@@ -10,6 +10,8 @@
 //   - from a Paradox-syntax folder with load_game(), which uses WorldBuilder underneath:
 //
 //   schema/*.txt         entity types and fields          planet = { capacity = 4096  pop = quantity }
+//                        rows that come and go            army = { capacity = 4096  dynamic = yes
+//                                                                  spawn = { from = province count = raise parent = home } }
 //                        constants                        defines = { growth_rate = rate }
 //                        modifier keys                    modifier_keys = { pop_growth = { applies_to = planet type = rate inherit = owner } }
 //                        modifier settings (optional)     modifiers = { capacity = 65536 }
@@ -80,10 +82,24 @@ struct FieldDef {
     uint32_t words() const { return type == FieldType::Money64 ? 2 : 1; }  // 32-bit words per value
 };
 
+// Rows of a dynamic entity type that rules ask for: after every tick, each row of `from`
+// (in row order) gets as many new rows as its count field says, and the field is lowered
+// by the number created (to 0 unless the entity type is full).
+struct SpawnDef {
+    std::string from;          // entity type whose rows ask
+    std::string count_field;   // its `count` field: how many new rows that row wants
+    std::string parent_field;  // ref:<from> field of the new rows, set to the row that asked ("" = none)
+    int from_entity = -1, count_index = -1, parent_index = -1;  // resolved by finish()
+    Location where;
+};
+
 struct EntityDef {
     std::string name;
     uint32_t capacity = 0;
     std::vector<FieldDef> fields;
+    // Rows are created and destroyed while the simulation runs (see GameSim::create_entity).
+    bool dynamic = false;
+    std::vector<SpawnDef> spawns;  // dynamic entity types only; handled in this order
     Location where;
     const FieldDef* field(const std::string& n) const;
     int field_index(const std::string& n) const;
@@ -195,6 +211,16 @@ public:
     uint32_t entity(const std::string& name, uint32_t capacity, Location where = {});
     void field(uint32_t entity, const std::string& name, FieldType type, const std::string& ref_entity = "",
                uint32_t size = 1, int64_t default_raw = 0, Location where = {});
+    // Rows of `entity` come and go during play: rules get <entity>_alive(i),
+    // <entity>_destroy(i) and <entity>_generation[i], loops skip rows that are not alive,
+    // and the host gets GameSim::create_entity() / destroy_entity().
+    void entity_dynamic(uint32_t entity, Location where = {});
+    // Rules ask for new rows of the dynamic `entity`: each row of `from_entity` sets its
+    // `count_field` (type count) to the number it wants. The new rows exist from the next
+    // tick, with every field at its default and `parent_field` (a ref:<from_entity> field
+    // of `entity`, optional) set to the row that asked.
+    void spawn(uint32_t entity, const std::string& from_entity, const std::string& count_field,
+               const std::string& parent_field = "", Location where = {});
     void define(const std::string& name, FieldType type, Location where = {});
     void set_define(const std::string& name, int64_t raw, Location where = {});
     // `inherit_field`: a ref field of `entity` to inherit through, or several joined by
@@ -248,6 +274,8 @@ uint64_t game_checksum(const Game& game);
 
 // Exact decimal text -> fixed-point raw value of a type (integer math only).
 bool parse_value(const std::string& text, FieldType type, int64_t& out);
+
+constexpr uint32_t NO_ENTITY = 0xFFFFFFFFu;  // GameSim::create_entity(): the entity type is full
 
 // A modifier instance. `version` makes stale handles harmless: once the instance is
 // removed (or expires) and its slot reused, old handles no longer match.
@@ -386,6 +414,26 @@ public:
     // (valid until the tick after the next one begins; after load(), stale until the next
     // tick is collected).
     std::span<const int32_t> tick_result(uint32_t id) const;
+
+    // ---- entities at run time (entity types marked dynamic) ----
+    // A new row: the lowest one that is not alive, with every field at its default, alive
+    // from the next tick. NO_ENTITY if the entity type is full. Rows that rules asked for
+    // (WorldBuilder::spawn) are created when their tick is collected, before any call made
+    // here, so the same calls give the same rows on every peer. create_entity() and
+    // destroy_entity() collect a tick in flight first (they block); they throw
+    // std::invalid_argument for an entity type that is not dynamic.
+    uint32_t create_entity(uint32_t entity);
+    // The row is no longer alive: loops skip it from the next tick, its modifier instances
+    // are removed, and a later create may reuse it. False if it was not alive.
+    bool destroy_entity(uint32_t entity, uint32_t row);
+    // As of the last collected tick, plus creates and destroys since. Never block. For an
+    // entity type that is not dynamic, the rows in use are alive.
+    bool entity_alive(uint32_t entity, uint32_t row) const;
+    // How many times the row has been created (0: never). With the row it names one
+    // entity for good: keep both to tell a row that was destroyed and reused.
+    uint32_t entity_generation(uint32_t entity, uint32_t row) const;
+    uint32_t entity_count(uint32_t entity) const;    // rows in use: one past the highest row ever alive
+    uint32_t entities_alive(uint32_t entity) const;  // rows alive among them
 
     // ---- modifiers ----
     ModifierHandle add_modifier(uint32_t bundle, uint32_t entity, uint32_t row, int32_t scale = 1 << 16,

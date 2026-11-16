@@ -104,6 +104,9 @@ ctest --test-dir build --output-on-failure
 - **New rules in tests or examples** must load without order warnings, or mark a
   deliberate line with `// terni: order ok`.
 - **Data-folder syntax** (`game_load.cpp`): update `docs/data-format.md`.
+- **Dynamic entity types** (`GameSim::Impl::Dynamic`): rows are given out on the host in
+  `collect_dynamic()`, lowest free row first; `tests/test_dynamic.cpp` has the same rules
+  as a CPU model, so change both together.
 
 ## Style
 

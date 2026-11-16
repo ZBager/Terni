@@ -1,0 +1,12 @@
+# Armies come and go: provinces ask for them, and they destroy themselves.
+province = {
+    capacity = 8
+    raise = count
+}
+army = {
+    capacity = 16
+    dynamic = yes
+    spawn = { from = province  count = raise  parent = home }
+    home = ref:province
+    strength = { type = int  default = 5 }
+}

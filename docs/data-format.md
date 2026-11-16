@@ -49,6 +49,30 @@ planet = {
 `size = N` gives each row N values. `default` is written in the field's own units
 (`default = 50` on a rate means 50.0).
 
+### Dynamic entity types
+
+```
+army = {
+    capacity = 4096
+    dynamic  = yes                                               # rows are created and destroyed during play
+    spawn    = { from = province  count = raise  parent = home } # provinces ask for armies (optional, repeatable)
+    home     = ref:province
+    strength = { type = int  default = 100 }
+}
+```
+
+- `dynamic = yes` gives rules `army_alive(i)`, `army_destroy(i)` and
+  `army_generation[i]`, and makes loops skip rows that are not alive. The fields may
+  not be named `alive`, `alive_bits`, `destroy` or `generation`.
+- `spawn` lets rules ask for new rows. `from` is the entity type that asks, `count` one
+  of its `count` fields (how many rows a row wants), and `parent`, if given, a
+  `ref:<from>` field of the new rows that is set to the row that asked. Several
+  `spawn` blocks are served in the order written.
+- History creates the starting rows as for any entity type; a new row gets each
+  field's `default`.
+
+See [Writing rules](writing-rules.md#entities-that-come-and-go) for how rules use them.
+
 ### Constants
 
 ```

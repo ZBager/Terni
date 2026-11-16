@@ -195,6 +195,19 @@ private:
                     continue;
                 }
                 if (f.key == "capacity") continue;
+                if (f.key == "dynamic" && !f.is_block()) {  // dynamic = yes
+                    if (f.scalar == "yes") b_.entity_dynamic(e, at(d, f));
+                    else if (f.scalar != "no") error(at(d, f), "expected `dynamic = yes`");
+                    continue;
+                }
+                if (f.key == "spawn" && f.is_block() && !f.block->find("type")) {  // spawn = { from = .. count = .. }
+                    const auto* from = f.block->find("from");
+                    const auto* count = f.block->find("count");
+                    const auto* parent = f.block->find("parent");
+                    if (!from || !count) error(at(d, f), "expected `spawn = { from = entity count = field }`");
+                    else b_.spawn(e, str(from->scalar), str(count->scalar), parent ? str(parent->scalar) : "", at(d, f));
+                    continue;
+                }
                 std::string type_text = str(f.scalar), default_text;
                 uint32_t size = 1;
                 if (f.is_block() && f.scalar.empty()) {

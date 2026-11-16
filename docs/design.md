@@ -60,6 +60,7 @@ several features:
 | Host code looked up constants by scanning the description | `Game::define(name)` |
 | Each map size needed its own compiled rules | Capacities are specialization constants; `Game::set_capacity()` |
 | A tick blocked the frame that started it | `begin_tick()` / `end_tick()`; commands made meanwhile go to the next tick |
+| Games kept their own pools of rows with an "alive" field, and their own rules for reusing them | Dynamic entity types: `dynamic = yes`, `spawn`, `create_entity()` |
 | A machine without a Vulkan 1.3 GPU could not run a game at all | `add_vulkan_driver()` with a software driver shipped by the game |
 | Another program on the GPU made ticks twenty times slower, unnoticed | `device_health()` and `move_to_device()` |
 

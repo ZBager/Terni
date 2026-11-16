@@ -209,6 +209,36 @@ turns finished research or events into modifiers, and lets AI players decide. It
 the last tick's results, decides, and writes. As long as that logic uses only integer
 math on values every peer reads back identically, it stays deterministic.
 
+### Creating and destroying entities
+
+For an entity type marked dynamic (`dynamic = yes`, or `WorldBuilder::entity_dynamic`):
+
+```cpp
+const uint32_t row = sim.create_entity(army);        // terni::NO_ENTITY if the type is full
+if (row != terni::NO_ENTITY) {
+    sim.write_field(army, "home", row, {capital});   // fields start at their defaults
+    my_armies.push_back({row, sim.entity_generation(army, row)});
+}
+sim.destroy_entity(army, other_row);                 // false if it was not alive
+```
+
+- Both take effect for the rules at the next tick, like `write_field`. The host's own
+  view (`entity_alive`, `entity_generation`, `entities_alive`) changes at once.
+- `read_field` shows what the device holds, so a new row's defaults and the fields you
+  wrote appear there after the next tick.
+- Rows that rules asked for are created when their tick is collected, before anything
+  you create afterwards. `create_entity` and `destroy_entity` collect a tick in flight
+  first, so the same calls give the same rows on every peer, whenever each collects.
+- Rows are reused. Keep the generation with the row, as above, and compare it before
+  you act on an entity you remembered: `entity_alive(army, row) &&
+  entity_generation(army, row) == generation`.
+- To find the rows rules created, compare generations, or read the field you use to
+  mark new rows (`read_each_tick(army, "fresh")`).
+- Each tick brings back one bit per row of every dynamic type, and four bytes per row
+  in use of every entity type that asks through `spawn`, in the same submission as the
+  tick. For millions of asking rows that is megabytes per tick; ask from the smaller
+  table where you can (provinces rather than pops).
+
 ### Modifiers from the host
 
 ```cpp

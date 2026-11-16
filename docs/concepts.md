@@ -31,11 +31,31 @@ hold), set in the schema, and a **count** (the rows in use), set by the starting
 - A game that offers several map sizes changes capacities before it starts:
   `game->set_capacity(province, 16384)`. The rules do not have to be compiled again;
   one compiled set serves every size.
-- Counts are fixed while the simulation runs: Terni does not create or destroy rows
-  during play. A game whose entities come and go (armies, for example) keeps a pool of
-  rows with an "alive" field and reuses free ones.
+- By default counts are fixed while the simulation runs. An entity type whose rows come
+  and go (armies, pops that split) is marked **dynamic**; see below.
 - A **ref** field holds the row index of another entity (a planet's `owner`). That is
   how the world is linked together.
+
+### Entities that come and go
+
+Mark an entity type `dynamic = yes` and its rows can be created and destroyed during
+play. Each row is then **alive** or not, and loops visit only the rows that are alive.
+
+- **Destroying** is immediate: a rule calls `army_destroy(a)`, usually on its own row,
+  or the host calls `destroy_entity`. The row's modifier instances are removed.
+- **Creating** happens between ticks, so that every machine gives the same row to the
+  same request. A rule asks by setting a count field (`province_raise[p] = 2u` asks
+  for two armies); the host asks with `create_entity`. A new row is alive from the next
+  tick, with every field at its default.
+- A new entity takes the **lowest row that is not alive**. Rows are reused, possibly
+  right after they were destroyed, so a ref can end up pointing at a different entity.
+  Every row has a **generation**, the number of times it has been created; a row and
+  its generation together name one entity for good.
+- The **count** of a dynamic type is one past the highest row ever alive. It grows and
+  never shrinks; the capacity is still the limit, and a request that does not fit
+  waits.
+- Who is alive, the generations and the counts are part of the state: saves hold them,
+  and they are compared between devices like any field.
 
 ## Fields
 
@@ -105,6 +125,7 @@ entity `planet` with a field `pop`:
 | `PLANET_CAPACITY`, `PLANET_STOCK_SIZE` | Capacity, values per row of a sized field |
 | `D.growth_rate` | A define |
 | `planet_mod_pop_growth(i)` | A modifier total, own plus inherited |
+| `army_alive(i)`, `army_destroy(i)`, `army_generation[i]` | For a dynamic entity type: whether a row is alive, destroy it, how often it was created |
 
 `terni_run <folder> --prelude` prints the whole prelude of a game.
 

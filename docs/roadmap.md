@@ -10,9 +10,11 @@ stable public releases. Order within a phase is a priority, not a promise.
 
 ## Phase 1: what larger games need
 
-1. **Entities at run time** (create and destroy rows during play, with stable ids and
-   counts in saves). Pools of rows work for now; this comes when a game needs it.
-2. **A larger example game** that exercises markets, inheritance and workgroup stages.
+1. **A larger example game** that exercises markets, inheritance, workgroup stages and
+   entities that come and go.
+2. **New rows given out on the GPU.** Rows that rules ask for are created on the host
+   between ticks, which costs a readback of the asking field. For millions of asking
+   rows a tick, do it in a built-in stage instead.
 
 ## Phase 2: public releases
 

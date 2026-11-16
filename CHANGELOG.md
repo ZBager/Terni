@@ -30,6 +30,15 @@ The first public version.
   with the same checksums, SPIR-V cache keys and results on all of them; rule files
   read the same whatever their line endings. `CMakePresets.json` for each platform, and
   continuous integration that runs the whole suite on lavapipe on all three.
+- **Entities at run time**: an entity type marked `dynamic = yes`
+  (`WorldBuilder::entity_dynamic`) has rows that are created and destroyed during play.
+  Rules get `<entity>_alive(i)`, `<entity>_destroy(i)` and `<entity>_generation[i]`,
+  loops skip rows that are not alive, and rules ask for new rows through a count field
+  (`spawn = { from = province count = raise parent = home }`, `WorldBuilder::spawn`).
+  The host gets `GameSim::create_entity`, `destroy_entity`, `entity_alive`,
+  `entity_generation`, `entity_count` and `entities_alive`. Rows are given out the same
+  way on every device, and saves hold who is alive. Games without dynamic entity types
+  keep their checksums and compiled rules.
 - **Machines without a usable GPU**: `add_vulkan_driver()` loads a software Vulkan driver
   shipped with the game (such as lavapipe), and the rules run on the CPU with the same
   results; `DeviceInfo::cpu()`; `list_devices()` is empty, instead of throwing, where

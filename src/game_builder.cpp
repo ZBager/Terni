@@ -86,6 +86,11 @@ void set_raw(std::vector<int32_t>& col, const FieldDef& f, size_t index, int64_t
 
 constexpr uint32_t SKIPPED_ROW = 0xFFFFFFFFu;
 
+// Names the prelude generates for a dynamic entity type: <entity>_alive(), ...
+bool reserved_in_dynamic(const std::string& field) {
+    return field == "alive" || field == "alive_bits" || field == "destroy" || field == "generation";
+}
+
 }  // namespace
 
 void Game::set_capacity(uint32_t entity, uint32_t rows) {
@@ -144,6 +149,24 @@ void WorldBuilder::field(uint32_t entity, const std::string& name, FieldType typ
     for (size_t r = 0; r < size_t(e.capacity) * f.size; ++r) set_raw(col, f, r, f.default_raw);
     e.fields.push_back(std::move(f));
     g.tables[entity].columns.push_back(std::move(col));
+}
+
+void WorldBuilder::entity_dynamic(uint32_t entity, Location where) {
+    Game& g = *game_;
+    if (entity >= g.entities.size()) return error(where, "dynamic: unknown entity type");
+    g.entities[entity].dynamic = true;
+}
+
+void WorldBuilder::spawn(uint32_t entity, const std::string& from_entity, const std::string& count_field,
+                         const std::string& parent_field, Location where) {
+    Game& g = *game_;
+    if (entity >= g.entities.size()) return error(where, "spawn: unknown entity type");
+    SpawnDef s;
+    s.from = from_entity;
+    s.count_field = count_field;
+    s.parent_field = parent_field;
+    s.where = std::move(where);
+    g.entities[entity].spawns.push_back(std::move(s));  // checked in finish(): it may name later entities
 }
 
 void WorldBuilder::define(const std::string& name, FieldType type, Location where) {
@@ -291,6 +314,37 @@ std::unique_ptr<Game> WorldBuilder::finish() {
         for (const auto& f : g.entities[e].fields)
             if (f.type == FieldType::Ref && !g.entity(f.ref_entity))
                 error(f.where, "reference to unknown entity '" + f.ref_entity + "'");
+    }
+    for (auto& e : g.entities) {
+        if (!e.spawns.empty() && !e.dynamic)
+            error(e.spawns[0].where, "spawn: '" + e.name + "' is not a dynamic entity type");
+        for (const auto& f : e.fields)
+            if (e.dynamic && reserved_in_dynamic(f.name))
+                error(f.where, "field '" + f.name + "' of dynamic entity '" + e.name + "': rules already have " + e.name +
+                                   "_" + f.name);
+        for (auto& s : e.spawns) {
+            const std::string what = "spawn of '" + e.name + "': ";
+            s.from_entity = g.entity_index(s.from);
+            s.count_index = s.parent_index = -1;
+            if (s.from_entity < 0) {
+                error(s.where, what + "unknown entity '" + s.from + "'");
+                continue;
+            }
+            const EntityDef& from = g.entities[size_t(s.from_entity)];
+            s.count_index = from.field_index(s.count_field);
+            if (s.count_index < 0 || from.fields[size_t(s.count_index)].type != FieldType::Count ||
+                from.fields[size_t(s.count_index)].size != 1) {
+                error(s.where, what + "'" + s.count_field + "' is not a single count field of '" + from.name + "'");
+                s.count_index = -1;
+            }
+            if (s.parent_field.empty()) continue;
+            s.parent_index = e.field_index(s.parent_field);
+            const FieldDef* p = s.parent_index >= 0 ? &e.fields[size_t(s.parent_index)] : nullptr;
+            if (!p || p->type != FieldType::Ref || p->ref_entity != from.name || p->size != 1) {
+                error(s.where, what + "'" + s.parent_field + "' is not a single ref:" + from.name + " field of '" + e.name + "'");
+                s.parent_index = -1;
+            }
+        }
     }
     for (auto& k : g.modifier_keys) {
         k.inherit_steps.clear();

@@ -71,6 +71,11 @@ times and the whole state is read back after each run. Run it in tests, on small
 for many ticks. The two checks complement each other: the warning finds a race before it
 ever happens; the checked tick proves one.
 
+Rows of a dynamic entity type are created on the host, between ticks, from what the
+tick left: each request takes the lowest row that is not alive, in the order of the
+entity types, their `spawn` lines and the asking rows. That is plain integer work on
+values every peer reads back identically, so every peer creates the same rows.
+
 ## Testing parity
 
 The most useful test for a game on Terni runs the same match on every Vulkan device in

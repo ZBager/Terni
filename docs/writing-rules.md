@@ -26,6 +26,7 @@ void main() {
 | `terni.tick`, `terni.<entity>_count` | Completed ticks; rows in use |
 | `D.<define>` | Constants from `common/` |
 | `<entity>_mod_<key>(i)` | Modifier total of row `i`, own plus inherited. For a key that inherits in several steps, every entity type on the way has one, and it counts from that level up |
+| `<entity>_alive(i)`, `<entity>_destroy(i)`, `<entity>_generation[i]` | Dynamic entity types only; see [Entities that come and go](#entities-that-come-and-go) |
 | `workgroup_sync()` | Barrier for shared memory, in workgroup stages |
 | The GLSL library below | Fixed point, wide integers, randomness |
 
@@ -116,6 +117,74 @@ in the rule:
 #define VALUES 2
 #include "terni/slot_table.glsl"
 ```
+
+## Entities that come and go
+
+For an entity type marked `dynamic = yes`, `FOR_EACH_ARMY(a)` visits only the armies
+that are alive, and three more names exist:
+
+| Name | Meaning |
+| --- | --- |
+| `army_alive(i)` | True if row `i` is alive. False for any index that is not a row, so it is safe on a stale ref |
+| `army_destroy(i)` | Row `i` is no longer alive, from this moment |
+| `army_generation[i]` | How many times row `i` has been created (0: never) |
+
+**Destroying.** A row normally destroys itself:
+
+```glsl
+FOR_EACH_ARMY(a) {
+    army_strength[a] -= army_losses[a];
+    if (army_strength[a] <= 0) army_destroy(a);
+}
+```
+
+The fields of a destroyed row keep their values until the row is created again.
+Destroying *another* army from a stage that loops over armies breaks the
+[rule about order](#the-one-rule-about-order): that army's own thread may or may not
+have started. Do it from a stage over another entity type (a battle destroys its
+armies), or set a field and let the army destroy itself.
+
+**Creating.** Rules cannot create a row on the spot, because two threads would race for
+the same one. They ask instead, through a `count` field named in the schema:
+
+```
+army = {
+    capacity = 4096
+    dynamic  = yes
+    spawn    = { from = province  count = raise  parent = home }
+    home     = ref:province
+    fresh    = { type = int  default = 1 }
+}
+```
+
+```glsl
+FOR_EACH_PROVINCE(p) {
+    if (province_unrest[p] > D.revolt_at) province_raise[p] += 1u;   // ask for one army
+}
+```
+
+After the tick, each province gets as many new armies as its `raise` says, in row
+order, and `raise` goes back to 0. A new army has every field at its default and, if
+`parent` is given, that field set to the province that asked. It is alive from the next
+tick, so give it a field such as `fresh` with a default of 1 and set it up there:
+
+```glsl
+FOR_EACH_ARMY(a) {
+    if (army_fresh[a] != 0) {
+        army_fresh[a] = 0;
+        army_strength[a] = province_manpower[army_home[a]];
+    }
+    ...
+}
+```
+
+If the entity type is full, the armies that do not fit are not created and `raise`
+keeps the number still wanted; they are created when rows come free, unless a rule
+sets `raise` back to 0.
+
+**Refs to entities that may be gone.** Rows are reused, so check a ref before trusting
+it: `army_alive(r)` tells you the row holds an army, and comparing `army_generation[r]`
+with a generation you stored next to the ref tells you it is still the same one.
 
 ## Workgroup stages
 

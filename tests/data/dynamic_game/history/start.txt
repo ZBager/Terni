@@ -1,0 +1,4 @@
+province = { id = north }
+province = { id = south }
+province = { id = east }
+army = { id = guard  home = south  strength = 9 }

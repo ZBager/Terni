@@ -7,6 +7,7 @@
 //   0      defines                       D.<name>
 //   1      state                         terni.tick, terni.<entity>_count
 //   2 ...  one buffer per field          <entity>_<field>[]       (entities and fields in schema order)
+//   then   two per dynamic entity type:  <entity>_alive_bits[]    (one bit per row), <entity>_generation[]
 //   then   one buffer per modifier key and entity it can sit on:
 //                                        <entity>_modown_<key>[]  (key order; applies_to entity, then those it inherits from, nearest first)
 //
@@ -14,6 +15,7 @@
 // per entity type, <ENTITY>_CAPACITY, so the SPIR-V does not depend on capacities.
 
 #include <algorithm>
+#include <bit>
 #include <chrono>
 #include <cstdio>
 #include <cstring>
@@ -213,6 +215,14 @@ public:
         free_.push_back(h.slot);
         --alive_;
         return true;
+    }
+
+    // Remove every instance on rows of `entity` that `gone(row)` names (rows that were
+    // destroyed), in slot order.
+    template <class F>
+    void remove_on(uint32_t entity, F&& gone) {
+        for (uint32_t s = 0; s < inst_.size(); ++s)
+            if (inst_[s].alive && inst_[s].entity == entity && gone(inst_[s].row)) remove({s, inst_[s].version});
     }
 
     // Tick boundary: expire everything due at or before `now`, in (due, sequence) order.
@@ -544,13 +554,30 @@ std::string generate_prelude(const Game& game) {
         // set when the pipelines are made, so every capacity runs the same SPIR-V
         o << "layout(constant_id = " << CAPACITY_CONSTANT0 + i << ") const uint " << upper(e.name)
           << "_CAPACITY = 1u;\n";
-        o << "#define FOR_EACH_" << upper(e.name) << "(i) FOR_EACH(i, terni." << e.name << "_count)\n";
-        o << "#define FOR_EACH_" << upper(e.name) << "_GROUP(i) FOR_EACH_GROUP(i, terni." << e.name << "_count)\n";
+        // a dynamic entity type's loops leave out the rows that are not alive
+        const std::string alive = e.dynamic ? " if (" + e.name + "_alive(i))" : "";
+        o << "#define FOR_EACH_" << upper(e.name) << "(i) FOR_EACH(i, terni." << e.name << "_count)" << alive << "\n";
+        o << "#define FOR_EACH_" << upper(e.name) << "_GROUP(i) FOR_EACH_GROUP(i, terni." << e.name << "_count)" << alive
+          << "\n";
         for (const auto& f : e.fields) {
             if (f.size > 1) o << "const uint " << upper(e.name + "_" + f.name) << "_SIZE = " << f.size << "u;\n";
             o << "layout(std430, binding = " << binding++ << ") buffer " << e.name << "_" << f.name << "_buf { "
               << glsl_type(f.type) << " " << e.name << "_" << f.name << "[]; };\n";
         }
+    }
+    for (const auto& e : game.entities) {
+        if (!e.dynamic) continue;
+        const std::string& n = e.name;
+        o << "\n// " << n << ": rows come and go\n";
+        o << "layout(std430, binding = " << binding++ << ") buffer " << n << "_alive_bits_buf { uint " << n
+          << "_alive_bits[]; };\n";
+        o << "layout(std430, binding = " << binding++ << ") buffer " << n << "_generation_buf { uint " << n
+          << "_generation[]; };\n";
+        o << "bool " << n << "_alive(uint i) { return i < " << upper(n) << "_CAPACITY && (" << n
+          << "_alive_bits[i >> 5] & (1u << (i & 31u))) != 0u; }\n";
+        // an atomic: rows that share a word may be destroyed by different threads
+        o << "void " << n << "_destroy(uint i) { if (i < " << upper(n) << "_CAPACITY) atomicAnd(" << n
+          << "_alive_bits[i >> 5], ~(1u << (i & 31u))); }\n";
     }
     const auto cols = modifier_columns(game);
     if (!cols.empty()) {
@@ -640,6 +667,28 @@ struct GameSim::Impl {
         // they go back on top of that tick's results when it is collected
         std::vector<std::pair<uint32_t, uint32_t>> pending;  // (row, value)
     };
+    // A dynamic entity type on the host: which rows are alive and how often each was
+    // created, as of the last collected tick plus host calls since. Rules only ever clear
+    // alive bits; rows are created here, so every peer gives the same row to the same request.
+    struct Dynamic {
+        uint32_t entity = 0;
+        uint32_t alive_binding = 0, generation_binding = 0;
+        std::vector<uint32_t> alive;       // one bit per row
+        std::vector<uint32_t> generation;  // per row: times it was created
+        uint32_t alive_count = 0;
+        uint32_t free_word = 0;  // no word below this one has a free row
+        TickRead alive_read{};   // the bits, back with every tick
+        struct Spawn {
+            uint32_t from = 0, count_binding = 0;
+            int parent_field = -1;
+            TickRead count_read{};  // the count field's rows in use, back with every tick
+        };
+        std::vector<Spawn> spawns;
+        std::vector<std::vector<int32_t>> default_row;  // per field: the words of a new row
+        bool is_alive(uint32_t row) const { return row / 32 < alive.size() && (alive[row / 32] >> (row % 32) & 1u) != 0; }
+    };
+    std::vector<Dynamic> dynamics;
+    std::vector<int> dynamic_of;  // per entity: index into `dynamics`, or -1
     std::vector<Parents> parents;
     std::vector<std::vector<uint32_t>> key_parents;  // per modifier key and inherit step: index into `parents`
     std::vector<uint64_t> row_words;  // per binding: words per row (order check reports)
@@ -732,6 +781,114 @@ struct GameSim::Impl {
         for (size_t s = 0; s < game.stages.size(); ++s) run[s] = game.stages[s].runs_in(now);
         return run;
     }
+    // ---- dynamic entity types ----
+    Dynamic& dynamic(uint32_t entity, const char* call) {
+        const int d = dynamic_of.at(entity);
+        if (d < 0)
+            throw std::invalid_argument(std::string(call) + ": '" + game.entities[entity].name +
+                                        "' is not a dynamic entity type");
+        return dynamics[size_t(d)];
+    }
+    // The lowest row that is not alive becomes alive; NO_ENTITY if every row is. The GPU
+    // hears of it through created().
+    uint32_t allocate(Dynamic& d) {
+        const uint32_t capacity = game.entities[d.entity].capacity;
+        while (d.free_word < d.alive.size() && d.alive[d.free_word] == 0xFFFFFFFFu) ++d.free_word;
+        if (d.free_word >= d.alive.size()) return NO_ENTITY;
+        const uint32_t row = d.free_word * 32 + uint32_t(std::countr_one(d.alive[d.free_word]));
+        if (row >= capacity) return NO_ENTITY;  // only the bits past the capacity are left
+        d.alive[row / 32] |= 1u << (row % 32);
+        ++d.generation[row];
+        ++d.alive_count;
+        if (row >= counts[d.entity]) {  // the rows in use grow; they never shrink
+            counts[d.entity] = row + 1;
+            state[1 + d.entity] = row + 1;
+            runner->queue_write(1, &state[1 + d.entity], 4, uint64_t(1 + d.entity) * 4);
+            size_tick_reads();
+        }
+        return row;
+    }
+    // Queue what the GPU needs to know about rows just allocated (ascending): alive bits,
+    // generations and every field at its default, one write per run of neighbouring rows.
+    void created(Dynamic& d, const std::vector<uint32_t>& rows) {
+        if (rows.empty()) return;
+        const uint32_t lo = rows.front() / 32, hi = rows.back() / 32 + 1;
+        runner->queue_write(d.alive_binding, d.alive.data() + lo, uint64_t(hi - lo) * 4, uint64_t(lo) * 4);
+        std::vector<int32_t> words;
+        for (size_t a = 0, b = 0; a < rows.size(); a = b) {
+            for (b = a + 1; b < rows.size() && rows[b] == rows[b - 1] + 1;) ++b;
+            const uint64_t first = rows[a], n = b - a;
+            runner->queue_write(d.generation_binding, d.generation.data() + first, n * 4, first * 4);
+            for (size_t f = 0; f < d.default_row.size(); ++f) {
+                const auto& one = d.default_row[f];
+                words.clear();
+                for (uint64_t k = 0; k < n; ++k) words.insert(words.end(), one.begin(), one.end());
+                runner->queue_write(field_binding[d.entity][f], words.data(), words.size() * 4, first * one.size() * 4);
+                mirror_write(d.entity, uint32_t(f), uint32_t(first), words.data(), one.size() == 1 ? n : 0);
+            }
+        }
+    }
+    // A row is no longer alive: on the host's say (the GPU is told) or a rule's (it knows).
+    void died(Dynamic& d, uint32_t word) { d.free_word = std::min(d.free_word, word); }
+    // After a tick: take over the alive bits the rules left, drop modifiers of rows they
+    // destroyed, then create the rows they asked for. Requests are served in the order of
+    // entity types, their spawns, and the asking rows; each takes the lowest free row.
+    void collect_dynamic() {
+        for (auto& d : dynamics) {
+            const auto* bits = static_cast<const uint32_t*>(runner->tick_readback(d.alive_read.readback));
+            bool deaths = false;
+            for (size_t w = 0; w < d.alive.size(); ++w) {
+                if (bits[w] == d.alive[w]) continue;
+                deaths = true;
+                d.alive_count = d.alive_count - uint32_t(std::popcount(d.alive[w])) + uint32_t(std::popcount(bits[w]));
+                d.alive[w] = bits[w];
+                died(d, uint32_t(w));
+            }
+            if (deaths) mods.remove_on(d.entity, [&](uint32_t row) { return !d.is_alive(row); });
+        }
+        std::vector<uint32_t> rows, asked_by;
+        std::vector<uint32_t> asking;  // which rows could ask: those alive when the tick ended
+        for (auto& d : dynamics)
+            for (auto& sp : d.spawns) {
+                const auto* counts_now = static_cast<const uint32_t*>(runner->tick_readback(sp.count_read.readback));
+                const uint32_t n = uint32_t(runner->tick_readback_bytes(sp.count_read.readback) / 4);
+                const int from_dynamic = dynamic_of[sp.from];
+                if (from_dynamic >= 0) asking = dynamics[size_t(from_dynamic)].alive;
+                rows.clear();
+                asked_by.clear();
+                bool full = false;
+                for (uint32_t p = 0; p < n && !full; ++p) {
+                    if (counts_now[p] == 0) continue;
+                    if (from_dynamic >= 0 && (asking[p / 32] >> (p % 32) & 1u) == 0) continue;
+                    uint32_t made = 0;
+                    for (; made < counts_now[p]; ++made) {
+                        const uint32_t row = allocate(d);
+                        if (row == NO_ENTITY) {
+                            full = true;
+                            break;
+                        }
+                        rows.push_back(row);
+                        asked_by.push_back(p);
+                    }
+                    const uint32_t left = counts_now[p] - made;  // 0 unless the entity type is full
+                    if (made > 0) runner->queue_write(sp.count_binding, &left, 4, uint64_t(p) * 4);
+                }
+                // rows come out ascending per request but not overall (a hole, then the end): sort for the runs
+                std::vector<size_t> order(rows.size());
+                for (size_t i = 0; i < order.size(); ++i) order[i] = i;
+                std::sort(order.begin(), order.end(), [&](size_t a, size_t b) { return rows[a] < rows[b]; });
+                std::vector<uint32_t> sorted(rows.size());
+                for (size_t i = 0; i < order.size(); ++i) sorted[i] = rows[order[i]];
+                created(d, sorted);
+                if (sp.parent_field >= 0)
+                    for (size_t i = 0; i < rows.size(); ++i) {
+                        const int32_t parent = int32_t(asked_by[i]);
+                        runner->queue_write(field_binding[d.entity][size_t(sp.parent_field)], &parent, 4, uint64_t(rows[i]) * 4);
+                        mirror_write(d.entity, uint32_t(sp.parent_field), rows[i], &parent, 1);
+                    }
+            }
+    }
+
     void after_tick(bool measured = true) {
         ++now;
         if (measured) health.add(runner->last_tick_ms());
@@ -742,6 +899,7 @@ struct GameSim::Impl {
             for (const auto& [row, value] : p.pending) p.rows[row] = value;
             p.pending.clear();
         }
+        collect_dynamic();
     }
     // The tick host calls belong to: while tick N runs they already act between N and N+1,
     // exactly as if made after end_tick(), so peers that collect at other moments agree.
@@ -776,6 +934,9 @@ struct GameSim::Impl {
         for (const auto& r : tick_reads) runner->set_tick_readback_bytes(r.readback, tick_read_bytes(r));
         for (const auto& p : parents)
             if (p.active) runner->set_tick_readback_bytes(p.read.readback, tick_read_bytes(p.read));
+        for (const auto& d : dynamics)
+            for (const auto& sp : d.spawns)
+                runner->set_tick_readback_bytes(sp.count_read.readback, tick_read_bytes(sp.count_read));
     }
 
     // Tick boundary: expire modifiers, push host changes to the GPU.
@@ -829,6 +990,40 @@ GameSim::GameSim(const Game& game, const GameSimOptions& options) : impl_(std::m
             m.column_names.push_back(t.def->name + "." + t.def->fields[f].name);
         }
     }
+    m.dynamic_of.assign(game.entities.size(), -1);
+    for (uint32_t e = 0; e < game.entities.size(); ++e) {
+        const EntityDef& def = game.entities[e];
+        if (!def.dynamic) continue;
+        Impl::Dynamic d;
+        d.entity = e;
+        d.alive.assign((def.capacity + 31) / 32, 0);
+        d.generation.assign(def.capacity, 0);
+        for (uint32_t row = 0; row < game.tables[e].count; ++row) d.alive[row / 32] |= 1u << (row % 32), d.generation[row] = 1;
+        d.alive_count = game.tables[e].count;
+        d.alive_binding = static_cast<uint32_t>(2 + m.columns.size());
+        m.columns.emplace_back(d.alive.begin(), d.alive.end());
+        m.column_names.push_back(def.name + ".alive_bits");
+        d.generation_binding = static_cast<uint32_t>(2 + m.columns.size());
+        m.columns.emplace_back(d.generation.begin(), d.generation.end());
+        m.column_names.push_back(def.name + ".generation");
+        for (const auto& f : def.fields) {
+            std::vector<int32_t> one;
+            for (uint32_t k = 0; k < f.size; ++k) {
+                one.push_back(static_cast<int32_t>(static_cast<uint64_t>(f.default_raw)));
+                if (f.words() == 2) one.push_back(static_cast<int32_t>(static_cast<uint64_t>(f.default_raw) >> 32));
+            }
+            d.default_row.push_back(std::move(one));
+        }
+        for (const auto& s : def.spawns) {
+            Impl::Dynamic::Spawn sp;
+            sp.from = uint32_t(s.from_entity);
+            sp.count_binding = m.field_binding[sp.from][size_t(s.count_index)];
+            sp.parent_field = s.parent_index;
+            d.spawns.push_back(sp);
+        }
+        m.dynamic_of[e] = int(m.dynamics.size());
+        m.dynamics.push_back(std::move(d));
+    }
     m.mod_binding0 = static_cast<uint32_t>(2 + m.columns.size());
     for (auto& c : m.mods.columns) {
         c.dirty_lo = UINT32_MAX;  // initial modifiers are part of the upload
@@ -854,6 +1049,16 @@ GameSim::GameSim(const Game& game, const GameSimOptions& options) : impl_(std::m
     m.spirv = std::move(spirv);
     m.validation = options.validation;
     m.runner = m.make_runner(static_cast<uint32_t>(device), nullptr);
+    // what creating rows needs to know comes back with every tick
+    for (auto& d : m.dynamics) {
+        d.alive_read = {0, d.entity, 0, 0, 1, d.alive_binding, d.alive.size() * 4, 0};
+        d.alive_read.readback = m.runner->add_tick_readback(d.alive_binding, d.alive_read.most, 0);
+        for (auto& sp : d.spawns) {
+            sp.count_read = {0, sp.from, 0, UINT32_MAX, 1, sp.count_binding, uint64_t(game.entities[sp.from].capacity) * 4, 0};
+            sp.count_read.readback = m.runner->add_tick_readback(sp.count_binding, sp.count_read.most, 0);
+            m.runner->set_tick_readback_bytes(sp.count_read.readback, m.tick_read_bytes(sp.count_read));
+        }
+    }
 }
 
 void GameSim::move_to_device(uint32_t device) {
@@ -884,6 +1089,10 @@ void GameSim::move_to_device(uint32_t device) {
     for (auto& r : m.tick_reads) carry(r);
     for (auto& p : m.parents)
         if (p.active) carry(p.read);
+    for (auto& d : m.dynamics) {
+        carry(d.alive_read);
+        for (auto& sp : d.spawns) carry(sp.count_read);
+    }
     next->take_queued(*m.runner);
     m.earlier_sync_reads += m.runner->sync_reads();
     m.runner = std::move(next);
@@ -891,6 +1100,49 @@ void GameSim::move_to_device(uint32_t device) {
 }
 
 DeviceHealth GameSim::device_health() const { return impl_->health.health(); }
+
+uint32_t GameSim::create_entity(uint32_t entity) {
+    Impl& m = *impl_;
+    Impl::Dynamic& d = m.dynamic(entity, "create_entity");
+    m.settle();  // which rows are free depends on the tick in flight
+    const uint32_t row = m.allocate(d);
+    if (row != NO_ENTITY) m.created(d, {row});
+    return row;
+}
+
+bool GameSim::destroy_entity(uint32_t entity, uint32_t row) {
+    Impl& m = *impl_;
+    Impl::Dynamic& d = m.dynamic(entity, "destroy_entity");
+    m.settle();
+    if (!d.is_alive(row)) return false;
+    d.alive[row / 32] &= ~(1u << (row % 32));
+    --d.alive_count;
+    m.died(d, row / 32);
+    m.runner->queue_write(d.alive_binding, &d.alive[row / 32], 4, uint64_t(row / 32) * 4);
+    m.mods.remove_on(entity, [&](uint32_t r) { return r == row; });
+    return true;
+}
+
+bool GameSim::entity_alive(uint32_t entity, uint32_t row) const {
+    const Impl& m = *impl_;
+    const int d = m.dynamic_of.at(entity);
+    return d >= 0 ? m.dynamics[size_t(d)].is_alive(row) : row < m.counts[entity];
+}
+
+uint32_t GameSim::entity_generation(uint32_t entity, uint32_t row) const {
+    const Impl& m = *impl_;
+    const int d = m.dynamic_of.at(entity);
+    if (d < 0) return row < m.counts[entity] ? 1 : 0;
+    return row < m.dynamics[size_t(d)].generation.size() ? m.dynamics[size_t(d)].generation[row] : 0;
+}
+
+uint32_t GameSim::entity_count(uint32_t entity) const { return impl_->counts.at(entity); }
+
+uint32_t GameSim::entities_alive(uint32_t entity) const {
+    const Impl& m = *impl_;
+    const int d = m.dynamic_of.at(entity);
+    return d >= 0 ? m.dynamics[size_t(d)].alive_count : m.counts[entity];
+}
 
 GameSim::~GameSim() = default;
 
@@ -1077,6 +1329,11 @@ uint64_t game_checksum(const Game& game) {
         for (const auto& [k, v] : b.values) w.u32(k), w.i32(v);
     }
     w.u32(game.modifier_capacity);
+    for (const auto& e : game.entities) {  // nothing for a game without them: its checksum stays what it was
+        if (!e.dynamic) continue;
+        w.str("dynamic"), w.str(e.name), w.u32(static_cast<uint32_t>(e.spawns.size()));
+        for (const auto& s : e.spawns) w.str(s.from), w.str(s.count_field), w.str(s.parent_field);
+    }
     w.u32(static_cast<uint32_t>(game.stages.size()));
     for (const auto& s : game.stages) {
         w.str(s.name), w.str(s.for_each), w.str(s.source), w.u32(static_cast<uint32_t>(s.clear.size()));
@@ -1162,6 +1419,15 @@ void GameSim::load(const std::vector<uint8_t>& data) {
             std::memcpy(p.rows.data(), col.data(), p.rows.size() * 4);
             p.stale = false;
         }
+    for (auto& d : m.dynamics) {  // who is alive is in the save, like every field
+        const auto& bits = m.columns[d.alive_binding - 2];
+        const auto& generation = m.columns[d.generation_binding - 2];
+        d.alive.assign(bits.begin(), bits.end());
+        d.generation.assign(generation.begin(), generation.end());
+        d.alive_count = 0;
+        for (uint32_t w : d.alive) d.alive_count += uint32_t(std::popcount(w));
+        d.free_word = 0;
+    }
     m.health.reset();  // other counts, other tick times
     m.mods.restore_from(std::move(mods));
     for (size_t c = 0; c < m.mods.columns.size(); ++c) {  // upload recomputed totals now, so reads are consistent

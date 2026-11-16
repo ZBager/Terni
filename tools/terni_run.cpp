@@ -103,11 +103,18 @@ int main(int argc, char** argv) {
                 if (f.first == name) return &f.second;
             return nullptr;
         };
-        for (const auto& t : game->tables) {
+        const std::vector<int64_t>& state = *column("terni.state");  // tick, then the rows in use per entity type
+        for (size_t e = 0; e < game->tables.size(); ++e) {
+            const auto& t = game->tables[e];
             std::printf("\n%s:\n", t.def->name.c_str());
-            std::vector<std::string> names(t.count);
-            for (const auto& [id, row] : t.ids) names[row] = id;
-            for (uint32_t r = 0; r < t.count; ++r) {
+            const uint32_t count = uint32_t(state[1 + e]);
+            const std::vector<int64_t>* alive = column(t.def->name + ".alive_bits");  // dynamic entity types
+            std::vector<std::string> names(count);
+            for (uint32_t r = 0; r < count; ++r) names[r] = "#" + std::to_string(r);  // created during the run
+            if (!alive)
+                for (const auto& [id, row] : t.ids) names[row] = id;
+            for (uint32_t r = 0; r < count; ++r) {
+                if (alive && ((*alive)[r / 32] >> (r % 32) & 1) == 0) continue;
                 std::printf("  %-12s", names[r].c_str());
                 for (const auto& f : t.def->fields) {
                     const auto& v = *column(t.def->name + "." + f.name);

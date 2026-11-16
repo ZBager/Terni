@@ -25,6 +25,8 @@ Describes a world in code. Every call validates; problems are collected in
 | --- | --- |
 | `uint32_t entity(name, capacity)` | Adds an entity type; returns its index |
 | `void field(entity, name, type, ref_entity = "", size = 1, default_raw = 0)` | Adds a field |
+| `void entity_dynamic(entity)` | Rows of the entity type are created and destroyed during play |
+| `void spawn(entity, from_entity, count_field, parent_field = "")` | Rules ask for new rows of the dynamic `entity` through a `Count` field of `from_entity`; `parent_field` of the new row is set to the row that asked |
 | `void define(name, type)` / `set_define(name, raw)` | Declares a constant / sets its value |
 | `uint32_t modifier_key(name, entity, type, inherit_field = "")` | Adds a modifier key (`Rate`, `Quantity` or `Int`). `inherit_field` is a ref field of `entity`, or several joined by `.`, nearest first: `"district.region.realm"` |
 | `uint32_t bundle(name, {{key, raw}, ...})` | Adds a modifier bundle |
@@ -102,6 +104,10 @@ Runs a `Game` on one device. The `Game` must outlive it. Not thread-safe.
 | `void write_field(entity, field, row, index, words)` | Values `index` onwards of one row of a sized field; the rest of the row is untouched |
 | `uint32_t read_each_tick(entity, field, first_row = 0, rows = in use)` | Registers a per-tick readback; returns an id |
 | `std::span<const int32_t> tick_result(id)` | Its words as of the last collected tick; valid until the tick after the next one begins |
+| `uint32_t create_entity(entity)` | A new row of a dynamic entity type: the lowest one not alive, fields at their defaults, alive from the next tick. `NO_ENTITY` if full. Collects a tick in flight |
+| `bool destroy_entity(entity, row)` | The row is no longer alive and its modifier instances are removed; false if it was not alive. Collects a tick in flight |
+| `bool entity_alive(entity, row)`, `uint32_t entity_generation(entity, row)` | As of the last collected tick plus creates and destroys since; never block |
+| `uint32_t entity_count(entity)`, `uint32_t entities_alive(entity)` | Rows in use (one past the highest row ever alive); rows alive |
 | `ModifierHandle add_modifier(bundle, entity, row, scale = fx::ONE, duration = 0)` | Adds an instance; an invalid handle if the store is full |
 | `bool set_modifier_scale(handle, scale)`, `bool remove_modifier(handle)` | False if the handle is stale |
 | `bool modifier_alive(handle)`, `size_t modifier_count()` | |
@@ -128,7 +134,8 @@ Runs a `Game` on one device. The `Game` must outlive it. Not thread-safe.
 | `CompileStats` | `compiled`, `cached`, `ms` |
 | `DeviceHealth` | `usual_ms` (lowest median of 32 ticks so far), `recent_ms` (latest median), `ticks` (measured since the start, `load()` or `move_to_device()`), `slow` (over 4 times the usual and at least 1 ms longer) |
 | `StageDef` (in `Game::stages`) | `name`, `for_each`, `dispatch`, `clear`, `source`, `every`, `offset`; `runs_in(tick)` says whether it runs in the tick after `tick` completed ticks |
-| `EntityDef` (in `Game::entities`) | `name`, `capacity`, `fields`; `field(name)`, `field_index(name)` |
+| `EntityDef` (in `Game::entities`) | `name`, `capacity`, `fields`, `dynamic`, `spawns`; `field(name)`, `field_index(name)` |
+| `SpawnDef` (in `EntityDef::spawns`) | `from`, `count_field`, `parent_field`, and their indices once the world is finished |
 
 ## Rules and the SPIR-V cache
 
