@@ -318,6 +318,8 @@ std::unique_ptr<Game> WorldBuilder::finish() {
     for (auto& e : g.entities) {
         if (!e.spawns.empty() && !e.dynamic)
             error(e.spawns[0].where, "spawn: '" + e.name + "' is not a dynamic entity type");
+        if (e.dynamic && e.capacity >= (1u << 24))  // the spawn stages' sums stay within 32 bits
+            error(e.where, "dynamic entity '" + e.name + "': capacity must be under 16,777,216");
         for (const auto& f : e.fields)
             if (e.dynamic && reserved_in_dynamic(f.name))
                 error(f.where, "field '" + f.name + "' of dynamic entity '" + e.name + "': rules already have " + e.name +

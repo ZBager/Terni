@@ -104,9 +104,11 @@ ctest --test-dir build --output-on-failure
 - **New rules in tests or examples** must load without order warnings, or mark a
   deliberate line with `// terni: order ok`.
 - **Data-folder syntax** (`game_load.cpp`): update `docs/data-format.md`.
-- **Dynamic entity types** (`GameSim::Impl::Dynamic`): rows are given out on the host in
-  `collect_dynamic()`, lowest free row first; `tests/test_dynamic.cpp` has the same rules
-  as a CPU model, so change both together.
+- **Dynamic entity types**: rows that rules ask for are given out by the built-in stages
+  of `spawn_stage_sources()`, rows the host asks for by `Impl::allocate()`, both by the
+  same rule (lowest free row; a destroyed row rests one tick). `tests/test_dynamic.cpp`
+  has that rule as CPU models, so change all three together. The built-in stages must
+  not use barriers: lavapipe runs such shaders several times slower.
 
 ## Style
 

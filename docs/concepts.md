@@ -43,14 +43,15 @@ play. Each row is then **alive** or not, and loops visit only the rows that are 
 
 - **Destroying** is immediate: a rule calls `army_destroy(a)`, usually on its own row,
   or the host calls `destroy_entity`. The row's modifier instances are removed.
-- **Creating** happens between ticks, so that every machine gives the same row to the
-  same request. A rule asks by setting a count field (`province_raise[p] = 2u` asks
-  for two armies); the host asks with `create_entity`. A new row is alive from the next
-  tick, with every field at its default.
-- A new entity takes the **lowest row that is not alive**. Rows are reused, possibly
-  right after they were destroyed, so a ref can end up pointing at a different entity.
-  Every row has a **generation**, the number of times it has been created; a row and
-  its generation together name one entity for good.
+- **Creating** happens at the end of a tick, in a fixed order, so that every machine
+  gives the same row to the same request. A rule asks by setting a count field
+  (`province_raise[p] = 2u` asks for two armies); the host asks with `create_entity`.
+  A new row is alive from the next tick, with every field at its default.
+- A new entity takes the **lowest free row**. A destroyed row rests for one tick before
+  it is free again, so rules that hold a ref to it get a tick to see that it is gone.
+  After that the row is reused, and the ref would point at a different entity. Every
+  row has a **generation**, the number of times it has been created; a row and its
+  generation together name one entity for good.
 - The **count** of a dynamic type is one past the highest row ever alive. It grows and
   never shrinks; the capacity is still the limit, and a request that does not fit
   waits.

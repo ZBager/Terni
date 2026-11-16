@@ -82,9 +82,9 @@ struct FieldDef {
     uint32_t words() const { return type == FieldType::Money64 ? 2 : 1; }  // 32-bit words per value
 };
 
-// Rows of a dynamic entity type that rules ask for: after every tick, each row of `from`
-// (in row order) gets as many new rows as its count field says, and the field is lowered
-// by the number created (to 0 unless the entity type is full).
+// Rows of a dynamic entity type that rules ask for: at the end of every tick, each row of
+// `from` (in row order) gets as many new rows as its count field says, and the field is
+// lowered by the number created (to 0 unless the entity type is full).
 struct SpawnDef {
     std::string from;          // entity type whose rows ask
     std::string count_field;   // its `count` field: how many new rows that row wants
@@ -213,7 +213,8 @@ public:
                uint32_t size = 1, int64_t default_raw = 0, Location where = {});
     // Rows of `entity` come and go during play: rules get <entity>_alive(i),
     // <entity>_destroy(i) and <entity>_generation[i], loops skip rows that are not alive,
-    // and the host gets GameSim::create_entity() / destroy_entity().
+    // and the host gets GameSim::create_entity() / destroy_entity(). The capacity must be
+    // under 16,777,216.
     void entity_dynamic(uint32_t entity, Location where = {});
     // Rules ask for new rows of the dynamic `entity`: each row of `from_entity` sets its
     // `count_field` (type count) to the number it wants. The new rows exist from the next
@@ -416,15 +417,17 @@ public:
     std::span<const int32_t> tick_result(uint32_t id) const;
 
     // ---- entities at run time (entity types marked dynamic) ----
-    // A new row: the lowest one that is not alive, with every field at its default, alive
-    // from the next tick. NO_ENTITY if the entity type is full. Rows that rules asked for
-    // (WorldBuilder::spawn) are created when their tick is collected, before any call made
-    // here, so the same calls give the same rows on every peer. create_entity() and
-    // destroy_entity() collect a tick in flight first (they block); they throw
-    // std::invalid_argument for an entity type that is not dynamic.
+    // A new row: the lowest free one, with every field at its default, alive from the next
+    // tick. NO_ENTITY if no row is free. A row is free if it is not alive, was not destroyed
+    // by a rule in the last tick and not by the host since: a destroyed row rests for a tick
+    // before it is used again. Rows that rules asked for (WorldBuilder::spawn) are created
+    // on the device at the end of their tick, before any call made here, so the same calls
+    // give the same rows on every peer. create_entity() and destroy_entity() collect a
+    // tick in flight first (they block); they throw std::invalid_argument for an entity
+    // type that is not dynamic.
     uint32_t create_entity(uint32_t entity);
     // The row is no longer alive: loops skip it from the next tick, its modifier instances
-    // are removed, and a later create may reuse it. False if it was not alive.
+    // are removed, and it can be used again after that tick. False if it was not alive.
     bool destroy_entity(uint32_t entity, uint32_t row);
     // As of the last collected tick, plus creates and destroys since. Never block. For an
     // entity type that is not dynamic, the rows in use are alive.

@@ -63,7 +63,8 @@ army = {
 
 - `dynamic = yes` gives rules `army_alive(i)`, `army_destroy(i)` and
   `army_generation[i]`, and makes loops skip rows that are not alive. The fields may
-  not be named `alive`, `alive_bits`, `destroy` or `generation`.
+  not be named `alive`, `alive_bits`, `destroy` or `generation`, and the capacity must
+  be under 16,777,216.
 - `spawn` lets rules ask for new rows. `from` is the entity type that asks, `count` one
   of its `count` fields (how many rows a row wants), and `parent`, if given, a
   `ref:<from>` field of the new rows that is set to the row that asked. Several

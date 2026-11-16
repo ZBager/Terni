@@ -3,7 +3,8 @@
 // Entities at run time: provinces ask for armies, armies wear out and destroy themselves,
 // the host creates and destroys some too. Every device is compared, tick by tick, with a
 // model of the same world on the CPU: which rows are alive, which row each request got
-// (the lowest free one), generations, fields, counts and the modifiers of destroyed rows.
+// (the lowest free one; a destroyed row rests for a tick), generations, fields, counts and
+// the modifiers of destroyed rows.
 // The session also saves and loads, moves device, runs a checked tick and creates a row
 // while a tick is in flight.
 #include <cstdio>
@@ -97,13 +98,15 @@ struct Model {
     std::vector<uint32_t> raise = std::vector<uint32_t>(PROVINCE_CAPACITY, 0);
     std::vector<int32_t> armies = std::vector<int32_t>(PROVINCE_CAPACITY, 0);
     std::vector<bool> alive = std::vector<bool>(ARMY_CAPACITY, false);
+    // prev: alive when the last tick ended, or created by the host since. cool: died in the last tick.
+    std::vector<bool> prev = alive, cool = alive;
     std::vector<uint32_t> generation = std::vector<uint32_t>(ARMY_CAPACITY, 0);
     std::vector<int32_t> home = std::vector<int32_t>(ARMY_CAPACITY, 0), strength = home, fresh = std::vector<int32_t>(ARMY_CAPACITY, 1),
                          age = home, seen_generation = home;
     uint32_t count = 0;
     bool was_full = false, reused = false;  // what the session must have gone through
-    // What read_field() gives: the fields as the last tick left them. New rows, and
-    // anything else the host wrote since, reach the device with the next tick.
+    // What read_field() gives: the fields as the last tick left them, the rows it created
+    // included. What the host wrote since reaches the device with the next tick.
     struct Fields {
         std::vector<uint32_t> raise;
         std::vector<int32_t> armies, home, strength, fresh, age, seen_generation;
@@ -111,7 +114,7 @@ struct Model {
     void sync() { device = {raise, armies, home, strength, fresh, age, seen_generation}; }
 
     Model() {
-        for (uint32_t a = 0; a < ARMIES; ++a) alive[a] = true, generation[a] = 1, home[a] = int32_t(a + 1);
+        for (uint32_t a = 0; a < ARMIES; ++a) alive[a] = prev[a] = true, generation[a] = 1, home[a] = int32_t(a + 1);
         count = ARMIES;
         sync();
     }
@@ -120,16 +123,19 @@ struct Model {
         for (bool a : alive) n += a;
         return n;
     }
-    uint32_t create() {  // lowest free row, every field at its default
-        for (uint32_t a = 0; a < ARMY_CAPACITY; ++a) {
-            if (alive[a]) continue;
-            reused |= generation[a] > 0;
-            alive[a] = true;
-            ++generation[a];
-            home[a] = 0, strength[a] = 0, fresh[a] = 1, age[a] = 0, seen_generation[a] = 0;
-            count = std::max(count, a + 1);
-            return a;
-        }
+    void born(uint32_t a) {  // every field at its default
+        reused |= generation[a] > 0;
+        alive[a] = prev[a] = true;
+        ++generation[a];
+        home[a] = 0, strength[a] = 0, fresh[a] = 1, age[a] = 0, seen_generation[a] = 0;
+        count = std::max(count, a + 1);
+    }
+    uint32_t create() {  // the host: the lowest row that is free between ticks
+        for (uint32_t a = 0; a < ARMY_CAPACITY; ++a)
+            if (!alive[a] && !prev[a] && !cool[a]) {
+                born(a);
+                return a;
+            }
         return NO_ENTITY;
     }
     void step() {
@@ -147,18 +153,25 @@ struct Model {
         for (uint32_t a = 0; a < count; ++a)
             if (alive[a]) ++armies[size_t(home[a])];
         ++tick;
-        sync();
-        // the rows the provinces asked for, in province order
+        // the end of the tick: the rows the provinces asked for, in province order, each the
+        // lowest row that is dead now and was dead when the last tick ended
+        std::vector<uint32_t> eligible;
+        for (uint32_t a = 0; a < ARMY_CAPACITY; ++a) {
+            if (!alive[a] && !prev[a]) eligible.push_back(a);
+            cool[a] = prev[a] && !alive[a];
+            prev[a] = alive[a];
+        }
+        size_t next = 0;
         for (uint32_t p = 0; p < PROVINCES; ++p)
-            while (raise[p] > 0) {
-                const uint32_t a = create();
-                if (a == NO_ENTITY) {
+            for (; raise[p] > 0; --raise[p]) {
+                if (next == eligible.size()) {
                     was_full = true;
                     break;
                 }
-                home[a] = int32_t(p);
-                --raise[p];
+                born(eligible[next]);
+                home[eligible[next++]] = int32_t(p);
             }
+        sync();
     }
 };
 
@@ -234,7 +247,7 @@ static StateSnapshot session(const World& w, uint32_t from, uint32_t to) {
         if (t == 22) {  // back to tick 15, and on from there
             sim.load(save);
             m = saved;
-            m.sync();  // a save holds the writes that were waiting for the next tick
+            m.sync();  // a save holds the host's writes that were waiting for the next tick
             ok &= matches(sim, w, m);
         }
 
@@ -260,6 +273,149 @@ static StateSnapshot session(const World& w, uint32_t from, uint32_t to) {
     CHECK(m.was_full && m.reused);  // the session met a full entity type and reused rows
     CHECK(sim.entities_alive(w.army) > 0 && sim.entity_count(w.army) == ARMY_CAPACITY);
     return sim.snapshot();
+}
+
+// ---- a crowd: thousands of rows asking at once ------------------------------------
+// Pops split (a dynamic entity type asking for rows of its own kind) and provinces settle
+// new ones, 180,000 pops in 200,003 rows: requests and free rows span many blocks of the
+// spawn stages, there are more requests than rows in the first ticks, and the capacity
+// is no multiple of anything.
+constexpr uint32_t CROWD_PROVINCES = 700, POPS = 180000, POP_CAPACITY = 200003;
+
+const char* SETTLE = R"(
+void main() {
+    FOR_EACH_PROVINCE(p) {
+        if ((p * 7u + terni.tick) % 11u == 0u) province_settle[p] += 1u + (p & 3u);
+    }
+}
+)";
+const char* LIVE = R"(
+void main() {
+    FOR_EACH_POP(i) {
+        pop_age[i] += 1;
+        uint h = (i * 2654435761u + terni.tick * 40503u) >> 20;
+        if (h < 300u) pop_split[i] += 1u + (h & 1u);
+        else if (h > 3600u || pop_age[i] > 30) pop_destroy(i);
+    }
+}
+)";
+
+struct Crowd {
+    std::unique_ptr<Game> game;
+    uint32_t province = 0, pop = 0;
+};
+static Crowd build_crowd() {
+    Crowd w;
+    WorldBuilder b;
+    w.province = b.entity("province", 1024);
+    b.field(w.province, "settle", FieldType::Count);
+    w.pop = b.entity("pop", POP_CAPACITY);
+    b.entity_dynamic(w.pop);
+    b.field(w.pop, "home", FieldType::Ref, "province");
+    b.field(w.pop, "mother", FieldType::Ref, "pop");
+    b.field(w.pop, "age", FieldType::Int);
+    b.field(w.pop, "split", FieldType::Count);
+    b.spawn(w.pop, "province", "settle", "home");
+    b.spawn(w.pop, "pop", "split", "mother");
+    b.stage("settle", "province", SETTLE);
+    b.stage("live", "pop", LIVE);
+    for (uint32_t p = 0; p < CROWD_PROVINCES; ++p) b.create(w.province);
+    for (uint32_t i = 0; i < POPS; ++i) b.set(w.pop, b.create(w.pop), "age", int64_t(i % 29));
+    w.game = b.finish();
+    for (const auto& e : w.game->errors) std::printf("  %s\n", e.text().c_str());
+    for (const auto& x : w.game->warnings) std::printf("  warning: %s\n", x.text().c_str());
+    return w;
+}
+
+struct CrowdModel {
+    uint32_t tick = 0, count = POPS;
+    std::vector<uint32_t> settle = std::vector<uint32_t>(1024, 0);
+    std::vector<bool> alive = std::vector<bool>(POP_CAPACITY, false), prev = alive;
+    std::vector<uint32_t> generation = std::vector<uint32_t>(POP_CAPACITY, 0), split = generation;
+    std::vector<int32_t> home = std::vector<int32_t>(POP_CAPACITY, 0), mother = home, age = home;
+    uint64_t born = 0, turned_away = 0;
+
+    CrowdModel() {
+        for (uint32_t i = 0; i < POPS; ++i) alive[i] = prev[i] = true, generation[i] = 1, age[i] = int32_t(i % 29);
+    }
+    void step() {
+        for (uint32_t p = 0; p < CROWD_PROVINCES; ++p)
+            if ((p * 7u + tick) % 11u == 0u) settle[p] += 1u + (p & 3u);
+        for (uint32_t i = 0; i < count; ++i) {
+            if (!alive[i]) continue;
+            age[i] += 1;
+            const uint32_t h = (i * 2654435761u + tick * 40503u) >> 20;
+            if (h < 300u) split[i] += 1u + (h & 1u);
+            else if (h > 3600u || age[i] > 30) alive[i] = false;
+        }
+        ++tick;
+        std::vector<uint32_t> eligible;
+        for (uint32_t i = 0; i < POP_CAPACITY; ++i) {
+            if (!alive[i] && !prev[i]) eligible.push_back(i);
+            prev[i] = alive[i];
+        }
+        const std::vector<bool> asking = alive;  // rows created below do not ask in the tick they are created
+        const uint32_t asking_count = count;
+        size_t next = 0;
+        auto serve = [&](uint32_t& want, std::vector<int32_t>& parent, uint32_t by) {
+            for (; want > 0; --want) {
+                if (next == eligible.size()) {
+                    turned_away += want;
+                    return;
+                }
+                const uint32_t row = eligible[next++];
+                alive[row] = prev[row] = true;
+                ++generation[row];
+                home[row] = mother[row] = age[row] = 0;
+                split[row] = 0;
+                parent[row] = int32_t(by);
+                count = std::max(count, row + 1);
+                ++born;
+            }
+        };
+        for (uint32_t p = 0; p < CROWD_PROVINCES; ++p) serve(settle[p], home, p);
+        for (uint32_t i = 0; i < asking_count; ++i)
+            if (asking[i]) serve(split[i], mother, i);
+    }
+};
+
+static void test_crowd(const std::vector<DeviceInfo>& devices) {
+    const Crowd w = build_crowd();
+    CHECK(w.game->ok() && w.game->warnings.empty());
+    if (!w.game->ok()) return;
+    std::vector<StateSnapshot> ends;
+    for (const auto& d : devices) {
+        GameSim sim(*w.game, d.index);
+        CrowdModel m;
+        bool ok = true;
+        const uint64_t reads = sim.sync_reads();
+        for (int t = 0; t < 30; ++t) {
+            sim.tick();
+            m.step();
+            bool same = sim.entity_count(w.pop) == m.count;
+            uint32_t alive = 0;
+            for (uint32_t i = 0; i < POP_CAPACITY; ++i) {
+                same &= sim.entity_alive(w.pop, i) == m.alive[i] && sim.entity_generation(w.pop, i) == m.generation[i];
+                alive += m.alive[i];
+            }
+            same &= sim.entities_alive(w.pop) == alive;
+            ok &= same;
+            if (!same) std::printf("  tick %d: rows differ from the model\n", t);
+        }
+        CHECK(sim.sync_reads() == reads);  // the host followed all of it without one read that waits
+        ok &= sim.read_field(w.pop, "home") == m.home && sim.read_field(w.pop, "mother") == m.mother;
+        ok &= sim.read_field(w.pop, "age") == m.age;
+        ok &= sim.read_field(w.pop, "split") == std::vector<int32_t>(m.split.begin(), m.split.end());
+        ok &= sim.read_field(w.province, "settle") == std::vector<int32_t>(m.settle.begin(), m.settle.end());
+        ok &= sim.read_field(w.pop, "home") == m.home;
+        CHECK(ok);
+        CHECK(m.born > 200000 && m.turned_away > 0 && m.count > POPS);
+        ends.push_back(sim.snapshot());
+        const bool agree = first_difference(ends[0], ends.back()).empty();
+        CHECK(agree);
+        std::printf("a crowd of pops on %-45.45s %s (%llu born)\n", d.name.c_str(), ok && agree ? "ok" : "DIFFERS",
+                    (unsigned long long)m.born);
+    }
 }
 
 static bool has(const Game& g, const std::string& text) {
@@ -290,6 +446,8 @@ int main() {
                     same ? "ok" : "DIFFERS");
     }
 
+    test_crowd(devices);
+
     // entity types that are not dynamic: the rows in use are alive, and there is nothing to create
     {
         GameSim sim(*w.game, devices[0].index);
@@ -312,7 +470,6 @@ int main() {
         sim.tick();
         CHECK(sim.read_field(w.army, "purse", row, 1) == std::vector<int32_t>({1, 2, 3, 4}));
         while (sim.entity_generation(w.army, row) < 2) sim.tick();  // a province's request takes the row
-        sim.tick();                                                 // and the new army reaches the device
         const int32_t lo = int32_t(uint32_t(5000000000ull)), hi = int32_t(5000000000ull >> 32);
         CHECK(sim.read_field(w.army, "purse", row, 1) == std::vector<int32_t>({lo, hi, lo, hi}));
     }
@@ -333,6 +490,7 @@ int main() {
         b.field(mill, "need", FieldType::Count);
         b.spawn(cart, "town", "want", "owner");   // owner refers to mill, not town
         b.spawn(mill, "town", "want");            // mill is not dynamic
+        b.entity_dynamic(b.entity("crowd", 1u << 24));  // more rows than the spawn stages count
         const auto bad = b.finish();
         CHECK(has(*bad, "field 'alive' of dynamic entity 'cart'"));
         CHECK(has(*bad, "'want' is not a single count field of 'town'"));
@@ -341,6 +499,7 @@ int main() {
         CHECK(has(*bad, "'missing' is not a single count field of 'mill'"));
         CHECK(has(*bad, "'owner' is not a single ref:town field of 'cart'"));
         CHECK(has(*bad, "'mill' is not a dynamic entity type"));
+        CHECK(has(*bad, "dynamic entity 'crowd': capacity must be under 16,777,216"));
     }
 
     // a data folder: `dynamic = yes` and `spawn = { ... }`; every device agrees

@@ -163,8 +163,9 @@ FOR_EACH_PROVINCE(p) {
 }
 ```
 
-After the tick, each province gets as many new armies as its `raise` says, in row
-order, and `raise` goes back to 0. A new army has every field at its default and, if
+At the end of the tick, each province gets as many new armies as its `raise` says, in
+row order, and `raise` goes back to 0. This happens on the device, in built-in stages
+after yours, so it costs no trip to the host however many rows ask. A new army has every field at its default and, if
 `parent` is given, that field set to the province that asked. It is alive from the next
 tick, so give it a field such as `fresh` with a default of 1 and set it up there:
 
@@ -182,9 +183,15 @@ If the entity type is full, the armies that do not fit are not created and `rais
 keeps the number still wanted; they are created when rows come free, unless a rule
 sets `raise` back to 0.
 
-**Refs to entities that may be gone.** Rows are reused, so check a ref before trusting
-it: `army_alive(r)` tells you the row holds an army, and comparing `army_generation[r]`
-with a generation you stored next to the ref tells you it is still the same one.
+**Refs to entities that may be gone.** A destroyed row is not used again in the tick it
+was destroyed or the one after, so a rule that checks `army_alive(r)` every tick always
+sees an army go before another takes its row. A ref that is checked less often can
+miss that: compare `army_generation[r]` with a generation you stored next to the ref to
+know it is still the same army.
+
+**Cost.** The built-in stages pass over every row of a dynamic entity type and of the
+types that ask, every tick, whether anything is asked or not: about as much work as
+three to five simple stages of your own over those rows.
 
 ## Workgroup stages
 

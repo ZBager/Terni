@@ -7,7 +7,8 @@
 //   0      defines                       D.<name>
 //   1      state                         terni.tick, terni.<entity>_count
 //   2 ...  one buffer per field          <entity>_<field>[]       (entities and fields in schema order)
-//   then   two per dynamic entity type:  <entity>_alive_bits[]    (one bit per row), <entity>_generation[]
+//   then   per dynamic entity type:      <entity>_alive_bits[]    (one bit per row), <entity>_generation[],
+//                                        and what giving out new rows needs (spawn_stage_sources)
 //   then   one buffer per modifier key and entity it can sit on:
 //                                        <entity>_modown_<key>[]  (key order; applies_to entity, then those it inherits from, nearest first)
 //
@@ -407,6 +408,201 @@ struct RuleSource {
     std::string source;  // full GLSL
 };
 
+// ---- new rows of dynamic entity types -------------------------------------------
+// Rules ask for rows through count fields; four built-in stages at the end of every tick
+// give them out, so that the result is the one a single thread would get going through
+// the entity types, their spawn lines and the asking rows in order, each request taking
+// the lowest free row:
+//   wanted  per word of alive bits: which rows are free; per asking row: the rows it
+//           wants, copied aside and added up per block of 256 rows
+//   blocks  per 256 words: the free rows before each word; per 256 blocks of asking rows:
+//           the rows wanted before each block
+//   scan    (one thread) running totals over those, so each knows where it starts
+//   assign  per asking row: its request k, k + 1, ... take the k-th, (k + 1)-th, ... free rows
+// No stage reads what another thread of it writes, and none needs a barrier (software
+// drivers run shaders with barriers far more slowly).
+// A row is free if it is not alive now and was not alive when the last tick ended: one
+// that is destroyed stays out of use for a whole tick, so that every death and every new
+// row shows in the alive bits the host reads back, and rules holding a ref see it dead.
+//
+// Per dynamic entity type (capacity C, W = ceil(C / 32) words, B = ceil(W / 256) blocks),
+// after its alive bits and generations:
+//   terni_prev_<e>      alive when the last tick ended, plus rows the host created since
+//   terni_cool_<e>      rows that died in the last tick (the host must not take them yet)
+//   terni_eligible_<e>  free rows, fixed before assign changes the alive bits
+//   terni_scratch_<e>   [0, B) free rows before each block; [B] free rows in all; [B + 1, B + 1 + W)
+//                       free rows before each word within its block; then per spawn line (R
+//                       blocks of 256 asking rows at the asking type's capacity): the asking
+//                       rows in use; per 256 blocks the rows wanted before them; per block
+//                       the rows wanted before it within its 256. Zeroed when a tick starts.
+//   terni_wanted_<e>_<i>  per spawn line: what each asking row wants, at most C
+// Capacities are specialization constants, so the layout is computed in the shaders.
+// Sums of wanted rows saturate at the capacity: more than that is never given out, and
+// with capacities under 2^24 (checked when the world is built) nothing overflows on the way.
+constexpr uint32_t SPAWN_BLOCK = 256;
+const char* const DYNAMIC_OWN[] = {"prev", "cool", "eligible", "scratch"};  // after alive_bits and generation
+
+uint32_t spawn_scratch_words(const Game& g, const EntityDef& e) {
+    const uint32_t bit_words = (e.capacity + 31) / 32;
+    uint32_t words = (bit_words + SPAWN_BLOCK - 1) / SPAWN_BLOCK + 1 + bit_words;
+    for (const auto& s : e.spawns) {
+        const uint32_t blocks = (g.entities[size_t(s.from_entity)].capacity + SPAWN_BLOCK - 1) / SPAWN_BLOCK;
+        words += 1 + (blocks + SPAWN_BLOCK - 1) / SPAWN_BLOCK + blocks;
+    }
+    return words;
+}
+
+struct BuiltInStage {
+    std::string name, body;
+    uint32_t elements;  // threads to launch
+};
+
+// A field's default as GLSL, for one value.
+std::string glsl_default(const FieldDef& f) {
+    const uint64_t raw = static_cast<uint64_t>(f.default_raw);
+    const std::string lo = std::to_string(uint32_t(raw)) + "u", hi = std::to_string(uint32_t(raw >> 32)) + "u";
+    if (f.type == FieldType::Money64) return "uvec2(" + lo + ", " + hi + ")";
+    return f.type == FieldType::Count || f.type == FieldType::Ref ? lo : "int(" + lo + ")";
+}
+
+std::vector<BuiltInStage> spawn_stage_sources(const Game& game) {
+    std::ostringstream wanted, blocks, scan, assign, helpers;
+    for (auto* o : {&wanted, &blocks, &scan, &assign, &helpers}) o->imbue(std::locale::classic());
+    uint32_t wanted_elements = 1, block_elements = 1, assign_elements = 1;
+    bool any = false;
+    for (const auto& e : game.entities) {
+        if (!e.dynamic) continue;
+        any = true;
+        const std::string& n = e.name;
+        const std::string cap = upper(n) + "_CAPACITY", S = "terni_scratch_" + n, eligible = "terni_eligible_" + n,
+                          prev = "terni_prev_" + n;
+        const std::string layout = "    uint words = (" + cap + " + 31u) / 32u, blocks = (words + 255u) / 256u;\n"
+                                   "    uint word_base = blocks + 1u, base = word_base + words;\n";
+        const uint32_t bit_words = (e.capacity + 31) / 32;
+        wanted_elements = std::max(wanted_elements, bit_words);
+        block_elements = std::max(block_elements, (bit_words + SPAWN_BLOCK - 1) / SPAWN_BLOCK);
+
+        wanted << "  {  // " << n << "\n" << layout
+               << "    FOR_EACH(w, words) {\n"
+                  "        uint rows = w + 1u == words && (" << cap << " & 31u) != 0u ? (1u << (" << cap << " & 31u)) - 1u : 0xFFFFFFFFu;\n"
+                  "        uint alive = " << n << "_alive_bits[w], before = " << prev << "[w];\n"
+                  "        " << eligible << "[w] = ~alive & ~before & rows;\n"
+                  "        terni_cool_" << n << "[w] = before & ~alive;\n"
+                  "    }\n";
+        blocks << "  {  // " << n << "\n" << layout
+               << "    FOR_EACH(b, blocks) {\n"
+                  "        uint free = 0u, end = min(words, b * 256u + 256u);\n"
+                  "        for (uint w = b * 256u; w < end; ++w) {\n"
+                  "            " << S << "[word_base + w] = free;\n"
+                  "            free += uint(bitCount(" << eligible << "[w]));\n"
+                  "            " << prev << "[w] = " << n << "_alive_bits[w];\n"
+                  "        }\n"
+                  "        " << S << "[b] = free;\n"
+                  "    }\n";
+        scan << "  {  // " << n << "\n" << layout
+             << "    uint free = 0u, wanted = 0u;\n"
+                "    for (uint b = 0u; b < blocks; ++b) { uint v = " << S << "[b]; " << S << "[b] = free; free += v; }\n"
+                "    " << S << "[blocks] = free;\n";
+        assign << "  {  // " << n << "\n" << layout << "    uint free = " << S << "[blocks];\n";
+
+        // the k-th free row (k < free rows in all), and what makes a row a new entity
+        helpers << "uint terni_free_" << n << "(uint k) {\n"
+                << "    uint words = (" << cap << " + 31u) / 32u, blocks = (words + 255u) / 256u, word_base = blocks + 1u;\n"
+                << "    uint lo = 0u, hi = blocks;\n"
+                << "    while (hi - lo > 1u) { uint mid = (lo + hi) / 2u; if (" << S << "[mid] <= k) lo = mid; else hi = mid; }\n"
+                << "    uint left = k - " << S << "[lo];\n"
+                << "    hi = min(words, lo * 256u + 256u);\n"
+                << "    lo *= 256u;\n"
+                << "    while (hi - lo > 1u) { uint mid = (lo + hi) / 2u; if (" << S << "[word_base + mid] <= left) lo = mid; else hi = mid; }\n"
+                << "    uint bits = " << eligible << "[lo];\n"
+                << "    for (left -= " << S << "[word_base + lo]; left > 0u; --left) bits &= bits - 1u;\n"
+                << "    return lo * 32u + uint(findLSB(bits));\n"
+                << "}\n"
+                << "void terni_new_" << n << "(uint row) {\n"
+                << "    atomicOr(" << n << "_alive_bits[row >> 5], 1u << (row & 31u));\n"
+                << "    atomicOr(" << prev << "[row >> 5], 1u << (row & 31u));\n"
+                << "    atomicMax(terni." << n << "_count, row + 1u);\n"
+                << "    " << n << "_generation[row] += 1u;\n";
+        for (const auto& f : e.fields) {
+            const std::string at = f.size > 1 ? "row * " + std::to_string(f.size) + "u + k" : "row";
+            helpers << "    ";
+            if (f.size > 1) helpers << "for (uint k = 0u; k < " << f.size << "u; ++k) ";
+            helpers << n << "_" << f.name << "[" << at << "] = " << glsl_default(f) << ";\n";
+        }
+        helpers << "}\n";
+
+        for (size_t i = 0; i < e.spawns.size(); ++i) {
+            const SpawnDef& s = e.spawns[i];
+            const EntityDef& from = game.entities[size_t(s.from_entity)];
+            const std::string count = from.name + "_" + s.count_field;
+            const std::string copy = "terni_wanted_" + n + "_" + std::to_string(i);
+            const std::string lines = "        uint r0 = (" + upper(from.name) + "_CAPACITY + 255u) / 256u, r1 = (r0 + 255u) / 256u;\n"
+                                      "        uint l1 = base + 1u, l0 = l1 + r1;\n";
+            const std::string title = "    {  // from " + from.name + "." + s.count_field + "\n" + lines;
+            const uint32_t from_blocks = (from.capacity + SPAWN_BLOCK - 1) / SPAWN_BLOCK;
+            wanted_elements = std::max(wanted_elements, from.capacity);
+            block_elements = std::max(block_elements, (from_blocks + SPAWN_BLOCK - 1) / SPAWN_BLOCK);
+            assign_elements = std::max(assign_elements, from.capacity);
+            wanted << title
+                   << "        FOR_EACH(p, terni." << from.name << "_count) {\n"
+                      "            uint want = " << (from.dynamic ? from.name + "_alive(p)" : "true") << " ? min(" << count << "[p], "
+                   << cap << ") : 0u;\n"
+                      "            " << copy << "[p] = want;\n"
+                      "            if (want != 0u) atomicAdd(" << S << "[l0 + (p >> 8)], want);\n"
+                      "        }\n"
+                      "        base = l0 + r0;\n"
+                      "    }\n";
+            blocks << title
+                   << "        uint used = (terni." << from.name << "_count + 255u) / 256u;\n"
+                      "        FOR_EACH(g, (used + 255u) / 256u) {\n"
+                      "            uint sum = 0u, end = min(used, g * 256u + 256u);\n"
+                      "            for (uint b = g * 256u; b < end; ++b) {\n"
+                      "                uint v = min(" << S << "[l0 + b], " << cap << ");\n"
+                      "                " << S << "[l0 + b] = sum;\n"
+                      "                sum += v;\n"
+                      "            }\n"
+                      "            " << S << "[l1 + g] = min(sum, " << cap << ");\n"
+                      "        }\n"
+                      "        base = l0 + r0;\n"
+                      "    }\n";
+            scan << title
+                 << "        uint asking = terni." << from.name << "_count;\n"
+                    "        " << S << "[base] = asking;\n"
+                    "        for (uint g = 0u; g < (asking + 65535u) / 65536u; ++g) {\n"
+                    "            uint v = " << S << "[l1 + g];\n"
+                    "            " << S << "[l1 + g] = wanted;\n"
+                    "            wanted = min(wanted + v, " << cap << ");\n"
+                    "        }\n"
+                    "        base = l0 + r0;\n"
+                    "    }\n";
+            assign << title
+                   << "        FOR_EACH(p, " << S << "[base]) {\n"
+                      "            if (" << copy << "[p] == 0u) continue;  // most rows ask for nothing\n"
+                      "            uint at = min(" << S << "[l1 + (p >> 16)] + " << S << "[l0 + (p >> 8)], " << cap << ");\n"
+                      "            if (at < free) {  // rows are left when its block starts\n"
+                      "                for (uint q = p & ~255u; q < p; ++q) at += " << copy << "[q];\n"
+                      "                uint want = " << count << "[p];\n"
+                      "                uint made = at < free ? min(want, free - at) : 0u;\n"
+                      "                for (uint j = 0u; j < made; ++j) {\n"
+                      "                    uint row = terni_free_" << n << "(at + j);\n"
+                      "                    terni_new_" << n << "(row);\n";
+            if (!s.parent_field.empty()) assign << "                    " << n << "_" << s.parent_field << "[row] = p;\n";
+            assign << "                }\n"
+                      "                if (made != 0u) " << count << "[p] = want - made;\n"
+                      "            }\n"
+                      "        }\n"
+                      "        base = l0 + r0;\n"
+                      "    }\n";
+        }
+        for (auto* o : {&wanted, &blocks, &scan, &assign}) *o << "  }\n";
+    }
+    if (!any) return {};
+    return {{"terni_spawn_wanted", "void main() {\n" + wanted.str() + "}\n", wanted_elements},
+            {"terni_spawn_blocks", "void main() {\n" + blocks.str() + "}\n", block_elements},
+            {"terni_spawn_scan", "void main() {\n  if (gl_GlobalInvocationID.x != 0u) return;\n" + scan.str() + "}\n", 1},
+            {"terni_spawn_assign", helpers.str() + "void main() {\n" + assign.str() + "}\n", assign_elements}};
+}
+
 // Every shader a world runs, in tick order: its rules, then the built-in stage that
 // advances the tick counter (seeds the rng rolls). GameSim and compile_rules() both
 // use this, so a cache filled by one is found by the other.
@@ -420,6 +616,7 @@ std::vector<RuleSource> rule_sources(const Game& game) {
     };
     std::vector<RuleSource> out;
     for (const auto& s : game.stages) out.push_back({s.name, full("rules/" + s.name + ".glsl", s.source)});
+    for (const auto& s : spawn_stage_sources(game)) out.push_back({s.name, full("<terni>", s.body)});
     out.push_back({"terni_tick", full("<terni>", "void main() { if (gl_GlobalInvocationID.x == 0u) terni.tick += 1u; }")});
     return out;
 }
@@ -573,6 +770,11 @@ std::string generate_prelude(const Game& game) {
           << "_alive_bits[]; };\n";
         o << "layout(std430, binding = " << binding++ << ") buffer " << n << "_generation_buf { uint " << n
           << "_generation[]; };\n";
+        auto own = [&](const std::string& name) {  // for the spawn stages (spawn_stage_sources)
+            o << "layout(std430, binding = " << binding++ << ") buffer " << name << "_buf { uint " << name << "[]; };\n";
+        };
+        for (const char* part : DYNAMIC_OWN) own(std::string("terni_") + part + "_" + n);
+        for (size_t i = 0; i < e.spawns.size(); ++i) own("terni_wanted_" + n + "_" + std::to_string(i));
         o << "bool " << n << "_alive(uint i) { return i < " << upper(n) << "_CAPACITY && (" << n
           << "_alive_bits[i >> 5] & (1u << (i & 31u))) != 0u; }\n";
         // an atomic: rows that share a word may be destroyed by different threads
@@ -668,24 +870,25 @@ struct GameSim::Impl {
         std::vector<std::pair<uint32_t, uint32_t>> pending;  // (row, value)
     };
     // A dynamic entity type on the host: which rows are alive and how often each was
-    // created, as of the last collected tick plus host calls since. Rules only ever clear
-    // alive bits; rows are created here, so every peer gives the same row to the same request.
+    // created, as of the last collected tick plus host calls since. The built-in spawn
+    // stages give out the rows rules ask for; the host follows through the alive bits that
+    // come back with every tick, and gives out rows itself for create_entity(), by the
+    // same rule: a row is free if it is not alive, did not die in the last tick and was
+    // not destroyed by the host since.
     struct Dynamic {
         uint32_t entity = 0;
-        uint32_t alive_binding = 0, generation_binding = 0;
+        uint32_t alive_binding = 0;        // then generation, and Terni's own (spawn_stage_sources)
         std::vector<uint32_t> alive;       // one bit per row
+        std::vector<uint32_t> prev, cool;  // as on the device (spawn_stage_sources)
         std::vector<uint32_t> generation;  // per row: times it was created
         uint32_t alive_count = 0;
         uint32_t free_word = 0;  // no word below this one has a free row
         TickRead alive_read{};   // the bits, back with every tick
-        struct Spawn {
-            uint32_t from = 0, count_binding = 0;
-            int parent_field = -1;
-            TickRead count_read{};  // the count field's rows in use, back with every tick
-        };
-        std::vector<Spawn> spawns;
         std::vector<std::vector<int32_t>> default_row;  // per field: the words of a new row
         bool is_alive(uint32_t row) const { return row / 32 < alive.size() && (alive[row / 32] >> (row % 32) & 1u) != 0; }
+        uint32_t generation_binding() const { return alive_binding + 1; }
+        uint32_t prev_binding() const { return alive_binding + 2; }
+        uint32_t cool_binding() const { return alive_binding + 3; }
     };
     std::vector<Dynamic> dynamics;
     std::vector<int> dynamic_of;  // per entity: index into `dynamics`, or -1
@@ -726,6 +929,14 @@ struct GameSim::Impl {
                 for (size_t k = 0; k < column_names.size(); ++k)
                     if (column_names[k] == c) zero.push_back(static_cast<uint32_t>(k + 2));
             stages.push_back({s.name, elements, spirv[i], std::move(zero)});
+        }
+        const auto built_in = spawn_stage_sources(game);  // after the rules, as in rule_sources
+        std::vector<uint32_t> scratch;  // zeroed when a tick starts
+        for (size_t k = 0; k < column_names.size(); ++k)
+            if (column_names[k].ends_with(".terni_scratch")) scratch.push_back(static_cast<uint32_t>(k + 2));
+        for (size_t i = 0; i < built_in.size(); ++i) {
+            stages.push_back({built_in[i].name, built_in[i].elements, spirv[game.stages.size() + i],
+                              i == 0 ? scratch : std::vector<uint32_t>{}});
         }
         stages.push_back({"terni_tick", 1, spirv.back(), {}});  // built-in last stage (rule_sources)
 
@@ -777,7 +988,7 @@ struct GameSim::Impl {
     }
     // Which stages run in the coming tick (the built-in last one always does).
     std::vector<bool> stages_now() const {
-        std::vector<bool> run(game.stages.size() + 1, true);
+        std::vector<bool> run(spirv.size(), true);
         for (size_t s = 0; s < game.stages.size(); ++s) run[s] = game.stages[s].runs_in(now);
         return run;
     }
@@ -789,104 +1000,70 @@ struct GameSim::Impl {
                                         "' is not a dynamic entity type");
         return dynamics[size_t(d)];
     }
-    // The lowest row that is not alive becomes alive; NO_ENTITY if every row is. The GPU
-    // hears of it through created().
+    // The lowest free row becomes alive; NO_ENTITY if there is none. The GPU hears of it
+    // through created().
     uint32_t allocate(Dynamic& d) {
         const uint32_t capacity = game.entities[d.entity].capacity;
-        while (d.free_word < d.alive.size() && d.alive[d.free_word] == 0xFFFFFFFFu) ++d.free_word;
+        auto taken = [&](uint32_t w) { return d.alive[w] | d.prev[w] | d.cool[w]; };
+        while (d.free_word < d.alive.size() && taken(d.free_word) == 0xFFFFFFFFu) ++d.free_word;
         if (d.free_word >= d.alive.size()) return NO_ENTITY;
-        const uint32_t row = d.free_word * 32 + uint32_t(std::countr_one(d.alive[d.free_word]));
+        const uint32_t row = d.free_word * 32 + uint32_t(std::countr_one(taken(d.free_word)));
         if (row >= capacity) return NO_ENTITY;  // only the bits past the capacity are left
         d.alive[row / 32] |= 1u << (row % 32);
+        d.prev[row / 32] |= 1u << (row % 32);  // if it dies in the coming tick, that tick must not reuse it
         ++d.generation[row];
         ++d.alive_count;
-        if (row >= counts[d.entity]) {  // the rows in use grow; they never shrink
-            counts[d.entity] = row + 1;
-            state[1 + d.entity] = row + 1;
+        if (row >= counts[d.entity]) {
+            in_use(d.entity, row + 1);
             runner->queue_write(1, &state[1 + d.entity], 4, uint64_t(1 + d.entity) * 4);
-            size_tick_reads();
         }
         return row;
     }
-    // Queue what the GPU needs to know about rows just allocated (ascending): alive bits,
-    // generations and every field at its default, one write per run of neighbouring rows.
-    void created(Dynamic& d, const std::vector<uint32_t>& rows) {
-        if (rows.empty()) return;
-        const uint32_t lo = rows.front() / 32, hi = rows.back() / 32 + 1;
-        runner->queue_write(d.alive_binding, d.alive.data() + lo, uint64_t(hi - lo) * 4, uint64_t(lo) * 4);
-        std::vector<int32_t> words;
-        for (size_t a = 0, b = 0; a < rows.size(); a = b) {
-            for (b = a + 1; b < rows.size() && rows[b] == rows[b - 1] + 1;) ++b;
-            const uint64_t first = rows[a], n = b - a;
-            runner->queue_write(d.generation_binding, d.generation.data() + first, n * 4, first * 4);
-            for (size_t f = 0; f < d.default_row.size(); ++f) {
-                const auto& one = d.default_row[f];
-                words.clear();
-                for (uint64_t k = 0; k < n; ++k) words.insert(words.end(), one.begin(), one.end());
-                runner->queue_write(field_binding[d.entity][f], words.data(), words.size() * 4, first * one.size() * 4);
-                mirror_write(d.entity, uint32_t(f), uint32_t(first), words.data(), one.size() == 1 ? n : 0);
-            }
+    // The rows in use of an entity type grow (they never shrink).
+    void in_use(uint32_t entity, uint32_t count) {
+        counts[entity] = count;
+        state[1 + entity] = count;
+        size_tick_reads();
+    }
+    // Queue what the GPU needs to know about a row the host just allocated: alive bits,
+    // generation and every field at its default.
+    void created(Dynamic& d, uint32_t row) {
+        const uint64_t w = row / 32;
+        runner->queue_write(d.alive_binding, &d.alive[w], 4, w * 4);
+        runner->queue_write(d.prev_binding(), &d.prev[w], 4, w * 4);
+        runner->queue_write(d.generation_binding(), &d.generation[row], 4, uint64_t(row) * 4);
+        for (size_t f = 0; f < d.default_row.size(); ++f) {
+            const auto& one = d.default_row[f];
+            runner->queue_write(field_binding[d.entity][f], one.data(), one.size() * 4, uint64_t(row) * one.size() * 4);
+            mirror_write(d.entity, uint32_t(f), row, one.data(), one.size() == 1 ? 1 : 0);
         }
     }
-    // A row is no longer alive: on the host's say (the GPU is told) or a rule's (it knows).
-    void died(Dynamic& d, uint32_t word) { d.free_word = std::min(d.free_word, word); }
-    // After a tick: take over the alive bits the rules left, drop modifiers of rows they
-    // destroyed, then create the rows they asked for. Requests are served in the order of
-    // entity types, their spawns, and the asking rows; each takes the lowest free row.
+    // After a tick: follow what the rules and the spawn stages did to the alive bits. A bit
+    // that went out is a row destroyed (its modifiers go); one that came on is a new row.
+    // Neither can be missed: a destroyed row is not given out again in the same tick.
     void collect_dynamic() {
         for (auto& d : dynamics) {
             const auto* bits = static_cast<const uint32_t*>(runner->tick_readback(d.alive_read.readback));
             bool deaths = false;
+            uint32_t top = 0;
             for (size_t w = 0; w < d.alive.size(); ++w) {
-                if (bits[w] == d.alive[w]) continue;
-                deaths = true;
-                d.alive_count = d.alive_count - uint32_t(std::popcount(d.alive[w])) + uint32_t(std::popcount(bits[w]));
-                d.alive[w] = bits[w];
-                died(d, uint32_t(w));
+                const uint32_t was = d.alive[w], now = bits[w];
+                d.cool[w] = d.prev[w] & ~now;
+                d.prev[w] = now;
+                if (now == was) continue;
+                deaths |= (was & ~now) != 0;
+                for (uint32_t born = now & ~was; born != 0; born &= born - 1) {
+                    const uint32_t row = uint32_t(w) * 32 + uint32_t(std::countr_zero(born));
+                    ++d.generation[row];
+                    top = std::max(top, row + 1);
+                }
+                d.alive_count = d.alive_count - uint32_t(std::popcount(was)) + uint32_t(std::popcount(now));
+                d.alive[w] = now;
             }
+            d.free_word = 0;  // rows that were cooling are free again
+            if (top > counts[d.entity]) in_use(d.entity, top);
             if (deaths) mods.remove_on(d.entity, [&](uint32_t row) { return !d.is_alive(row); });
         }
-        std::vector<uint32_t> rows, asked_by;
-        std::vector<uint32_t> asking;  // which rows could ask: those alive when the tick ended
-        for (auto& d : dynamics)
-            for (auto& sp : d.spawns) {
-                const auto* counts_now = static_cast<const uint32_t*>(runner->tick_readback(sp.count_read.readback));
-                const uint32_t n = uint32_t(runner->tick_readback_bytes(sp.count_read.readback) / 4);
-                const int from_dynamic = dynamic_of[sp.from];
-                if (from_dynamic >= 0) asking = dynamics[size_t(from_dynamic)].alive;
-                rows.clear();
-                asked_by.clear();
-                bool full = false;
-                for (uint32_t p = 0; p < n && !full; ++p) {
-                    if (counts_now[p] == 0) continue;
-                    if (from_dynamic >= 0 && (asking[p / 32] >> (p % 32) & 1u) == 0) continue;
-                    uint32_t made = 0;
-                    for (; made < counts_now[p]; ++made) {
-                        const uint32_t row = allocate(d);
-                        if (row == NO_ENTITY) {
-                            full = true;
-                            break;
-                        }
-                        rows.push_back(row);
-                        asked_by.push_back(p);
-                    }
-                    const uint32_t left = counts_now[p] - made;  // 0 unless the entity type is full
-                    if (made > 0) runner->queue_write(sp.count_binding, &left, 4, uint64_t(p) * 4);
-                }
-                // rows come out ascending per request but not overall (a hole, then the end): sort for the runs
-                std::vector<size_t> order(rows.size());
-                for (size_t i = 0; i < order.size(); ++i) order[i] = i;
-                std::sort(order.begin(), order.end(), [&](size_t a, size_t b) { return rows[a] < rows[b]; });
-                std::vector<uint32_t> sorted(rows.size());
-                for (size_t i = 0; i < order.size(); ++i) sorted[i] = rows[order[i]];
-                created(d, sorted);
-                if (sp.parent_field >= 0)
-                    for (size_t i = 0; i < rows.size(); ++i) {
-                        const int32_t parent = int32_t(asked_by[i]);
-                        runner->queue_write(field_binding[d.entity][size_t(sp.parent_field)], &parent, 4, uint64_t(rows[i]) * 4);
-                        mirror_write(d.entity, uint32_t(sp.parent_field), rows[i], &parent, 1);
-                    }
-            }
     }
 
     void after_tick(bool measured = true) {
@@ -934,9 +1111,6 @@ struct GameSim::Impl {
         for (const auto& r : tick_reads) runner->set_tick_readback_bytes(r.readback, tick_read_bytes(r));
         for (const auto& p : parents)
             if (p.active) runner->set_tick_readback_bytes(p.read.readback, tick_read_bytes(p.read));
-        for (const auto& d : dynamics)
-            for (const auto& sp : d.spawns)
-                runner->set_tick_readback_bytes(sp.count_read.readback, tick_read_bytes(sp.count_read));
     }
 
     // Tick boundary: expire modifiers, push host changes to the GPU.
@@ -1000,12 +1174,23 @@ GameSim::GameSim(const Game& game, const GameSimOptions& options) : impl_(std::m
         d.generation.assign(def.capacity, 0);
         for (uint32_t row = 0; row < game.tables[e].count; ++row) d.alive[row / 32] |= 1u << (row % 32), d.generation[row] = 1;
         d.alive_count = game.tables[e].count;
+        d.prev = d.alive;  // the starting rows count as alive before the first tick
+        d.cool.assign(d.alive.size(), 0);
         d.alive_binding = static_cast<uint32_t>(2 + m.columns.size());
-        m.columns.emplace_back(d.alive.begin(), d.alive.end());
-        m.column_names.push_back(def.name + ".alive_bits");
-        d.generation_binding = static_cast<uint32_t>(2 + m.columns.size());
-        m.columns.emplace_back(d.generation.begin(), d.generation.end());
-        m.column_names.push_back(def.name + ".generation");
+        const std::vector<int32_t> bits(d.alive.begin(), d.alive.end()), none(d.alive.size(), 0);
+        auto column = [&](const char* name, std::vector<int32_t> words) {
+            m.columns.push_back(std::move(words));
+            m.column_names.push_back(def.name + "." + name);
+        };
+        column("alive_bits", bits);
+        column("generation", std::vector<int32_t>(d.generation.begin(), d.generation.end()));
+        column("terni_prev", bits);
+        column("terni_cool", none);
+        column("terni_eligible", none);
+        column("terni_scratch", std::vector<int32_t>(spawn_scratch_words(game, def), 0));
+        for (size_t i = 0; i < def.spawns.size(); ++i)
+            column(("terni_wanted_" + std::to_string(i)).c_str(),
+                   std::vector<int32_t>(game.entities[size_t(def.spawns[i].from_entity)].capacity, 0));
         for (const auto& f : def.fields) {
             std::vector<int32_t> one;
             for (uint32_t k = 0; k < f.size; ++k) {
@@ -1013,13 +1198,6 @@ GameSim::GameSim(const Game& game, const GameSimOptions& options) : impl_(std::m
                 if (f.words() == 2) one.push_back(static_cast<int32_t>(static_cast<uint64_t>(f.default_raw) >> 32));
             }
             d.default_row.push_back(std::move(one));
-        }
-        for (const auto& s : def.spawns) {
-            Impl::Dynamic::Spawn sp;
-            sp.from = uint32_t(s.from_entity);
-            sp.count_binding = m.field_binding[sp.from][size_t(s.count_index)];
-            sp.parent_field = s.parent_index;
-            d.spawns.push_back(sp);
         }
         m.dynamic_of[e] = int(m.dynamics.size());
         m.dynamics.push_back(std::move(d));
@@ -1053,11 +1231,6 @@ GameSim::GameSim(const Game& game, const GameSimOptions& options) : impl_(std::m
     for (auto& d : m.dynamics) {
         d.alive_read = {0, d.entity, 0, 0, 1, d.alive_binding, d.alive.size() * 4, 0};
         d.alive_read.readback = m.runner->add_tick_readback(d.alive_binding, d.alive_read.most, 0);
-        for (auto& sp : d.spawns) {
-            sp.count_read = {0, sp.from, 0, UINT32_MAX, 1, sp.count_binding, uint64_t(game.entities[sp.from].capacity) * 4, 0};
-            sp.count_read.readback = m.runner->add_tick_readback(sp.count_binding, sp.count_read.most, 0);
-            m.runner->set_tick_readback_bytes(sp.count_read.readback, m.tick_read_bytes(sp.count_read));
-        }
     }
 }
 
@@ -1089,10 +1262,7 @@ void GameSim::move_to_device(uint32_t device) {
     for (auto& r : m.tick_reads) carry(r);
     for (auto& p : m.parents)
         if (p.active) carry(p.read);
-    for (auto& d : m.dynamics) {
-        carry(d.alive_read);
-        for (auto& sp : d.spawns) carry(sp.count_read);
-    }
+    for (auto& d : m.dynamics) carry(d.alive_read);
     next->take_queued(*m.runner);
     m.earlier_sync_reads += m.runner->sync_reads();
     m.runner = std::move(next);
@@ -1106,7 +1276,7 @@ uint32_t GameSim::create_entity(uint32_t entity) {
     Impl::Dynamic& d = m.dynamic(entity, "create_entity");
     m.settle();  // which rows are free depends on the tick in flight
     const uint32_t row = m.allocate(d);
-    if (row != NO_ENTITY) m.created(d, {row});
+    if (row != NO_ENTITY) m.created(d, row);
     return row;
 }
 
@@ -1116,8 +1286,7 @@ bool GameSim::destroy_entity(uint32_t entity, uint32_t row) {
     m.settle();
     if (!d.is_alive(row)) return false;
     d.alive[row / 32] &= ~(1u << (row % 32));
-    --d.alive_count;
-    m.died(d, row / 32);
+    --d.alive_count;  // its prev bit stays: not free again until a tick has passed
     m.runner->queue_write(d.alive_binding, &d.alive[row / 32], 4, uint64_t(row / 32) * 4);
     m.mods.remove_on(entity, [&](uint32_t r) { return r == row; });
     return true;
@@ -1169,8 +1338,8 @@ std::vector<OrderIssue> GameSim::tick_checked() {
     Impl& m = *impl_;
     m.settle();
     m.boundary();
-    std::vector<bool> check(m.game.stages.size() + 1, true);
-    check.back() = false;  // the built-in tick counter stage
+    std::vector<bool> check(m.spirv.size(), false);  // not the built-in stages after the rules
+    std::fill(check.begin(), check.begin() + std::ptrdiff_t(m.game.stages.size()), true);
     const auto diffs = m.runner->tick_checked(check, m.row_words, m.stages_now());
     m.after_tick(false);  // a checked tick runs every stage three times: no measure of the device
     std::vector<OrderIssue> out;
@@ -1420,10 +1589,13 @@ void GameSim::load(const std::vector<uint8_t>& data) {
             p.stale = false;
         }
     for (auto& d : m.dynamics) {  // who is alive is in the save, like every field
-        const auto& bits = m.columns[d.alive_binding - 2];
-        const auto& generation = m.columns[d.generation_binding - 2];
-        d.alive.assign(bits.begin(), bits.end());
-        d.generation.assign(generation.begin(), generation.end());
+        auto words = [&](uint32_t binding, std::vector<uint32_t>& to) {
+            to.assign(m.columns[binding - 2].begin(), m.columns[binding - 2].end());
+        };
+        words(d.alive_binding, d.alive);
+        words(d.generation_binding(), d.generation);
+        words(d.prev_binding(), d.prev);
+        words(d.cool_binding(), d.cool);
         d.alive_count = 0;
         for (uint32_t w : d.alive) d.alive_count += uint32_t(std::popcount(w));
         d.free_word = 0;

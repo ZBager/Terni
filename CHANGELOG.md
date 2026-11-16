@@ -36,8 +36,10 @@ The first public version.
   loops skip rows that are not alive, and rules ask for new rows through a count field
   (`spawn = { from = province count = raise parent = home }`, `WorldBuilder::spawn`).
   The host gets `GameSim::create_entity`, `destroy_entity`, `entity_alive`,
-  `entity_generation`, `entity_count` and `entities_alive`. Rows are given out the same
-  way on every device, and saves hold who is alive. Games without dynamic entity types
+  `entity_generation`, `entity_count` and `entities_alive`. New rows are given out on
+  the device, in built-in stages at the end of each tick, the same way on every device:
+  the lowest free row first, and a destroyed row rests for one tick. Saves hold who is
+  alive. Games without dynamic entity types
   keep their checksums and compiled rules.
 - **Machines without a usable GPU**: `add_vulkan_driver()` loads a software Vulkan driver
   shipped with the game (such as lavapipe), and the rules run on the CPU with the same

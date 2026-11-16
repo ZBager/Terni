@@ -71,10 +71,12 @@ times and the whole state is read back after each run. Run it in tests, on small
 for many ticks. The two checks complement each other: the warning finds a race before it
 ever happens; the checked tick proves one.
 
-Rows of a dynamic entity type are created on the host, between ticks, from what the
-tick left: each request takes the lowest row that is not alive, in the order of the
-entity types, their `spawn` lines and the asking rows. That is plain integer work on
-values every peer reads back identically, so every peer creates the same rows.
+Rows of a dynamic entity type are created by built-in stages at the end of the tick.
+Threads cannot each grab a free row, since which thread wins would differ from run to
+run. Instead the requests are numbered in a fixed order (entity types, their `spawn`
+lines, the asking rows) with running totals, the free rows are numbered the same way,
+and request number k takes free row number k: the result a single thread would get,
+whatever the device. The host's `create_entity` follows the same rule between ticks.
 
 ## Testing parity
 
