@@ -69,6 +69,7 @@ struct ComputeRunner::Impl {
     std::string shader_dir;
     VkBool32 shared_reduction = VK_FALSE;
     std::vector<uint32_t> zero_each_tick;
+    std::vector<ComputeSpecConstant> constants;
     // order check (tick_checked), made on first use
     std::vector<VkPipeline> check_pipelines;  // TERNI_ORDER_CHECK = 1
     std::vector<GpuBuffer> backup;            // the state before a checked stage
@@ -82,12 +83,17 @@ struct ComputeRunner::Impl {
     }
 
     // One pipeline per stage. Specialization constants: 0 = USE_SHARED_REDUCTION,
-    // 1 = TERNI_ORDER_CHECK (shaders/terni/compute.glsl).
+    // 1 = TERNI_ORDER_CHECK (shaders/terni/compute.glsl), then the caller's `constants`.
     std::vector<VkPipeline> make_pipelines(uint32_t order_check) {
         VkDevice d = ctx.device();
-        const struct { VkBool32 shared; uint32_t check; } data{shared_reduction, order_check};
-        const VkSpecializationMapEntry entries[2] = {{0, 0, sizeof(VkBool32)}, {1, sizeof(VkBool32), sizeof(uint32_t)}};
-        const VkSpecializationInfo spec{2, entries, sizeof(data), &data};
+        std::vector<uint32_t> data{shared_reduction, order_check};  // VkBool32 is a 32-bit word too
+        std::vector<VkSpecializationMapEntry> entries{{0, 0, 4}, {1, 4, 4}};
+        for (const auto& c : constants) {
+            entries.push_back({c.id, static_cast<uint32_t>(data.size() * 4), 4});
+            data.push_back(c.value);
+        }
+        const VkSpecializationInfo spec{static_cast<uint32_t>(entries.size()), entries.data(), data.size() * 4,
+                                        data.data()};
         const size_t S = stages.size();
         std::vector<VkShaderModule> modules(S);
         std::vector<VkComputePipelineCreateInfo> cis(S);
@@ -208,7 +214,8 @@ struct ComputeRunner::Impl {
 
 ComputeRunner::ComputeRunner(uint32_t device_index, bool validation, const std::string& shader_dir,
                              const std::vector<ComputeBufferSpec>& specs, const std::vector<ComputeStageSpec>& stages,
-                             const std::vector<uint32_t>& zero_each_tick, bool shared_reduction)
+                             const std::vector<uint32_t>& zero_each_tick, bool shared_reduction,
+                             const std::vector<ComputeSpecConstant>& constants)
     : impl_(std::make_unique<Impl>(device_index, validation)) {
     Impl& m = *impl_;
     VulkanContext& ctx = m.ctx;
@@ -218,6 +225,9 @@ ComputeRunner::ComputeRunner(uint32_t device_index, bool validation, const std::
     m.shader_dir = shader_dir;
     m.shared_reduction = shared_reduction ? VK_TRUE : VK_FALSE;
     m.zero_each_tick = zero_each_tick;
+    for (const auto& c : constants)
+        if (c.id < 2) throw std::invalid_argument("ComputeRunner: specialization constants 0 and 1 are the runner's own");
+    m.constants = constants;
     if (ctx.properties().limits.maxPerStageDescriptorStorageBuffers < n)
         throw std::runtime_error("device supports too few storage buffers per shader stage");
 

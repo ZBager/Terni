@@ -187,6 +187,8 @@ if(TERNI_BUILD_TESTS)
   add_test(NAME stage_schedule COMMAND test_schedule)
   terni_test(test_partial_write tests/test_partial_write.cpp)
   add_test(NAME partial_writes COMMAND test_partial_write)
+  terni_test(test_capacity tests/test_capacity.cpp)
+  add_test(NAME capacities COMMAND test_capacity)
 
   # These two check the shader math against __int128 on the CPU (GCC and Clang, including
   # MinGW). The SPIR-V they test is the same whichever compiler built the host.

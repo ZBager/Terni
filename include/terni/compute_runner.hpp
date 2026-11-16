@@ -26,6 +26,12 @@ struct ComputeBufferSpec {
     uint64_t bytes;
 };
 
+// A specialization constant given to every shader (layout(constant_id = id) in GLSL).
+// Ids 0 and 1 are the runner's own (shared reduction, order check).
+struct ComputeSpecConstant {
+    uint32_t id, value;
+};
+
 struct ComputeStageSpec {
     std::string shader;            // name; also the SPIR-V file name (without .spv) when `spirv` is empty
     uint32_t elements;             // threads to launch (grid-stride loops handle any count)
@@ -35,10 +41,12 @@ struct ComputeStageSpec {
 
 class ComputeRunner {
 public:
-    // shared_reduction is passed to every shader as specialization constant 0.
+    // shared_reduction is passed to every shader as specialization constant 0, and
+    // `constants` (ids from 2 up) as given.
     ComputeRunner(uint32_t device_index, bool validation, const std::string& shader_dir,
                   const std::vector<ComputeBufferSpec>& buffers, const std::vector<ComputeStageSpec>& stages,
-                  const std::vector<uint32_t>& zero_each_tick, bool shared_reduction);
+                  const std::vector<uint32_t>& zero_each_tick, bool shared_reduction,
+                  const std::vector<ComputeSpecConstant>& constants = {});
     ~ComputeRunner();
     ComputeRunner(const ComputeRunner&) = delete;
     ComputeRunner& operator=(const ComputeRunner&) = delete;

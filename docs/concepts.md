@@ -27,6 +27,10 @@ An **entity type** (planet, province, pop, army) is a table. Each entity is a **
 identified by its index. Every type has a fixed **capacity** (the most rows it can
 hold), set in the schema, and a **count** (the rows in use), set by the starting state.
 
+- A game that offers several map sizes changes capacities before it starts:
+  `game->set_capacity(province, 16384)`. The rules do not have to be compiled again;
+  one compiled set serves every size.
+
 - Stages visit rows `0 … count-1` of their entity type.
 - Counts are fixed while the simulation runs: Terni does not create or destroy rows
   during play. A game whose entities come and go (armies, for example) keeps a pool of

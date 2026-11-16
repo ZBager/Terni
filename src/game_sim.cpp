@@ -9,6 +9,9 @@
 //   2 ...  one buffer per field          <entity>_<field>[]       (entities and fields in schema order)
 //   then   one buffer per modifier key and entity it can sit on:
 //                                        <entity>_modown_<key>[]  (key order; applies_to entity, then inherited one)
+//
+// Specialization constants: 0, 1 are the runner's (compute.glsl); from 16 on, one capacity
+// per entity type, <ENTITY>_CAPACITY, so the SPIR-V does not depend on capacities.
 
 #include <algorithm>
 #include <chrono>
@@ -30,6 +33,8 @@
 namespace terni {
 
 namespace {
+
+constexpr uint32_t CAPACITY_CONSTANT0 = 16;  // constant_id of the first entity type's capacity
 
 const char* glsl_type(FieldType t) {
     switch (t) {
@@ -509,8 +514,8 @@ std::vector<std::vector<uint32_t>> rules_spirv(const std::vector<RuleSource>& ru
                               : std::to_string(missing_count) + " of " + std::to_string(rules.size()) +
                                     " shaders are not in the SPIR-V cache '" + cache_dir + "' (" + missing + ")";
         throw std::runtime_error(why + ": " + what +
-                                 ". Fill the cache with terni::compile_rules() for exactly this game (same rules, "
-                                 "defines and capacities) in a build that has the rule compiler.");
+                                 ". Fill the cache with terni::compile_rules() for exactly this game (same schema and "
+                                 "rules) in a build that has the rule compiler.");
     }
     return out;
 }
@@ -533,9 +538,12 @@ std::string generate_prelude(const Game& game) {
     for (const auto& e : game.entities) o << "    uint " << e.name << "_count;\n";
     o << "} terni;\n";
     uint32_t binding = 2;
-    for (const auto& e : game.entities) {
+    for (size_t i = 0; i < game.entities.size(); ++i) {
+        const auto& e = game.entities[i];
         o << "\n// " << e.name << "\n";
-        o << "const uint " << upper(e.name) << "_CAPACITY = " << e.capacity << "u;\n";
+        // set when the pipelines are made, so every capacity runs the same SPIR-V
+        o << "layout(constant_id = " << CAPACITY_CONSTANT0 + i << ") const uint " << upper(e.name)
+          << "_CAPACITY = 1u;\n";
         o << "#define FOR_EACH_" << upper(e.name) << "(i) FOR_EACH(i, terni." << e.name << "_count)\n";
         o << "#define FOR_EACH_" << upper(e.name) << "_GROUP(i) FOR_EACH_GROUP(i, terni." << e.name << "_count)\n";
         for (const auto& f : e.fields) {
@@ -761,8 +769,11 @@ GameSim::GameSim(const Game& game, const GameSimOptions& options) : impl_(std::m
     }
     stages.push_back({"terni_tick", 1, std::move(spirv.back()), {}});  // built-in last stage (rule_sources)
 
+    std::vector<ComputeSpecConstant> capacities;
+    for (size_t e = 0; e < game.entities.size(); ++e)
+        capacities.push_back({CAPACITY_CONSTANT0 + uint32_t(e), game.entities[e].capacity});
     m.runner = std::make_unique<ComputeRunner>(static_cast<uint32_t>(device), options.validation, "", buffers, stages,
-                                               std::vector<uint32_t>{}, true);
+                                               std::vector<uint32_t>{}, true, capacities);
 }
 
 GameSim::~GameSim() = default;

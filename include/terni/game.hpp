@@ -162,6 +162,12 @@ struct Game {
     // Throws std::invalid_argument for a name the game does not declare; define_index()
     // returns -1 instead, for defines that are optional.
     int32_t define(const std::string& n) const;
+    // Room for `rows` rows of an entity type, e.g. for the map size a match picks. New rows
+    // get the fields' defaults; rows past `rows` are dropped. Call before creating a
+    // GameSim. Capacities are not part of the compiled rules, so every capacity runs on the
+    // same SPIR-V (one cache entry). They are part of game_checksum(): peers must agree.
+    // Throws std::out_of_range for an unknown entity, zero rows or fewer rows than in use.
+    void set_capacity(uint32_t entity, uint32_t rows);
     bool ok() const { return errors.empty(); }
 };
 

@@ -59,6 +59,7 @@ their world can fill the starting state before creating a `GameSim`.
 | `errors`, `warnings` | `GameDiagnostic`s; `text()` gives `file:line: message` |
 | `ok()` | No errors |
 | `entity_index(name)`, `modifier_key_index(name)`, `bundle_index(name)`, `define_index(name)` | Index by name, or -1 |
+| `void set_capacity(entity, rows)` | Room for `rows` rows, before a `GameSim` starts; new rows get defaults. The rules need no recompiling |
 | `int32_t define(name)` | A define's raw value, as rules read it (`D.name`); throws `std::invalid_argument` for an unknown name |
 
 ### Functions
@@ -171,4 +172,5 @@ used by `load_game`, and by `terni_script_check`, which checks whole mod folders
 pre-recorded command buffer per tick, with batched uploads and readbacks. `GameSim` is
 built on it; use it directly only for models that do not fit the world description.
 `tick(run)` takes one flag per stage to skip some stages in that tick; each set of
-stages that run together is recorded once and reused.
+stages that run together is recorded once and reused. The constructor's `constants`
+are specialization constants (ids 2 and up) given to every shader.

@@ -16,7 +16,7 @@ measured.
 | Modifiers stored on the host, decided by the host | Research, focuses and events are game logic that changes rarely; Terni only keeps exact totals and expiries | Every modifier change goes through the API |
 | One pre-recorded command buffer per tick, batched transfers | A tick costs one GPU round trip, uploads and readbacks included | Writes and reads take effect at tick boundaries |
 | Sums through integer atomics | Integer addition gives the same total in any order | Rules must not read rows other threads write in the same stage (checked) |
-| Fixed capacity per entity type | Buffers and generated GLSL stay static; nothing is allocated during play | No entities created at run time; hosts use pools of rows |
+| Fixed capacity per entity type, set before the world starts | Buffers stay static; nothing is allocated during play. Capacities are specialization constants, so one compiled set of rules serves every map size | No entities created at run time; hosts use pools of rows |
 | A standalone library with no engine code | It is meant to be embedded by any engine | Integrations live in the games that use it |
 
 ## What the experiments measured

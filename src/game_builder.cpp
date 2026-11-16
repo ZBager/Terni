@@ -87,6 +87,23 @@ constexpr uint32_t SKIPPED_ROW = 0xFFFFFFFFu;
 
 }  // namespace
 
+void Game::set_capacity(uint32_t entity, uint32_t rows) {
+    if (entity >= entities.size()) throw std::out_of_range("set_capacity: no entity type " + std::to_string(entity));
+    EntityDef& e = entities[entity];
+    EntityTable& t = tables.at(entity);
+    if (rows == 0 || rows < t.count)
+        throw std::out_of_range("set_capacity: '" + e.name + "' needs room for its " + std::to_string(t.count) +
+                                " rows in use, and at least one");
+    for (size_t f = 0; f < e.fields.size(); ++f) {
+        const FieldDef& fd = e.fields[f];
+        auto& col = t.columns.at(f);
+        const size_t old_values = size_t(e.capacity) * fd.size, values = size_t(rows) * fd.size;
+        col.resize(values * fd.words());
+        for (size_t v = old_values; v < values; ++v) set_raw(col, fd, v, fd.default_raw);
+    }
+    e.capacity = rows;
+}
+
 WorldBuilder::WorldBuilder() : game_(std::make_unique<Game>()) {}
 WorldBuilder::WorldBuilder(std::string root) : WorldBuilder() { game_->root = std::move(root); }
 

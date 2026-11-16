@@ -27,7 +27,7 @@ ASCII letters, digits and `_`, not starting with a digit, `gl_` or `terni`.
 
 ```
 planet = {
-    capacity      = 4096                          # most rows this type can hold
+    capacity      = 4096                          # most rows this type can hold (Game::set_capacity changes it)
     owner         = ref:empire                    # field = type
     pop           = quantity
     stability     = { type = rate default = 50 }  # a starting value for every row

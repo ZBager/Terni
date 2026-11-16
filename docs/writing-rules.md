@@ -22,7 +22,7 @@ void main() {
 | `<entity>_<field>[i]` | A field; row `i`, or `i * SIZE + k` for sized fields |
 | `FOR_EACH_<ENTITY>(i) { }` | Loop over the rows in use of an entity type |
 | `FOR_EACH_<ENTITY>_GROUP(i) { }` | The same in `dispatch = workgroup` stages; 256 threads per row |
-| `<ENTITY>_CAPACITY`, `<ENTITY>_<FIELD>_SIZE` | Capacity; values per row |
+| `<ENTITY>_CAPACITY`, `<ENTITY>_<FIELD>_SIZE` | Capacity (see below); values per row |
 | `terni.tick`, `terni.<entity>_count` | Completed ticks; rows in use |
 | `D.<define>` | Constants from `common/` |
 | `<entity>_mod_<key>(i)` | Modifier total of row `i`, own plus inherited |
@@ -31,6 +31,11 @@ void main() {
 
 A stage may loop over another entity type than its `for_each` (the loop handles any
 count), and a rule may define helper functions and `const` values above `main`.
+
+`<ENTITY>_CAPACITY` is a specialization constant: its value is set when the world
+starts, so a game can change capacities without compiling its rules again. Use it in
+code, in `const` expressions and as an array size, but not in `#if`, which runs before
+the value is known.
 
 ## Fixed point
 

@@ -159,8 +159,8 @@ terni::GameSim sim(*game, options);
 
 If a rule is missing from the cache (a mod changed it), the start fails with one
 error that names every missing stage. The cache key covers the full rule source
-(including the generated prelude, so capacities count), the GLSL library and the
-compile settings, but not the compiler version: a cache built on one machine works on
+(including the generated prelude, so the schema counts, but not capacities, which are
+set when the world starts), the GLSL library and the compile settings, but not the compiler version: a cache built on one machine works on
 every other. Every file carries a content hash, so a damaged file is never handed to
 the driver.
 

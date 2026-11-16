@@ -153,8 +153,10 @@ int main() {
         std::ostringstream probe;
         probe << 4096;
         CHECK(probe.str() == "4.096");  // the locale is in effect for new streams
-        const std::string prelude = generate_prelude(*game);
-        CHECK(prelude.find("PLANET_CAPACITY = 4096u;") != std::string::npos);
+        WorldBuilder wide;  // a number the locale would group (capacities are not in the prelude)
+        wide.field(wide.entity("planet", 4), "stock", FieldType::Int, "", 4096);
+        const std::string prelude = generate_prelude(*wide.finish());
+        CHECK(prelude.find("PLANET_STOCK_SIZE = 4096u;") != std::string::npos);
         CHECK(prelude.find("4.096") == std::string::npos);
         auto reloaded = load_game(TERNI_SOURCE_DIR "/examples/mini_galaxy");
         CHECK(reloaded->ok() && game_checksum(*reloaded) == game_checksum(*game));

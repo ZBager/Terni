@@ -80,7 +80,7 @@ int main() {
         std::printf("mini_galaxy: checksum %016llx, prelude %016llx\n", (unsigned long long)checksum,
                     (unsigned long long)prelude_hash);
         CHECK(checksum == 0x7af6cb8520061a74ULL);
-        CHECK(prelude_hash == 0x9d146175bdc859f8ULL);
+        CHECK(prelude_hash == 0xbaf16d48709629d2ULL);
     }
     {  // rules with Windows line endings: same checksum, same text for the compiler
         const std::string lf = "void main() {\n    FOR_EACH_TOWN(t) { town_pop[t] += 1; }\n}\n";
