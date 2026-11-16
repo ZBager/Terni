@@ -261,10 +261,11 @@ private:
                 continue;
             }
             int64_t v = 0;
-            if (!parse_value(str(it.scalar), def->type, v))
+            if (!parse_value(str(it.scalar), def->type, v)) {
                 error(at(d, it), "invalid value '" + str(it.scalar) + "' for define '" + name + "'");
-            else
-                b_.set_define(name, v, at(d, it));
+                v = 0;  // still given, so the error is not followed by a "has no value" warning
+            }
+            b_.set_define(name, v, at(d, it));
         }
     }
 

@@ -58,8 +58,8 @@ defines = {
 }
 ```
 
-Give every declared define a value in `common/`; one without a value is 0 (the loader
-does not warn).
+Give every declared define a value in `common/`; one without a value is 0, with a
+warning at its line in the schema.
 
 ### Modifier keys
 

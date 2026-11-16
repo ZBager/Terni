@@ -35,7 +35,7 @@ Describes a world in code. Every call validates; problems are collected in
 | `uint32_t create(entity, id = "")` | Adds a starting row; returns the row |
 | `void set(entity, row, field, raw, index = 0)` | Sets a starting value (`index` within a sized field) |
 | `void add_modifier(bundle, entity, row, scale = fx::ONE, duration = 0)` | A modifier at the start |
-| `std::unique_ptr<Game> finish()` | Final validation, plus order warnings; check `ok()` |
+| `std::unique_ptr<Game> finish()` | Final validation, plus warnings (defines never given a value, order-dependent stages); check `ok()` |
 
 ### `load_game`
 

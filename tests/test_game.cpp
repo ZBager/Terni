@@ -3,6 +3,8 @@
 // Data-driven game loading: error reporting, value conversion, rule compile errors.
 #include <cstdio>
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -114,6 +116,12 @@ static bool has_error(const Game& g, const std::string& text) {
     return false;
 }
 
+static int warnings_with(const Game& g, const std::string& text) {
+    int n = 0;
+    for (const auto& w : g.warnings) n += w.text().find(text) != std::string::npos;
+    return n;
+}
+
 int main() {
     {  // exact decimal -> fixed point, no floats involved
         int64_t v = 0;
@@ -160,6 +168,30 @@ int main() {
         CHECK(has_error(*g, "common/modifiers/m.txt:1: unknown modifier key 'nonexistent'"));
         CHECK(has_error(*g, "common/modifiers/m.txt:1: invalid value 'abc' for modifier key 'pop_bonus'"));
         CHECK(has_error(*g, "history/all.txt:7: unknown modifier 'nope'"));
+        CHECK(warnings_with(*g, "has no value") == 0);  // 'growth = abc' is an error, not also a warning
+    }
+    {  // a define that is never given a value is 0, with a warning
+        WorldBuilder b;
+        b.define("given", FieldType::Rate);
+        b.define("forgotten", FieldType::Int, {"schema/x.txt", 4});
+        b.set_define("given", fx::rate(1, 2));
+        auto g = b.finish();
+        CHECK(g->ok() && g->define("forgotten") == 0);
+        CHECK(warnings_with(*g, "schema/x.txt:4: define 'forgotten' has no value, so it is 0") == 1);
+        CHECK(warnings_with(*g, "'given'") == 0);
+
+        namespace fs = std::filesystem;  // the same from a data folder, at the schema line
+        const fs::path root = fs::path(TERNI_TEST_BINARY_DIR) / "define_without_value";
+        fs::remove_all(root);
+        fs::create_directories(root / "schema");
+        fs::create_directories(root / "common");
+        std::ofstream(root / "schema" / "entities.txt") << "town = { capacity = 4 pop = int }\n"
+                                                           "defines = {\n    tax = rate\n    levy = int\n}\n";
+        std::ofstream(root / "common" / "defines.txt") << "tax = 0.1\n";
+        auto loaded = load_game(root.string());
+        CHECK(loaded->ok());
+        CHECK(warnings_with(*loaded, "schema/entities.txt:4: define 'levy' has no value, so it is 0") == 1);
+        CHECK(warnings_with(*loaded, "'tax'") == 0);
     }
     {  // GLSL errors in rules point at the rule file and line
         auto g = load_game(TERNI_TEST_DATA "/bad_rule");

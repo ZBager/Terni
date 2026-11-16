@@ -153,12 +153,14 @@ void WorldBuilder::define(const std::string& name, FieldType type, Location wher
     if (type == FieldType::Ref || type == FieldType::Money64) error(where, "defines can't be refs or money64");
     g.defines.push_back({name, type, std::move(where)});
     g.define_values.push_back(0);
+    define_given_.push_back(false);
 }
 
 void WorldBuilder::set_define(const std::string& name, int64_t raw, Location where) {
     Game& g = *game_;
     for (size_t i = 0; i < g.defines.size(); ++i)
         if (g.defines[i].name == name) {
+            if (i < define_given_.size()) define_given_[i] = true;  // even if refused below: that error says enough
             // stored as one 32-bit word: count is unsigned, the other types signed
             const bool count = g.defines[i].type == FieldType::Count;
             if (count ? raw < 0 || raw > int64_t(UINT32_MAX) : raw < INT32_MIN || raw > INT32_MAX)
@@ -280,6 +282,9 @@ void WorldBuilder::add_modifier(uint32_t bundle, uint32_t entity, uint32_t row, 
 
 std::unique_ptr<Game> WorldBuilder::finish() {
     Game& g = *game_;
+    for (size_t i = 0; i < g.defines.size() && i < define_given_.size(); ++i)  // defines added through game()
+        if (!define_given_[i])                                                // directly are not tracked
+            g.warnings.push_back({g.defines[i].where, "define '" + g.defines[i].name + "' has no value, so it is 0"});
     for (size_t e = 0; e < g.entities.size(); ++e) {
         g.tables[e].def = &g.entities[e];
         for (const auto& f : g.entities[e].fields)

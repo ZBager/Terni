@@ -203,16 +203,18 @@ public:
     void add_modifier(uint32_t bundle, uint32_t entity, uint32_t row, int32_t scale = 1 << 16, uint32_t duration = 0);
 
     Game& game() { return *game_; }
-    // Final validation; check result->ok(). result->warnings also names stages whose GLSL
-    // writes a field and reads it at a row other threads of the stage may write (or writes
-    // such rows without an atomic): their result can depend on thread order. A static look
-    // at the text; GameSim::tick_checked() confirms at run time. A line with the comment
+    // Final validation; check result->ok(). result->warnings names defines that were never
+    // given a value (they are 0), and stages whose GLSL writes a field and reads it at a
+    // row other threads of the stage may write (or writes such rows without an atomic):
+    // their result can depend on thread order. A static look at the text;
+    // GameSim::tick_checked() confirms at run time. A line with the comment
     // `terni: order ok` is left out.
     std::unique_ptr<Game> finish();
 
 private:
     void error(const Location& where, std::string message);
     std::unique_ptr<Game> game_;
+    std::vector<bool> define_given_;  // per define: set_define() was called for it
 };
 
 // Load a Paradox-syntax game folder (uses WorldBuilder). Never throws on bad data.
