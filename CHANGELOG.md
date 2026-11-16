@@ -37,5 +37,7 @@ The first public version.
   Host writes queued for one tick now always apply in the order they were made, even
   where they overlap (before, two writes to the same words in one tick could land in
   either order on the GPU).
+- **Defines by name**: `Game::define(name)` gives a constant's raw value, so host code
+  (tooltips, AI, UI) uses the same numbers as the rules; `Game::define_index(name)`.
 - **Licence**: LGPL 2.1 with the Terni Linking Exception (static linking, no relinking or
   reverse-engineering terms for games, compiled shaders belong to the game).

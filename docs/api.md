@@ -58,7 +58,8 @@ their world can fill the starting state before creating a `GameSim`.
 | `initial_modifiers`, `modifier_capacity` | Modifiers at the start |
 | `errors`, `warnings` | `GameDiagnostic`s; `text()` gives `file:line: message` |
 | `ok()` | No errors |
-| `entity_index(name)`, `modifier_key_index(name)`, `bundle_index(name)` | Index by name, or -1 |
+| `entity_index(name)`, `modifier_key_index(name)`, `bundle_index(name)`, `define_index(name)` | Index by name, or -1 |
+| `int32_t define(name)` | A define's raw value, as rules read it (`D.name`); throws `std::invalid_argument` for an unknown name |
 
 ### Functions
 

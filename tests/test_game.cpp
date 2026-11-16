@@ -3,6 +3,7 @@
 // Data-driven game loading: error reporting, value conversion, rule compile errors.
 #include <cstdio>
 #include <cstdint>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -173,6 +174,17 @@ int main() {
         CHECK(message.find("undefined_thing") != std::string::npos);
         if (failures) std::printf("  compile message was: %s\n", message.c_str());
     }
+    {  // define values must fit their 32-bit type (code-built worlds skip the loader's checks)
+        WorldBuilder b;
+        b.define("chance", FieldType::Rate);
+        b.define("slots", FieldType::Count);
+        b.set_define("chance", int64_t(INT32_MAX) + 1);
+        b.set_define("slots", -1);
+        b.set_define("slots", int64_t(UINT32_MAX));
+        auto g = b.finish();
+        CHECK(g->errors.size() == 2 && g->errors[0].message.find("'chance'") != std::string::npos);
+        CHECK(g->define("chance") == 0 && uint32_t(g->define("slots")) == UINT32_MAX);
+    }
     {  // the example game loads cleanly
         auto g = load_game(TERNI_SOURCE_DIR "/examples/mini_galaxy");
         for (const auto& e : g->errors) std::printf("  %s\n", e.text().c_str());
@@ -180,6 +192,18 @@ int main() {
         CHECK(g->tables.size() == 2 && g->tables[1].count == 5);
         CHECK(g->modifier_keys.size() == 2 && g->bundles.size() == 2 && g->initial_modifiers.size() == 2);
         CHECK(g->modifier_capacity == 1024);
+
+        int64_t growth = 0;  // defines by name: the raw word rules read as D.<name>
+        CHECK(parse_value("0.02", FieldType::Rate, growth));
+        CHECK(g->define("growth_rate") == growth && growth == 1310);
+        CHECK(g->define_index("tax_rate") == 1 && g->define_index("no_such_define") == -1);
+        bool threw = false;
+        try {
+            (void)g->define("no_such_define");
+        } catch (const std::invalid_argument& e) {
+            threw = std::string(e.what()).find("no_such_define") != std::string::npos;
+        }
+        CHECK(threw);
     }
     std::printf("test_game: %s\n", failures == 0 ? "PASS" : "FAIL");
     return failures == 0 ? 0 : 1;

@@ -157,6 +157,11 @@ struct Game {
     int entity_index(const std::string& n) const;
     int modifier_key_index(const std::string& n) const;
     int bundle_index(const std::string& n) const;
+    int define_index(const std::string& n) const;
+    // A define's raw value: the word rules read as D.<name> (a rate of 0.02 is 1310).
+    // Throws std::invalid_argument for a name the game does not declare; define_index()
+    // returns -1 instead, for defines that are optional.
+    int32_t define(const std::string& n) const;
     bool ok() const { return errors.empty(); }
 };
 

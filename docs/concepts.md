@@ -57,7 +57,8 @@ and compilers; integer results do not. See [Design](design.md).
 ## Constants (defines)
 
 A **define** is a named constant of one of the types above (`growth_rate = rate`),
-with its value in `common/` (`growth_rate = 0.02`). Rules read it as `D.growth_rate`.
+with its value in `common/` (`growth_rate = 0.02`). Rules read it as `D.growth_rate`;
+host code reads the same raw value with `game.define("growth_rate")`.
 Keeping balance numbers in defines lets mods change them without touching rules, and
 they are part of the game checksum.
 

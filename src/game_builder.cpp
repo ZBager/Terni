@@ -3,6 +3,9 @@
 // WorldBuilder: describing a world in code. All validation lives here, so worlds
 // built in code and worlds loaded from data folders get the same checks.
 
+#include <cstdint>
+#include <stdexcept>
+
 #include "terni/game.hpp"
 #include "order_lint.hpp"
 
@@ -44,6 +47,18 @@ int Game::bundle_index(const std::string& n) const {
     for (size_t i = 0; i < bundles.size(); ++i)
         if (bundles[i].name == n) return int(i);
     return -1;
+}
+
+int Game::define_index(const std::string& n) const {
+    for (size_t i = 0; i < defines.size(); ++i)
+        if (defines[i].name == n) return int(i);
+    return -1;
+}
+
+int32_t Game::define(const std::string& n) const {
+    const int i = define_index(n);
+    if (i < 0) throw std::invalid_argument("define: the game declares no define '" + n + "'");
+    return define_values.at(size_t(i));
 }
 
 namespace {
@@ -127,7 +142,11 @@ void WorldBuilder::set_define(const std::string& name, int64_t raw, Location whe
     Game& g = *game_;
     for (size_t i = 0; i < g.defines.size(); ++i)
         if (g.defines[i].name == name) {
-            g.define_values[i] = static_cast<int32_t>(raw);
+            // stored as one 32-bit word: count is unsigned, the other types signed
+            const bool count = g.defines[i].type == FieldType::Count;
+            if (count ? raw < 0 || raw > int64_t(UINT32_MAX) : raw < INT32_MIN || raw > INT32_MAX)
+                return error(where, "define '" + name + "': raw value " + std::to_string(raw) + " does not fit its type");
+            g.define_values[i] = static_cast<int32_t>(static_cast<uint32_t>(raw));
             return;
         }
     error(where, "'" + name + "' is not declared in schema `defines`");
