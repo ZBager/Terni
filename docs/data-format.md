@@ -68,13 +68,22 @@ modifier_keys = {
     pop_growth     = { applies_to = planet  type = rate  inherit = owner }
     tax_efficiency = { applies_to = planet  type = rate }
     research       = { applies_to = empire  type = rate }
+    unrest         = { applies_to = province  type = rate  inherit = { district region realm } }
 }
 modifiers = { capacity = 65536 }   # most modifier instances alive at once (optional)
 ```
 
 `type` is `rate`, `quantity` or `int`. `inherit` names a single-valued `ref` field of
 the key's entity that points to another entity type; the entity's total is then its
-own plus that row's. A bundle value for a key that does not apply to an entity is
+own plus that row's.
+
+A list inherits in several steps, nearest first. With `inherit = { district region
+realm }`, the first name is a field of the province, the second a field of the district
+and the third a field of the region. A province's total is its own, plus its
+district's, plus that district's region's, plus that region's realm's. Each entity type
+can appear once in the list. A ref that points at no row ends the chain there.
+
+A bundle value for a key that does not apply to an entity is
 ignored on that entity, as in Paradox games.
 
 ## common/

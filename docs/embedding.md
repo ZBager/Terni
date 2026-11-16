@@ -139,7 +139,8 @@ render();                                 // tick_result() still holds the last 
   `modifier_total()` and `modifier_breakdown()` answer from the host as usual.
 - Calls that need the GPU state as it is collect the tick first, and so block:
   `read_field`, `read_each_tick`, `save`, `load`, `snapshot`, `tick_checked`, and the
-  first `modifier_total` of a key inherited through a ref field.
+  first `modifier_total` of a key inherited through a ref field (once for each field
+  of a key that inherits in several steps).
 - One tick is in flight at a time: `begin_tick()` collects the previous one first.
 
 ### Host-side logic

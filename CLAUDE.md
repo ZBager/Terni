@@ -81,7 +81,7 @@ ctest --test-dir build --output-on-failure
 | `src/rule_compiler_*.cpp` | GLSL to SPIR-V with shaderc (`core`) or none (`runtime`) |
 | `src/order_lint.cpp` | Load-time warnings for order-dependent stages |
 | `shaders/terni/` | The GLSL library, embedded into the binary at build time |
-| `tests/` | Test programs; `tests/data/` holds broken games for error tests |
+| `tests/` | Test programs; `tests/data/` holds small games for loader tests, most of them broken on purpose |
 | `examples/` | `mini_galaxy` (a data folder) and `hello_towns` (a world in code) |
 | `docs/` | User documentation, written for outside game developers |
 

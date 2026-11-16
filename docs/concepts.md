@@ -117,6 +117,11 @@ shown in tooltips, often temporary.
   or `quantity`/`int` (flat): `pop_growth = { applies_to = planet type = rate }`.
 - A key can **inherit** through a ref field: with `inherit = owner`, a planet's total is
   its own plus its owner's.
+- A key can inherit in **several steps**: with `inherit = { district region realm }`, a
+  province's total is its own, plus its district's, plus that district's region's, plus
+  that region's realm's. Every level has its accessor: `province_mod_unrest(p)` is the
+  whole chain, `district_mod_unrest(d)` starts at the district, `region_mod_unrest(r)`
+  at the region.
 - A **bundle** is a named set of key values: `war_economy = { pop_growth = -0.005 tax_efficiency = 0.25 }`.
 - An **instance** applies a bundle to one row, with a **scale** (1.0 by default) and an
   optional **duration** in ticks, after which it expires.

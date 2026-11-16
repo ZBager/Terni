@@ -17,7 +17,9 @@ The first public version.
   command buffer per tick, on any Vulkan 1.3 device; `dispatch = workgroup` stages;
   batched host writes and per-tick readbacks of the rows in use.
 - **Modifiers**: additive keys, bundles and timed instances with inheritance through a ref
-  field; exact totals; breakdowns for tooltips answered without waiting for the GPU.
+  field, or through several in a row (`inherit = { district region realm }`,
+  `"district.region.realm"` in code; `ModifierKeyDef::inherit_steps` replaces
+  `inherit_entity`); exact totals; breakdowns for tooltips answered without waiting for the GPU.
 - **Saves and multiplayer**: complete, versioned saves that continue bit-identically on
   any device; `game_checksum()` over everything that defines behaviour.
 - **Shipping**: a SPIR-V cache keyed by source, not by compiler; `compile_rules()`;

@@ -8,7 +8,7 @@
 //   1      state                         terni.tick, terni.<entity>_count
 //   2 ...  one buffer per field          <entity>_<field>[]       (entities and fields in schema order)
 //   then   one buffer per modifier key and entity it can sit on:
-//                                        <entity>_modown_<key>[]  (key order; applies_to entity, then inherited one)
+//                                        <entity>_modown_<key>[]  (key order; applies_to entity, then those it inherits from, nearest first)
 //
 // Specialization constants: 0, 1 are the runner's (compute.glsl); from 16 on, one capacity
 // per entity type, <ENTITY>_CAPACITY, so the SPIR-V does not depend on capacities.
@@ -126,7 +126,7 @@ constexpr char SAVE_MAGIC[8] = {'T', 'E', 'R', 'N', 'I', 'S', 'A', 'V'};
 constexpr uint32_t SAVE_VERSION = 1;
 
 // Modifier total columns: for each key, the entity it applies to and (if it
-// inherits) the entity it inherits from. Shared by the prelude and the store.
+// inherits) the entities it inherits from, nearest first. Shared by the prelude and the store.
 struct ModColumn {
     uint32_t key, entity;
 };
@@ -135,8 +135,7 @@ std::vector<ModColumn> modifier_columns(const Game& g) {
     for (uint32_t k = 0; k < g.modifier_keys.size(); ++k) {
         const auto& key = g.modifier_keys[k];
         cols.push_back({k, key.entity});
-        if (key.inherit_entity >= 0 && uint32_t(key.inherit_entity) != key.entity)
-            cols.push_back({k, uint32_t(key.inherit_entity)});
+        for (const auto& step : key.inherit_steps) cols.push_back({k, step.entity});
     }
     return cols;
 }
@@ -560,17 +559,29 @@ std::string generate_prelude(const Game& game) {
             o << "layout(std430, binding = " << binding++ << ") buffer " << n << "_buf { int " << n << "[]; };\n";
         }
         o << "\n// modifier accessors: own total + inherited total\n";
-        for (const auto& c : cols) {
-            const auto& key = game.modifier_keys[c.key];
-            const std::string& en = game.entities[c.entity].name;
-            o << "int " << en << "_mod_" << key.name << "(uint i) { return " << en << "_modown_" << key.name << "[i]";
-            if (c.entity == key.entity && key.inherit_entity >= 0 && uint32_t(key.inherit_entity) != key.entity) {
-                const std::string& pn = game.entities[size_t(key.inherit_entity)].name;
-                const std::string ref = en + "_" + key.inherit_field + "[i]";
-                o << " + (" << ref << " < " << upper(pn) << "_CAPACITY ? " << pn << "_modown_" << key.name << "[" << ref
-                  << "] : 0)";
-            }
-            o << "; }\n";
+        for (const auto& key : game.modifier_keys) {
+            // level 0 is the key's own entity; level j inherits from level j + 1
+            const size_t top = key.inherit_steps.size();
+            auto entity_at = [&](size_t level) -> const EntityDef& {
+                return game.entities[level == 0 ? key.entity : key.inherit_steps[level - 1].entity];
+            };
+            auto accessor = [&](size_t level) {
+                const std::string& en = entity_at(level).name;
+                o << "int " << en << "_mod_" << key.name << "(uint i) { return " << en << "_modown_" << key.name << "[i]";
+                if (level < top) {
+                    const std::string& pn = entity_at(level + 1).name;
+                    const std::string ref = en + "_" + entity_at(level).fields[key.inherit_steps[level].field].name + "[i]";
+                    o << " + (" << ref << " < " << upper(pn) << "_CAPACITY ? " << pn;
+                    if (level + 1 < top) o << "_mod_" << key.name << "(" << ref << ")";  // it inherits in turn
+                    else o << "_modown_" << key.name << "[" << ref << "]";
+                    o << " : 0)";
+                }
+                o << "; }\n";
+            };
+            // GLSL wants a function before its callers: the levels that call the next one
+            // go from the top down; the top one calls nothing and nothing calls it
+            for (size_t level = top; level-- > 0;) accessor(level);
+            accessor(top);
         }
     }
     return o.str();
@@ -627,7 +638,7 @@ struct GameSim::Impl {
         std::vector<std::pair<uint32_t, uint32_t>> pending;  // (row, value)
     };
     std::vector<Parents> parents;
-    std::vector<int> key_parents;  // per modifier key: index into `parents`, or -1
+    std::vector<std::vector<uint32_t>> key_parents;  // per modifier key and inherit step: index into `parents`
     std::vector<uint64_t> row_words;  // per binding: words per row (order check reports)
     uint64_t now = 0;      // completed ticks
     bool in_flight = false;  // begin_tick() without end_tick()
@@ -635,9 +646,27 @@ struct GameSim::Impl {
     std::unique_ptr<ComputeRunner> runner;
     explicit Impl(const Game& g) : game(g), mods(g) {}
 
-    // The row a key's entity inherits from, without touching the GPU after the first call.
-    uint32_t parent_row(uint32_t key, uint32_t row) {
-        Parents& p = parents[size_t(key_parents.at(key))];
+    // The rows that count towards `key` on (entity, row): the row itself, then the rows it
+    // inherits from, nearest first. Stops at a ref that points at no row, as the accessor does.
+    template <class F>
+    void for_each_level(uint32_t key, uint32_t entity, uint32_t row, F&& visit) {
+        const auto& steps = game.modifier_keys.at(key).inherit_steps;
+        visit(entity, row);
+        size_t level = 0;  // where `entity` sits in the chain; other entity types inherit nothing
+        if (entity != game.modifier_keys[key].entity) {
+            while (level < steps.size() && steps[level].entity != entity) ++level;
+            ++level;
+        }
+        for (; level < steps.size(); ++level) {
+            row = parent_row(parents[key_parents[key][level]], row);
+            entity = steps[level].entity;
+            if (row >= game.entities[entity].capacity) return;
+            visit(entity, row);
+        }
+    }
+    // The row that `row` refers to through an inherit field, without touching the GPU after
+    // the first call.
+    uint32_t parent_row(Parents& p, uint32_t row) {
         if (!p.active) {
             settle();
             runner->flush_queued();  // queued host writes belong to the current state
@@ -773,17 +802,16 @@ GameSim::GameSim(const Game& game, const GameSimOptions& options) : impl_(std::m
         for (const auto& f : e.fields) m.row_words.push_back(uint64_t(f.size) * f.words());
     m.row_words.resize(buffers.size(), 1);  // modifier totals
     for (const auto& k : game.modifier_keys) {
-        int index = -1;
-        if (k.inherit_entity >= 0) {
-            const uint32_t f = static_cast<uint32_t>(game.entities[k.entity].field_index(k.inherit_field));
-            for (size_t i = 0; i < m.parents.size(); ++i)
-                if (m.parents[i].entity == k.entity && m.parents[i].field == f) index = int(i);
-            if (index < 0) {
-                m.parents.push_back({k.entity, f, m.field_binding[k.entity][f]});
-                index = int(m.parents.size() - 1);
-            }
+        std::vector<uint32_t> indices;
+        uint32_t from = k.entity;
+        for (const auto& step : k.inherit_steps) {  // keys that share a field share its mirror
+            size_t i = 0;
+            while (i < m.parents.size() && (m.parents[i].entity != from || m.parents[i].field != step.field)) ++i;
+            if (i == m.parents.size()) m.parents.push_back({from, step.field, m.field_binding[from][step.field]});
+            indices.push_back(uint32_t(i));
+            from = step.entity;
         }
-        m.key_parents.push_back(index);
+        m.key_parents.push_back(std::move(indices));
     }
 
     std::vector<ComputeStageSpec> stages;
@@ -956,19 +984,16 @@ int32_t GameSim::modifier_own_total(uint32_t key, uint32_t entity, uint32_t row)
 }
 
 int32_t GameSim::modifier_total(uint32_t key, uint32_t entity, uint32_t row) {
-    int32_t total = modifier_own_total(key, entity, row);
-    const auto& k = impl_->game.modifier_keys.at(key);
-    if (entity == k.entity && k.inherit_entity >= 0)
-        total += modifier_own_total(key, uint32_t(k.inherit_entity), impl_->parent_row(key, row));
-    return total;
+    uint32_t total = 0;  // wraps like the accessor's int sum
+    impl_->for_each_level(key, entity, row,
+                          [&](uint32_t e, uint32_t r) { total += uint32_t(impl_->mods.own_total(key, e, r)); });
+    return static_cast<int32_t>(total);
 }
 
 std::vector<ModifierContribution> GameSim::modifier_breakdown(uint32_t key, uint32_t entity, uint32_t row) {
     std::vector<ModifierContribution> out;
-    impl_->mods.own_breakdown(key, entity, row, out);
-    const auto& k = impl_->game.modifier_keys.at(key);
-    if (entity == k.entity && k.inherit_entity >= 0)
-        impl_->mods.own_breakdown(key, uint32_t(k.inherit_entity), impl_->parent_row(key, row), out);
+    impl_->for_each_level(key, entity, row,
+                          [&](uint32_t e, uint32_t r) { impl_->mods.own_breakdown(key, e, r, out); });
     return out;
 }
 

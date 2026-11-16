@@ -26,7 +26,7 @@ Describes a world in code. Every call validates; problems are collected in
 | `uint32_t entity(name, capacity)` | Adds an entity type; returns its index |
 | `void field(entity, name, type, ref_entity = "", size = 1, default_raw = 0)` | Adds a field |
 | `void define(name, type)` / `set_define(name, raw)` | Declares a constant / sets its value |
-| `uint32_t modifier_key(name, entity, type, inherit_field = "")` | Adds a modifier key (`Rate`, `Quantity` or `Int`) |
+| `uint32_t modifier_key(name, entity, type, inherit_field = "")` | Adds a modifier key (`Rate`, `Quantity` or `Int`). `inherit_field` is a ref field of `entity`, or several joined by `.`, nearest first: `"district.region.realm"` |
 | `uint32_t bundle(name, {{key, raw}, ...})` | Adds a modifier bundle |
 | `void modifier_capacity(n)` | Most modifier instances alive at once (default 65,536) |
 | `void stage(name, for_each, glsl, clear = {})` | Adds a stage at the end of the tick |
@@ -106,8 +106,8 @@ Runs a `Game` on one device. The `Game` must outlive it. Not thread-safe.
 | `bool set_modifier_scale(handle, scale)`, `bool remove_modifier(handle)` | False if the handle is stale |
 | `bool modifier_alive(handle)`, `size_t modifier_count()` | |
 | `int32_t modifier_own_total(key, entity, row)` | Without inheritance |
-| `int32_t modifier_total(key, entity, row)` | Own plus inherited, from host memory |
-| `std::vector<ModifierContribution> modifier_breakdown(key, entity, row)` | Every contributing instance, for tooltips |
+| `int32_t modifier_total(key, entity, row)` | Own plus inherited, from host memory. `entity` is the key's entity type or one it inherits through; the total counts from there up |
+| `std::vector<ModifierContribution> modifier_breakdown(key, entity, row)` | Every contributing instance, for tooltips, nearest level first |
 | `std::vector<uint8_t> save()` / `void load(bytes)` | The complete state; `load` throws on a bad save and changes nothing |
 | `uint64_t checksum()` | `game_checksum` of its game |
 | `StateSnapshot snapshot()` | Every field and modifier total, read back now |

@@ -36,7 +36,9 @@
 //
 // Modifiers (Paradox-style, additive): a key belongs to one entity type and
 // optionally inherits through a ref field (`inherit = owner`: a planet's total =
-// its own instances + its owner's). A bundle is a named set of key values. An
+// its own instances + its owner's), or through several in a row (`inherit =
+// { district region realm }`: a province's total = its own + its district's + that
+// district's region's + that region's realm's). A bundle is a named set of key values. An
 // instance applies a bundle to one entity with a scale, optionally for a number
 // of ticks. Host calls take effect for the simulation at the next tick.
 
@@ -93,12 +95,22 @@ struct DefineDef {
     Location where;
 };
 
+// One step of a modifier key's inheritance: a ref field of the entity type one level
+// below, and the entity type it refers to.
+struct InheritStep {
+    uint32_t field = 0;   // index of the ref field in the entity one level below
+    uint32_t entity = 0;  // entity type the field refers to
+};
+
 struct ModifierKeyDef {
     std::string name;
     uint32_t entity = 0;             // entity type the key applies to
     FieldType type = FieldType::Rate;  // Rate (percent-like), or Quantity or Int (flat)
-    std::string inherit_field;       // ref field of `entity` to inherit through ("" = none)
-    int inherit_entity = -1;         // resolved target entity type of that ref
+    // Ref fields to inherit through, nearest first, joined by '.' ("" = none): "owner" is
+    // one step; "district.region.realm" follows province.district, then district.region,
+    // then region.realm.
+    std::string inherit_field;
+    std::vector<InheritStep> inherit_steps;  // the same, resolved by finish(); empty = none
     Location where;
 };
 
@@ -185,6 +197,9 @@ public:
                uint32_t size = 1, int64_t default_raw = 0, Location where = {});
     void define(const std::string& name, FieldType type, Location where = {});
     void set_define(const std::string& name, int64_t raw, Location where = {});
+    // `inherit_field`: a ref field of `entity` to inherit through, or several joined by
+    // '.', nearest first ("district.region.realm"); every entity type on the way gets
+    // the key, and each may appear once.
     uint32_t modifier_key(const std::string& name, uint32_t entity, FieldType type,
                           const std::string& inherit_field = "", Location where = {});
     uint32_t bundle(const std::string& name, const std::vector<std::pair<uint32_t, int32_t>>& values, Location where = {});
@@ -367,10 +382,12 @@ public:
     bool modifier_alive(ModifierHandle h) const;
     // Own total of `key` on (entity, row) -- without inheritance.
     int32_t modifier_own_total(uint32_t key, uint32_t entity, uint32_t row) const;
-    // Own + inherited total, and the list of contributing instances (for tooltips). The
-    // inherited part follows the ref field (e.g. owner) as of the last tick plus host writes
-    // since. No GPU round trip: the first query of a key's inherit field reads it once,
-    // after that every tick brings back its rows in use in the same submission.
+    // Own + inherited total, and the list of contributing instances (for tooltips), nearest
+    // first. `entity` is the key's own entity type or one it inherits through; from there
+    // the total goes up the rest of the chain. The inherited part follows the ref fields
+    // (e.g. owner) as of the last tick plus host writes since. No GPU round trip: the first
+    // query that needs an inherit field reads it once, after that every tick brings back
+    // its rows in use in the same submission.
     int32_t modifier_total(uint32_t key, uint32_t entity, uint32_t row);
     std::vector<ModifierContribution> modifier_breakdown(uint32_t key, uint32_t entity, uint32_t row);
     size_t modifier_count() const;

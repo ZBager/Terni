@@ -25,7 +25,7 @@ void main() {
 | `<ENTITY>_CAPACITY`, `<ENTITY>_<FIELD>_SIZE` | Capacity (see below); values per row |
 | `terni.tick`, `terni.<entity>_count` | Completed ticks; rows in use |
 | `D.<define>` | Constants from `common/` |
-| `<entity>_mod_<key>(i)` | Modifier total of row `i`, own plus inherited |
+| `<entity>_mod_<key>(i)` | Modifier total of row `i`, own plus inherited. For a key that inherits in several steps, every entity type on the way has one, and it counts from that level up |
 | `workgroup_sync()` | Barrier for shared memory, in workgroup stages |
 | The GLSL library below | Fixed point, wide integers, randomness |
 

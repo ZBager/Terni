@@ -28,7 +28,8 @@ game loads, so mods can change the rules themselves, not only the numbers.
 - **Engine-agnostic.** A C++20 library with no engine dependency. Your engine draws,
   plays sound and runs the UI; Terni owns the simulation state.
 - **Paradox-style modifiers.** Additive, scalable, timed modifier bundles with
-  inheritance (a province inherits its owner's), totals kept exact and tooltips
+  inheritance in one or more steps (a province inherits from its district, region and
+  realm), totals kept exact and tooltips
   answered without waiting for the GPU.
 - **Determinism checks built in.** A warning at load time for rules whose result can
   depend on GPU thread order, and a checked tick that proves it at run time.

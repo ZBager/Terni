@@ -3,6 +3,7 @@
 // WorldBuilder: describing a world in code. All validation lives here, so worlds
 // built in code and worlds loaded from data folders get the same checks.
 
+#include <algorithm>
 #include <cstdint>
 #include <stdexcept>
 
@@ -292,19 +293,36 @@ std::unique_ptr<Game> WorldBuilder::finish() {
                 error(f.where, "reference to unknown entity '" + f.ref_entity + "'");
     }
     for (auto& k : g.modifier_keys) {
-        if (k.inherit_field.empty()) continue;
-        const FieldDef* f = k.entity < g.entities.size() ? g.entities[k.entity].field(k.inherit_field) : nullptr;
-        if (!f || f->type != FieldType::Ref)
-            error(k.where, "modifier key '" + k.name + "': inherit field '" + k.inherit_field + "' is not a ref field of '" +
-                               g.entities[k.entity].name + "'");
-        else if (f->size != 1)  // the generated accessor reads one parent per row
-            error(k.where, "modifier key '" + k.name + "': inherit field '" + k.inherit_field + "' must hold one ref, not " +
-                               std::to_string(f->size));
-        else if (f->ref_entity == g.entities[k.entity].name)  // the generated accessor would ignore it
-            error(k.where, "modifier key '" + k.name + "': inherit field '" + k.inherit_field +
-                               "' must refer to another entity type");
-        else
-            k.inherit_entity = g.entity_index(f->ref_entity);
+        k.inherit_steps.clear();
+        if (k.inherit_field.empty() || k.entity >= g.entities.size()) continue;
+        // "district.region.realm": each name is a ref field of the entity the one before leads to
+        std::vector<uint32_t> chain{k.entity};
+        bool ok = true;
+        for (size_t at = 0; ok && at <= k.inherit_field.size();) {
+            const size_t dot = std::min(k.inherit_field.find('.', at), k.inherit_field.size());
+            const std::string name = k.inherit_field.substr(at, dot - at);
+            at = dot + 1;
+            const EntityDef& from = g.entities[chain.back()];
+            const std::string what = "modifier key '" + k.name + "': inherit field '" + name + "' ";
+            const int fi = from.field_index(name);
+            const FieldDef* f = fi >= 0 ? &from.fields[size_t(fi)] : nullptr;
+            const int to = f && f->type == FieldType::Ref ? g.entity_index(f->ref_entity) : -1;
+            ok = false;
+            if (!f || f->type != FieldType::Ref)
+                error(k.where, what + "is not a ref field of '" + from.name + "'");
+            else if (f->size != 1)  // the generated accessor reads one parent per row
+                error(k.where, what + "must hold one ref, not " + std::to_string(f->size));
+            else if (f->ref_entity == from.name)  // the totals are one column per entity type
+                error(k.where, what + "must refer to another entity type");
+            else if (to >= 0 && std::find(chain.begin(), chain.end(), uint32_t(to)) != chain.end())
+                error(k.where, what + "leads back to '" + f->ref_entity + "', which the key already passes through");
+            else if (to >= 0) {  // an unknown entity is reported with the field
+                k.inherit_steps.push_back({uint32_t(fi), uint32_t(to)});
+                chain.push_back(uint32_t(to));
+                ok = true;
+            }
+        }
+        if (!ok) k.inherit_steps.clear();
     }
     if (g.modifier_capacity == 0) error({}, "modifier capacity must be positive");
     detail::lint_stage_order(g);  // warnings: stages whose result can depend on thread order

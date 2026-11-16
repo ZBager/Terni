@@ -1,0 +1,8 @@
+# A key that inherits in three steps, written as a list.
+realm    = { capacity = 4 }
+region   = { capacity = 8   realm = ref:realm }
+district = { capacity = 16  region = ref:region }
+province = { capacity = 64  district = ref:district  seen = rate }
+modifier_keys = {
+    tax = { applies_to = province  type = rate  inherit = { district region realm } }
+}

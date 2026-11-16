@@ -244,7 +244,12 @@ private:
                     error(at(d, *type), "unknown modifier key type '" + str(type->scalar) + "'");
                     continue;
                 }
-                b_.modifier_key(str(k.key), static_cast<uint32_t>(e), t, inherit ? str(inherit->scalar) : "", at(d, k));
+                // `inherit = owner`, or `inherit = { district region realm }` for several steps
+                std::string path = inherit && !inherit->is_block() ? str(inherit->scalar) : "";
+                if (inherit && inherit->is_block())
+                    for (const auto& step : inherit->block->items)
+                        path += (path.empty() ? "" : ".") + str(step.scalar);
+                b_.modifier_key(str(k.key), static_cast<uint32_t>(e), t, path, at(d, k));
             }
         }
     }
