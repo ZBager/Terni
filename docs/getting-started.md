@@ -17,11 +17,11 @@ driver that runs on the CPU, is enough to start.
 | Arch Linux | `cmake ninja gcc vulkan-headers vulkan-icd-loader shaderc vulkan-swrast` (lavapipe) |
 | Debian / Ubuntu | `cmake ninja-build g++ libvulkan-dev glslc libshaderc-dev mesa-vulkan-drivers` |
 | Windows (Visual Studio) | Visual Studio 2022 or 2026 with "Desktop development with C++" (includes CMake and Ninja), and the [Vulkan SDK](https://vulkan.lunarg.com/sdk/home#windows) (includes shaderc and `glslc`) |
-| Windows (MSYS2, UCRT64 shell) | `mingw-w64-ucrt-x86_64-{gcc,cmake,ninja,vulkan-headers,vulkan-loader,shaderc}` |
+| Windows (MSYS2, UCRT64 shell) | `mingw-w64-ucrt-x86_64-{gcc,libgomp,cmake,ninja,vulkan-headers,vulkan-loader,shaderc}` |
 
-The command-line tools also use OpenMP (part of GCC and MSVC; `libomp` for Clang).
-Package names change between releases; if one is missing, search for "shaderc" or
-"vulkan loader" in your package manager.
+The command-line tools also use OpenMP (part of GCC and MSVC, but a separate `libgomp`
+package in MSYS2; `libomp` for Clang). Package names change between releases; if one is
+missing, search for "shaderc" or "vulkan loader" in your package manager.
 
 Check that Vulkan sees a device:
 
