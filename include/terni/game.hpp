@@ -308,6 +308,14 @@ public:
     // Same, for any number of consecutive rows starting at `row`; the words are copied
     // into the GPU staging buffer immediately and uploaded with the next tick.
     void write_field(uint32_t entity, const std::string& field, uint32_t row, std::span<const int32_t> words);
+    // Part of one row of a sized field: values [index, index + n) of `row`, where n is the
+    // number of values in `words` (two words each for money64). The rest of the row keeps
+    // whatever the GPU has, so hosts need not mirror whole rows to change one value.
+    // Writes queued for the same tick apply in the order they were made.
+    void write_field(uint32_t entity, const std::string& field, uint32_t row, uint32_t index,
+                     const std::vector<int32_t>& words);
+    void write_field(uint32_t entity, const std::string& field, uint32_t row, uint32_t index,
+                     std::span<const int32_t> words);
 
     // ---- per-tick results without extra GPU round trips ----
     // Register a field to be copied back at the end of every tick, in the same GPU

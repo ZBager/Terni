@@ -838,6 +838,33 @@ void GameSim::write_field(uint32_t entity, const std::string& field, uint32_t ro
         }
 }
 
+void GameSim::write_field(uint32_t entity, const std::string& field, uint32_t row, uint32_t index,
+                          const std::vector<int32_t>& words) {
+    write_field(entity, field, row, index, std::span<const int32_t>(words));
+}
+
+void GameSim::write_field(uint32_t entity, const std::string& field, uint32_t row, uint32_t index,
+                          std::span<const int32_t> words) {
+    Impl& m = *impl_;
+    const EntityDef& e = m.game.entities.at(entity);
+    const int f = e.field_index(field);
+    if (f < 0) throw std::invalid_argument("write_field: '" + e.name + "' has no field '" + field + "'");
+    const FieldDef& fd = e.fields[size_t(f)];
+    const uint64_t per_value = fd.words();
+    if (words.size() % per_value != 0)
+        throw std::invalid_argument("write_field: '" + e.name + "." + field + "' takes " + std::to_string(per_value) +
+                                    " words per value");
+    if (row >= e.capacity || index > fd.size || words.size() / per_value > fd.size - index)
+        throw std::out_of_range("write_field: row or values out of range");
+    const uint64_t at = (uint64_t(row) * fd.size + index) * per_value;  // in words
+    m.runner->queue_write(m.field_binding[entity][size_t(f)], words.data(), words.size() * 4, at * 4);
+    for (auto& p : m.parents)  // inherit fields hold one value per row, so a partial write is the whole row
+        if (p.active && p.entity == entity && p.field == uint32_t(f) && !words.empty()) {
+            if (p.stale) m.refresh(p);
+            std::memcpy(p.rows.data() + row, words.data(), 4);
+        }
+}
+
 uint32_t GameSim::read_each_tick(uint32_t entity, const std::string& field, uint32_t first_row, uint32_t rows) {
     Impl& m = *impl_;
     const EntityDef& e = m.game.entities.at(entity);

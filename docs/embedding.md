@@ -104,7 +104,11 @@ copy_into_your_view_model(owners, pops);
   It is the cheap way to keep a host-side view of the fields the UI shows.
 - `read_field` is a separate round trip to the GPU. Use it for occasional reads.
 - `write_field` accepts any number of consecutive rows (`std::span`); the words are
-  staged at once and uploaded with the next tick.
+  staged at once and uploaded with the next tick. With an `index`, it changes only some
+  values of one row of a sized field: `write_field(province, "stock", p, grain, {amount})`
+  sets one good and leaves the others as the rules left them.
+- Writes made before the same tick apply in the order you made them, even where they
+  overlap: the last write to a value wins.
 - `last_tick_ms()` is the wall time of the last tick including transfers;
   `last_tick_gpu_ms()` is the GPU time of its stages. `report()` breaks the GPU time
   down per stage.

@@ -94,6 +94,7 @@ Runs a `Game` on one device. The `Game` must outlive it. Not thread-safe.
 | `std::vector<OrderIssue> tick_checked()` | A tick that also checks every stage for order dependence ([Determinism](determinism.md)) |
 | `std::vector<int32_t> read_field(entity, field, first_row = 0, rows = all)` | Raw words, read from the GPU now |
 | `void write_field(entity, field, row, words)` | Raw words from `row` on (vector or span); applied before the next tick |
+| `void write_field(entity, field, row, index, words)` | Values `index` onwards of one row of a sized field; the rest of the row is untouched |
 | `uint32_t read_each_tick(entity, field, first_row = 0, rows = in use)` | Registers a per-tick readback; returns an id |
 | `std::span<const int32_t> tick_result(id)` | Its words as of the last tick; valid until the next |
 | `ModifierHandle add_modifier(bundle, entity, row, scale = fx::ONE, duration = 0)` | Adds an instance; an invalid handle if the store is full |

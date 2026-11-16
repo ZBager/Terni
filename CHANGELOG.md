@@ -32,5 +32,10 @@ The first public version.
   `WorldBuilder::stage_schedule`) runs a stage only in some ticks; other ticks do not
   dispatch it, and its `clear` fields keep their values until it runs again.
   `ComputeRunner::tick()` and `tick_checked()` take the stages to run.
+- **Partial writes**: `GameSim::write_field(entity, field, row, index, words)` changes
+  some values of one row of a sized field, so hosts need not mirror whole rows.
+  Host writes queued for one tick now always apply in the order they were made, even
+  where they overlap (before, two writes to the same words in one tick could land in
+  either order on the GPU).
 - **Licence**: LGPL 2.1 with the Terni Linking Exception (static linking, no relinking or
   reverse-engineering terms for games, compiled shaders belong to the game).
