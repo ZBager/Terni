@@ -63,11 +63,11 @@ Rules of thumb:
 automatically) gives exact arithmetic on them from 32-bit operations, so it runs on
 every Vulkan device:
 
-`add_i64`, `sub_i64`, `neg_i64`, `abs_i64`, `min_i64`, `max_i64`, `lt_i64`, `le_i64`,
-`eq_i64`, `lt_u64`, `is_neg_i64`, `i64_from_int`, `mul_i64_q16` (i64 × rate),
-`mul_i32_i64` and `mul_i64_i64` (to i128), `mad_i128`, `add_i128`, `neg_i128`,
-`shr_i128_to_i64`, `div_u128_u64`, `div_i128_i64`, `muldiv_i64` (a × b / c),
-`div_q16_i64`.
+`add_i64` (also `add_i64(a, int)`), `sub_i64`, `neg_i64`, `abs_i64`, `min_i64`,
+`max_i64`, `lt_i64`, `le_i64`, `eq_i64`, `lt_u64`, `is_neg_i64`, `i64_from_int`,
+`mul_i64_q16` (i64 × rate), `mul_i32_i64` and `mul_i64_i64` (to i128), `mad_i128`,
+`add_i128`, `neg_i128`, `shr_i128_to_i64`, `div_u128_u64`, `div_i128_i64`, `muldiv_i64`
+(a × b / c), `div_q16_i64`.
 
 ```glsl
 empire_treasury[e] = add_i64(empire_treasury[e], empire_income[e]);

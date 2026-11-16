@@ -50,14 +50,17 @@ ctest --test-dir build --output-on-failure
   (`cmake --preset linux`, output in `build-<preset>/`). CI (`.github/workflows/ci.yml`)
   runs the suite on lavapipe on Linux, MSVC (VS 2022 and 2026) and MinGW, and checks the
   mini_galaxy state hash; if that example changes, update the hash there and the pinned
-  values in `tests/test_portable_text.cpp`.
+  values in `tests/test_portable_text.cpp` (which also pins the prelude's hash, so a
+  change to `generate_prelude` updates it too).
 - The GPU tests run on **every usable Vulkan device** and compare results bit for bit;
   lavapipe (Mesa's CPU driver) counts as a device. A change is done when the whole suite
   passes on every device in the machine.
 - Run a test binary under the validation layer with
   `VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation ./build/test_embedding` and check its
   output for `VUID` / `Validation Error`; a clean run prints none. Confirm the layer loaded
-  (`VK_LOADER_DEBUG=layer`) before trusting silence.
+  (`VK_LOADER_DEBUG=layer`) before trusting silence. For changes to transfers or
+  submission, also run `test_partial_write` and `test_async_tick` with
+  `VK_KHRONOS_VALIDATION_VALIDATE_SYNC=1` (CI does).
 - `./build/terni_run <game folder> [--ticks N] [--dump] [--prelude] [--device I]` runs a
   data folder on every device and compares state hashes; `--prelude` prints the generated
   GLSL. `./build/hello_towns` is the getting-started example.
@@ -74,7 +77,7 @@ ctest --test-dir build --output-on-failure
 | `include/terni/` | Public headers. `game.hpp` is the main API (`WorldBuilder`, `load_game`, `GameSim`) |
 | `src/game_sim.cpp` | Prelude generation, SPIR-V cache, modifier store, `GameSim`, saves |
 | `src/game_builder.cpp`, `src/game_load.cpp` | Validation; the data-folder loader |
-| `src/compute_runner.cpp` | Vulkan: buffers, pipelines, the per-tick command buffer, transfers, order-check runs |
+| `src/compute_runner.cpp` | Vulkan: buffers, pipelines, the per-tick command buffers, transfers, order-check runs |
 | `src/rule_compiler_*.cpp` | GLSL to SPIR-V with shaderc (`core`) or none (`runtime`) |
 | `src/order_lint.cpp` | Load-time warnings for order-dependent stages |
 | `shaders/terni/` | The GLSL library, embedded into the binary at build time |

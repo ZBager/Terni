@@ -27,11 +27,10 @@ An **entity type** (planet, province, pop, army) is a table. Each entity is a **
 identified by its index. Every type has a fixed **capacity** (the most rows it can
 hold), set in the schema, and a **count** (the rows in use), set by the starting state.
 
+- Stages visit rows `0 … count-1` of their entity type.
 - A game that offers several map sizes changes capacities before it starts:
   `game->set_capacity(province, 16384)`. The rules do not have to be compiled again;
   one compiled set serves every size.
-
-- Stages visit rows `0 … count-1` of their entity type.
 - Counts are fixed while the simulation runs: Terni does not create or destroy rows
   during play. A game whose entities come and go (armies, for example) keeps a pool of
   rows with an "alive" field and reuses free ones.
@@ -75,7 +74,8 @@ GPU threads it gets.
 One **tick** is:
 
 1. Host changes since the last tick are uploaded (field writes, modifier totals).
-2. Fields listed in a stage's `clear = { ... }` are set to zero (accumulators).
+2. Fields listed in the `clear = { ... }` of a stage that runs in this tick are set to
+   zero (accumulators).
 3. Every stage runs in order, with a memory barrier between stages: a stage sees
    everything the stages before it wrote. A stage with a schedule (`every = 30`) runs
    only in its ticks; in the others it is skipped, and its `clear` fields keep their
@@ -89,7 +89,7 @@ of the same stage writes. Terni checks this for you; see [Determinism](determini
 
 A stage can also run with **one workgroup per entity** (`dispatch = workgroup`): 256
 threads cooperate on each row through shared memory. That suits wide per-entity work,
-such as summing 204 pop rows of a province.
+such as summing a few hundred pop rows of a province.
 
 ## The generated GLSL
 
@@ -133,8 +133,8 @@ contributing instance without waiting for the GPU.
 `GameSim::save()` captures the complete simulation state: tick, counts, every field
 and the modifier store. A save loads on any device and continues bit-identically.
 
-`game_checksum()` hashes everything that defines how a world behaves: entity types and
-fields, defines and their values, modifier keys and bundles, stage order and rule
-sources. A save only loads into a game with the same checksum, and multiplayer peers
+`game_checksum()` hashes everything that defines how a world behaves: entity types with
+their capacities and fields, defines and their values, modifier keys and bundles, and
+the stages with their order, rule sources and settings. A save only loads into a game with the same checksum, and multiplayer peers
 compare it before they play together. The starting state is not part of it; that is
 what saves are for.

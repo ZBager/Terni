@@ -56,8 +56,9 @@ ctest --test-dir build                        # unit tests and GPU parity on eve
 ./build/terni_run examples/mini_galaxy --ticks 100 --dump   # a world from a data folder
 ```
 
-Requirements: CMake 3.21+, a C++20 compiler (GCC or Clang), the Vulkan loader and
-headers, and shaderc (`libshaderc` and `glslc`). The tools also need OpenMP.
+Requirements: CMake 3.21+, a C++20 compiler (GCC, Clang, or Visual Studio 2022 or
+2026), the Vulkan loader and headers, and shaderc (`libshaderc` and `glslc`). The tools
+also need OpenMP.
 See [Getting started](docs/getting-started.md) for packages per system.
 
 ## Using Terni in your game
@@ -70,6 +71,7 @@ target_link_libraries(my_game PRIVATE Terni::core)  # or Terni::runtime: no shad
 ```cpp
 auto game = terni::load_game("data/my_game");        // errors as file:line in game->errors
 terni::GameSim sim(*game);                            // compiles the rules, picks a GPU
+const uint32_t province = uint32_t(game->entity_index("province"));
 uint32_t pops = sim.read_each_tick(province, "pop");  // results copied back with every tick
 sim.tick();
 std::span<const int32_t> pop = sim.tick_result(pops);
@@ -85,7 +87,7 @@ std::span<const int32_t> pop = sim.tick_result(pops);
 | [Writing rules](docs/writing-rules.md) | The generated GLSL names, fixed point, sums, randomness, the GLSL library |
 | [Embedding in an engine](docs/embedding.md) | Devices, the per-tick loop, shipping, saves, lockstep multiplayer |
 | [Determinism](docs/determinism.md) | The contract, order checks, parity testing |
-| [API reference](docs/api.md) | Every public type and call |
+| [API reference](docs/api.md) | The public types and calls (lower-level details are in the headers) |
 | [Design](docs/design.md) | Why Terni is built this way, and what it measured |
 | [Roadmap](docs/roadmap.md) | What comes next |
 | [Licensing](docs/licensing.md) | What a game using Terni may do and must do |

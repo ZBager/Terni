@@ -72,7 +72,8 @@ UCRT64 shell. The programs land in `build-<preset>/` instead of `build/`.
 `hello_towns` describes a tiny world in C++ and prints how three towns grew.
 `terni_run` loads a game folder, runs it on every device, compares the state hashes,
 and with `--dump` prints the final state. `--prelude` shows the GLSL that Terni
-generated from the folder's schema; `--device N` picks one device.
+generated from the folder's schema; `--device N` picks one device, and
+`--vk-validation` turns on the Vulkan validation layers.
 
 ## 4. A world in code
 

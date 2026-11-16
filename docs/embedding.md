@@ -189,8 +189,8 @@ terni::GameSim sim(*game, options);
 If a rule is missing from the cache (a mod changed it), the start fails with one
 error that names every missing stage. The cache key covers the full rule source
 (including the generated prelude, so the schema counts, but not capacities, which are
-set when the world starts), the GLSL library and the compile settings, but not the compiler version: a cache built on one machine works on
-every other. Every file carries a content hash, so a damaged file is never handed to
+set when the world starts), the GLSL library and the compile settings, but not the
+compiler version: a cache built on one machine works on every other. Every file carries a content hash, so a damaged file is never handed to
 the driver.
 
 **If your engine has its own shader compiler.** Some engines export their own copy of
@@ -220,8 +220,9 @@ settings, player names) next to it.
 Because every peer computes the same state from the same inputs, only commands need to
 travel:
 
-1. **Before playing**, peers compare `terni::game_checksum(*game)`. Different rules,
-   defines or mods are refused here, not discovered as a desync later.
+1. **Before playing**, peers compare `terni::game_checksum(*game)`, after any
+   `set_capacity`. Different rules, defines, capacities or mods are refused here, not
+   discovered as a desync later.
 2. **Every tick**, the host sends one turn holding every command for that tick. Each
    peer applies the commands with the same host-side logic, then calls `tick()`.
 3. **Every N ticks**, peers compare a state hash and stop on a mismatch:

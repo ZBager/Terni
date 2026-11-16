@@ -54,5 +54,11 @@ several features:
 | Per-tick readbacks copied the whole capacity of a mostly empty world | Only the rows in use are copied (0.13 to 0.05 ms per tick on a small world) |
 | Tooltips of inherited modifiers waited for the GPU | Inherited totals are answered from host memory |
 | A rule read a row that another thread of the same stage wrote; cross-device tests passed anyway | Load-time warnings and `tick_checked()` |
+| Monthly stages were dispatched every day, only to test the date | Stage schedules: `every = 30 offset = 29` |
+| Changing one value of a sized field meant writing the whole row | Partial writes: `write_field(entity, field, row, index, words)` |
+| Two host writes to the same words before one tick could land in either order | Overlapping writes apply in the order they were made (found with synchronization validation) |
+| Host code looked up constants by scanning the description | `Game::define(name)` |
+| Each map size needed its own compiled rules | Capacities are specialization constants; `Game::set_capacity()` |
+| A tick blocked the frame that started it | `begin_tick()` / `end_tick()`; commands made meanwhile go to the next tick |
 
 The ones still open are on the [roadmap](roadmap.md).

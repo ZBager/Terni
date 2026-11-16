@@ -39,6 +39,7 @@ The first public version.
   either order on the GPU).
 - **Defines by name**: `Game::define(name)` gives a constant's raw value, so host code
   (tooltips, AI, UI) uses the same numbers as the rules; `Game::define_index(name)`.
+  `WorldBuilder::set_define` rejects a value that does not fit the define's type.
 - **Capacities at run time**: `Game::set_capacity(entity, rows)` sizes an entity type
   before the world starts (e.g. for the map size a match picks). `<ENTITY>_CAPACITY` is
   now a specialization constant, so one compiled set of rules and one SPIR-V cache entry

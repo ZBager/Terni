@@ -32,7 +32,7 @@
 // Generated GLSL:  planet_pop[i]   D.growth_rate   terni.tick   terni.planet_count
 //                  FOR_EACH_PLANET(i) { ... }      planet_mod_pop_growth(i)  (own + inherited modifier total)
 //                  FOR_EACH_PLANET_GROUP(i) { ... }  in `dispatch = workgroup` stages: 256 threads per
-//                  planet (gl_LocalInvocationID.x), shared memory and barrier() allowed
+//                  planet (gl_LocalInvocationID.x), shared memory and workgroup_sync() allowed
 //
 // Modifiers (Paradox-style, additive): a key belongs to one entity type and
 // optionally inherits through a ref field (`inherit = owner`: a planet's total =
@@ -96,7 +96,7 @@ struct DefineDef {
 struct ModifierKeyDef {
     std::string name;
     uint32_t entity = 0;             // entity type the key applies to
-    FieldType type = FieldType::Rate;  // Rate (percent-like) or Quantity (flat)
+    FieldType type = FieldType::Rate;  // Rate (percent-like), or Quantity or Int (flat)
     std::string inherit_field;       // ref field of `entity` to inherit through ("" = none)
     int inherit_entity = -1;         // resolved target entity type of that ref
     Location where;
@@ -285,12 +285,13 @@ struct CompileStats {
 // (built without shaderc; it loads every rule from a SPIR-V cache).
 bool can_compile_rules();
 
-// Compiles every rule of `game` (with the prelude for its schema and capacities) into
-// the SPIR-V cache in `cache_dir`, without a Vulkan device; rules already there are
-// kept. This prepares the cache that a cache-only GameSim or a Terni::runtime build
-// loads from, e.g. at build time, to ship with a game. The cache key does not depend on
-// the compiler, so the cache works with any build of the same Terni version. Throws on
-// a compile error, if the cache cannot be written, or in a build without the compiler.
+// Compiles every rule of `game` (with the prelude for its schema; capacities do not
+// matter, they are set when a GameSim starts) into the SPIR-V cache in `cache_dir`,
+// without a Vulkan device; rules already there are kept. This prepares the cache that a
+// cache-only GameSim or a Terni::runtime build loads from, e.g. at build time, to ship
+// with a game. The cache key does not depend on the compiler, so the cache works with
+// any build of the same Terni version. Throws on a compile error, if the cache cannot be
+// written, or in a build without the compiler.
 CompileStats compile_rules(const Game& game, const std::string& cache_dir, const std::string& shader_library_dir = "");
 
 // Runs a loaded game on one Vulkan device. `game` must outlive the GameSim.
@@ -351,7 +352,7 @@ public:
     // to the capacity.
     uint32_t read_each_tick(uint32_t entity, const std::string& field, uint32_t first_row = 0,
                             uint32_t rows = 0xFFFFFFFFu);
-    // Words of a registered field as of the last completed tick, for the rows it covers
+    // Words of a registered field as of the last collected tick, for the rows it covers
     // (valid until the tick after the next one begins; after load(), stale until the next
     // tick is collected).
     std::span<const int32_t> tick_result(uint32_t id) const;

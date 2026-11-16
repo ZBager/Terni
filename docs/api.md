@@ -91,6 +91,7 @@ Runs a `Game` on one device. The `Game` must outlive it. Not thread-safe.
 | Call | Does |
 | --- | --- |
 | `GameSim(const Game&, const GameSimOptions& = {})` | Compiles or loads the rules, uploads the state. Throws `std::runtime_error` on failure |
+| `GameSim(const Game&, device, shader_library_dir = "", validation = false)` | The same with a device index and no cache |
 | `void tick()` | One tick: uploads, every stage, per-tick readbacks; blocks until done |
 | `void begin_tick()` / `bool tick_ready()` / `void end_tick()` | The same tick without blocking: submit, poll, collect ([Embedding](embedding.md#a-tick-that-does-not-block)) |
 | `bool tick_in_flight()` | Begun and not yet collected |
@@ -123,6 +124,8 @@ Runs a `Game` on one device. The `Game` must outlive it. Not thread-safe.
 | `ModifierContribution` | `handle`, `bundle`, `entity`, `row` (where the instance sits), `value` (raw, scaled) |
 | `OrderIssue` | `stage`, `field`, `parallel` (false: forwards and backwards differ; true: the parallel run differs), `first_row`, `rows` |
 | `CompileStats` | `compiled`, `cached`, `ms` |
+| `StageDef` (in `Game::stages`) | `name`, `for_each`, `dispatch`, `clear`, `source`, `every`, `offset`; `runs_in(tick)` says whether it runs in the tick after `tick` completed ticks |
+| `EntityDef` (in `Game::entities`) | `name`, `capacity`, `fields`; `field(name)`, `field_index(name)` |
 
 ## Rules and the SPIR-V cache
 
@@ -157,8 +160,9 @@ Runs a `Game` on one device. The `Game` must outlive it. Not thread-safe.
 ## State hashes
 
 `terni/state_hash.hpp`: `StateSnapshot` (named fields), `hash_fields(snapshot)` (one
-hash per field), `combine(hashes)` (one hash). Comparing per-field hashes tells you
-which field diverged first.
+hash per field), `combine(hashes)` (one hash), and `first_difference(a, b)`, the name of
+the first field whose values differ between two snapshots ("" if none). Comparing
+per-field hashes on peers tells you which field diverged first.
 
 ## Script parser
 
@@ -177,3 +181,5 @@ built on it; use it directly only for models that do not fit the world descripti
 stages that run together is recorded once and reused. The constructor's `constants`
 are specialization constants (ids 2 and up) given to every shader. `tick_submit()`,
 `tick_done()` and `tick_wait()` split `tick()` for hosts that keep working meanwhile.
+The header documents every call, including the transfers (`queue_write`,
+`add_tick_readback`) and `VulkanContext`'s buffer and submission helpers.
