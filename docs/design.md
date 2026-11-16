@@ -16,7 +16,9 @@ measured.
 | Modifiers stored on the host, decided by the host | Research, focuses and events are game logic that changes rarely; Terni only keeps exact totals and expiries | Every modifier change goes through the API |
 | One pre-recorded command buffer per tick, batched transfers | A tick costs one GPU round trip, uploads and readbacks included | Writes and reads take effect at tick boundaries |
 | Sums through integer atomics | Integer addition gives the same total in any order | Rules must not read rows other threads write in the same stage (checked) |
-| Fixed capacity per entity type, set before the world starts | Buffers stay static; nothing is allocated during play. Capacities are specialization constants, so one compiled set of rules serves every map size | No entities created at run time; hosts use pools of rows |
+| Fixed capacity per entity type, set before the world starts | Buffers stay static; no memory is allocated during play. Capacities are specialization constants, so one compiled set of rules serves every map size | A world cannot outgrow its capacities; entities that come and go live in the rows of a dynamic entity type, up to its capacity |
+| Entities are created at the end of a tick, never in the middle of a stage | Threads that each grabbed a free row would get different rows from run to run. Rules ask through a count field instead; built-in stages number the requests and the free rows in a fixed order, and request k takes free row k, as a single thread would | A new entity is alive from the next tick; the built-in stages pass over the rows of dynamic entity types every tick |
+| A destroyed row rests for one tick before it is used again | Every death and every new row shows in the one bit per row the host reads back each tick, and rules that hold a ref get a tick to see the entity gone | A row cannot be reused at once; refs checked less often than every tick compare generations |
 | A standalone library with no engine code | It is meant to be embedded by any engine | Integrations live in the games that use it |
 
 ## What the experiments measured
