@@ -1,0 +1,1 @@
+planet = { capacity = 4 pop = quantity }

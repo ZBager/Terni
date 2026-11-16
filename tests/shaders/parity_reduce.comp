@@ -1,0 +1,29 @@
+// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception-1.0
+// Copyright (C) 2026 Rafał Zając
+#version 460
+#extension GL_GOOGLE_include_directive : require
+#include "parity_common.glsl"
+
+// Keyed sum through the shared-memory pre-summing table (slot_table.glsl),
+// falling back to global atomics when the table is full.
+#define TABLE_SLOTS 32
+#define VALUES 1
+#include "terni/slot_table.glsl"
+
+void main() {
+    const uint stride = gl_NumWorkGroups.x * gl_WorkGroupSize.x;
+    for (uint base = gl_WorkGroupID.x * gl_WorkGroupSize.x; base < n; base += stride) {
+        table_clear();
+        workgroup_sync();
+        uint i = base + gl_LocalInvocationID.x;
+        if (i < n) {
+            int slot = table_slot(keys[i]);
+            if (slot >= 0) atomicAdd(s_val[uint(slot)], vals[i]);
+            else atomicAdd(totals[keys[i]], vals[i]);
+        }
+        workgroup_sync();
+        for (uint k = gl_LocalInvocationID.x; k < TABLE_SLOTS; k += gl_WorkGroupSize.x)
+            if (s_key[k] != EMPTY_KEY && s_val[k] != 0) atomicAdd(totals[s_key[k]], s_val[k]);
+        workgroup_sync();
+    }
+}

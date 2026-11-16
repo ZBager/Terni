@@ -1,0 +1,1 @@
+boom = { nonexistent = 0.1 pop_bonus = abc }

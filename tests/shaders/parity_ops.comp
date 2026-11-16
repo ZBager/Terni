@@ -1,0 +1,35 @@
+// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception-1.0
+// Copyright (C) 2026 Rafał Zając
+#version 460
+#extension GL_GOOGLE_include_directive : require
+#include "parity_common.glsl"
+
+// Every fixed-point / rng primitive applied to random inputs.
+void main() {
+    FOR_EACH(i, n) {
+        int a = in_a[i], b = in_b[i];
+        uint base = i * 19u;
+        outputs[base + 0u] = fx_mul(a, b);
+        outputs[base + 1u] = fx_div(div_num[i], div_den[i]);
+        outputs[base + 2u] = fx_clamp(a, -1000000, 1000000);
+        outputs[base + 3u] = to_agg(a);
+        outputs[base + 4u] = int(hash32(uint(a)));
+        uint roll = rng_roll(i, uint(b), 7u);
+        outputs[base + 5u] = int(roll);
+        outputs[base + 6u] = rng_below(roll, b & 0xFFFF) ? 1 : 0;
+        uvec2 acc = add_i64(uvec2(uint(a), uint(b)), div_num[i] - div_den[i]);
+        outputs[base + 7u] = int(acc.x);
+        outputs[base + 8u] = int(acc.y);
+        // wide integers: i32 * i64 -> i128, multiply-add into an i128, i64 + i64
+        uvec2 b64 = uvec2(uint(div_num[i]), uint(b));
+        uvec4 p = mul_i32_i64(a, b64);
+        uvec4 m = mad_i128(i128_from_i64(uvec2(uint(a), uint(b))), div_den[i] ^ b, uvec2(uint(vals[i]), uint(a)));
+        uvec2 s = add_i64(uvec2(uint(a), uint(b)), uvec2(uint(div_num[i]), uint(div_den[i])));
+        for (uint k = 0u; k < 4u; ++k) {
+            outputs[base + 9u + k] = int(p[k]);
+            outputs[base + 13u + k] = int(m[k]);
+        }
+        outputs[base + 17u] = int(s.x);
+        outputs[base + 18u] = int(s.y);
+    }
+}

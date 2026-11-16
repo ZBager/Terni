@@ -1,0 +1,7 @@
+empire = { id = ROM gold = 12.5 }
+empire = { id = ROM }
+planet = { id = a owner = XXX pop = 10 }
+planet = { id = b owner = ROM weight = 3 }
+planet = { id = c owner = ROM }
+moon = { id = m }
+empire = { id = CAR add_modifier = { name = nope } }

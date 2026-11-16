@@ -1,0 +1,22 @@
+empire = {
+    capacity = 4
+    gold = money64
+}
+planet = {
+    capacity = 2
+    owner = ref:empire
+    size = flotsam
+    pop = quantity
+    pop = rate
+    sector = ref:sector
+}
+nocap = {
+    x = int
+}
+defines = {
+    growth = rate
+}
+modifier_keys = {
+    tax = { applies_to = galaxy type = rate }
+    pop_bonus = { applies_to = planet type = rate inherit = pop }
+}

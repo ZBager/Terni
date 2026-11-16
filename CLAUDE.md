@@ -1,0 +1,113 @@
+# CLAUDE.md
+
+Guidance for Claude Code (and other assistants) working in this repository.
+
+Terni is a C++20 library that runs the tick of a grand-strategy game as Vulkan compute
+shaders, with bit-identical results on every GPU and CPU so it can drive lockstep
+multiplayer. Worlds are described in code (`WorldBuilder`) or as Paradox-syntax data
+folders (`load_game`), compiled to SPIR-V at load time, and run by `GameSim`. Read
+`README.md` and `docs/concepts.md` first; `docs/design.md` explains why things are the
+way they are, and `docs/roadmap.md` is the plan: work in its order unless asked
+otherwise, and update it when an item is done or the plan changes.
+
+## Hard rules
+
+- **Terni is standalone and engine-agnostic.** Never add code, names, comments, examples
+  or documentation that refer to a particular engine, game or private project that uses
+  Terni. Integrations live in those projects. Use generic examples (planets, empires,
+  provinces, towns). Before committing, grep the diff for anything project-specific.
+- **Determinism is the product.** No floating point in simulation state; fixed point
+  through `fx_*` / `terni::fx`; sums through integer atomics on `agg` values; randomness
+  only from `rng_roll(entity, tick, salt)`; a stage never reads a row another thread of the
+  same stage writes. Any change to arithmetic needs a parity test across devices.
+- **Generated text must not depend on the process locale.** Streams that produce GLSL,
+  cache keys or reports imbue `std::locale::classic()`; identifier checks and case
+  changes are ASCII-only.
+- **`Terni::runtime` must never link shaderc.** Only `src/rule_compiler_shaderc.cpp` may
+  include shaderc; the `runtime_without_shaderc` test checks the binary.
+- **Licence header on every new source file** (C++, GLSL, CMake), as the first two lines:
+  ```
+  // SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception-1.0
+  // Copyright (C) 2026 Rafał Zając
+  ```
+  (`#` comments in CMake files). Do not change `LICENSE` or `LICENSE-EXCEPTION`.
+- **Build system: plain CMake.** Do not add a Makefile wrapper, pkg-config files or
+  another build system; this was tried and deliberately removed.
+- **Windows means MinGW-w64.** An MSVC build is not a goal; do not add MSVC-specific code
+  paths or project files.
+
+## Build and test
+
+```sh
+cmake -S . -B build -G Ninja && cmake --build build
+ctest --test-dir build --output-on-failure
+```
+
+- The GPU tests run on **every usable Vulkan device** and compare results bit for bit;
+  lavapipe (Mesa's CPU driver) counts as a device. A change is done when the whole suite
+  passes on every device in the machine.
+- Run a test binary under the validation layer with
+  `VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation ./build/test_embedding` and check its
+  output for `VUID` / `Validation Error`; a clean run prints none. Confirm the layer loaded
+  (`VK_LOADER_DEBUG=layer`) before trusting silence.
+- `./build/terni_run <game folder> [--ticks N] [--dump] [--prelude] [--device I]` runs a
+  data folder on every device and compares state hashes; `--prelude` prints the generated
+  GLSL. `./build/hello_towns` is the getting-started example.
+- `-DTERNI_RULE_COMPILER=OFF` builds only `Terni::runtime` (tools and tests need the
+  compiler). `-DTERNI_SCRIPT_CORPUS="<game folders>"` adds the optional `script_corpus`
+  test.
+- Do not benchmark while another program is using the GPU; tick times can rise
+  twentyfold and mislead.
+
+## Layout
+
+| Path | Contents |
+| --- | --- |
+| `include/terni/` | Public headers. `game.hpp` is the main API (`WorldBuilder`, `load_game`, `GameSim`) |
+| `src/game_sim.cpp` | Prelude generation, SPIR-V cache, modifier store, `GameSim`, saves |
+| `src/game_builder.cpp`, `src/game_load.cpp` | Validation; the data-folder loader |
+| `src/compute_runner.cpp` | Vulkan: buffers, pipelines, the per-tick command buffer, transfers, order-check runs |
+| `src/rule_compiler_*.cpp` | GLSL to SPIR-V with shaderc (`core`) or none (`runtime`) |
+| `src/order_lint.cpp` | Load-time warnings for order-dependent stages |
+| `shaders/terni/` | The GLSL library, embedded into the binary at build time |
+| `tests/` | Test programs; `tests/data/` holds broken games for error tests |
+| `examples/` | `mini_galaxy` (a data folder) and `hello_towns` (a world in code) |
+| `docs/` | User documentation, written for outside game developers |
+
+## Changes that require other changes
+
+- **Public API** (`include/terni/`): update `docs/api.md` and the guide that covers it, and
+  add a line to `CHANGELOG.md`.
+- **Generated GLSL names or loop macros** (`generate_prelude`, `shaders/terni/compute.glsl`):
+  update `docs/writing-rules.md` and `docs/concepts.md`. Any change to `shaders/terni/`
+  changes every SPIR-V cache key, so hosts recompile once; that is expected.
+- **Compile settings** in `rule_compiler_shaderc.cpp`: change `detail::kCompileSettings`
+  in `src/rule_compiler.hpp` too, so old cache files miss. Cache file layout changes bump
+  `CACHE_FORMAT`.
+- **Save layout**: bump `SAVE_VERSION`; `test_save` must still round-trip byte for byte.
+- **Anything `game_checksum` covers** (schema, defines, modifiers, stages): changing what
+  it hashes changes every game's checksum and breaks existing saves; treat it as a
+  breaking change.
+- **New rules in tests or examples** must load without order warnings, or mark a
+  deliberate line with `// terni: order ok`.
+- **Data-folder syntax** (`game_load.cpp`): update `docs/data-format.md`.
+
+## Style
+
+- Follow the surrounding code: 4-space indents, lines up to about 120 columns, `snake_case`
+  functions and variables, `PascalCase` types.
+- Comments say why, not what; keep them short.
+- Errors from bad game data are collected as `GameDiagnostic`s (`file:line: message`),
+  never thrown; programming errors and failed loads throw `std::runtime_error` /
+  `std::invalid_argument`.
+- Documentation is plain English for developers who have never seen Terni: short
+  sentences, concrete examples, no internal history.
+
+## Git
+
+- `main` is the only branch and is public on GitHub (`origin`). Commit with the
+  repository's configured identity; never put a personal email address in commits or
+  files.
+- Commit, push and especially force-push only when asked. Others may have cloned the
+  repository: add new commits rather than rewriting history unless told otherwise.
+- Commit messages: a short summary line, then what changed and why.

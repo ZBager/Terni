@@ -1,0 +1,2 @@
+grow = { for_each = asteroid }
+tax = { for_each = planet clear = { planet.nothing } }

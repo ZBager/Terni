@@ -1,0 +1,154 @@
+# Data format
+
+A game folder holds four subfolders. `load_game(root)` reads every `.txt` file in
+each one, in file-name order, in the Paradox script syntax (`key = value`,
+`key = { ... }`, `#` comments). Problems never throw: they are collected in
+`game->errors` and `game->warnings` as `file:line: message`.
+
+```
+my_game/
+  schema/      what exists: entity types, fields, constants, modifier keys
+  common/      values: constants, and modifier bundles in common/modifiers/
+  history/     the starting state: one block per entity
+  rules/       stages.txt (the tick order) and one <stage>.glsl per stage
+```
+
+Everything a mod may change is in these folders. A mod is a copy of the folder with
+some files changed or added.
+
+## Names
+
+Entity, field, define, modifier key, bundle and stage names become GLSL identifiers:
+ASCII letters, digits and `_`, not starting with a digit, `gl_` or `terni`.
+
+## schema/
+
+### Entity types
+
+```
+planet = {
+    capacity      = 4096                          # most rows this type can hold
+    owner         = ref:empire                    # field = type
+    pop           = quantity
+    stability     = { type = rate default = 50 }  # a starting value for every row
+    stock         = { type = agg size = 3 }       # three values per row
+    unrest_events = count
+}
+```
+
+| Field type | Value | Notes |
+| --- | --- | --- |
+| `quantity` | Q24.8 | about ±8.4 million with 1/256 steps |
+| `rate` | Q16.16 | about ±32,768 with 1/65,536 steps |
+| `agg` | 32-bit integer | whole units; sums over many entities |
+| `int` | 32-bit integer | |
+| `count` | 32-bit unsigned | |
+| `ref:<entity>` | row index | written as the target's `id` in history |
+| `money64` | 64-bit integer | two words on the GPU |
+
+`size = N` gives each row N values. `default` is written in the field's own units
+(`default = 50` on a rate means 50.0).
+
+### Constants
+
+```
+defines = {
+    growth_rate = rate
+    max_armies  = int
+}
+```
+
+Every declared define needs a value in `common/`.
+
+### Modifier keys
+
+```
+modifier_keys = {
+    pop_growth     = { applies_to = planet  type = rate  inherit = owner }
+    tax_efficiency = { applies_to = planet  type = rate }
+    research       = { applies_to = empire  type = rate }
+}
+modifiers = { capacity = 65536 }   # most modifier instances alive at once (optional)
+```
+
+`type` is `rate`, `quantity` or `int`. `inherit` names a single-valued `ref` field of
+the key's entity that points to another entity type; the entity's total is then its
+own plus that row's. A bundle value for a key that does not apply to an entity is
+ignored on that entity, as in Paradox games.
+
+## common/
+
+Values of the constants, one per line:
+
+```
+growth_rate = 0.02     # 2 % per tick
+max_armies  = 512
+```
+
+Decimal text is converted to fixed point with integer math only (truncating toward
+zero), so every machine reads the same bits. `yes`/`no` are 1/0 for integer types.
+
+### common/modifiers/
+
+Bundles: named sets of key values.
+
+```
+good_harvest = { pop_growth = 0.01 }
+war_economy  = { pop_growth = -0.005  tax_efficiency = 0.25 }
+```
+
+## history/
+
+The starting state: one block per entity, in file order. `id` names the row so that
+other entities can refer to it; refs are resolved across all history files.
+
+```
+empire = { id = ROM  treasury = 1000  stock = { 100 50 20 } }
+planet = { id = latium  owner = ROM  housing = 12000  pop = 8200.5
+           add_modifier = { name = good_harvest  duration = 24  scale = 1.5 } }
+```
+
+- A sized field takes `{ v1 v2 ... }` with exactly `size` values.
+- `add_modifier` applies a bundle at the start: `name`, optional `duration` (ticks)
+  and `scale` (default 1).
+- Rows in use (the count) are the rows created here. Games that generate their world
+  in code set rows with `WorldBuilder` or by filling `Game::tables` before starting.
+
+## rules/
+
+### stages.txt
+
+The tick order, one line per stage:
+
+```
+planet_growth   = { for_each = planet }
+empire_income   = { for_each = planet  clear = { empire.income } }
+empire_treasury = { for_each = empire }
+province_sums   = { for_each = province  dispatch = workgroup }
+```
+
+| Key | Meaning |
+| --- | --- |
+| `for_each` | The entity type whose rows the stage visits; sets the number of GPU threads |
+| `clear` | Fields set to zero at the start of every tick, before the first stage (accumulators) |
+| `dispatch` | `thread` (default, one thread per row) or `workgroup` (256 threads per row) |
+
+### &lt;stage&gt;.glsl
+
+The body of the stage: GLSL 4.60 with a `void main()`, using the names Terni
+generates. See [Writing rules](writing-rules.md).
+
+```glsl
+void main() {
+    FOR_EACH_PLANET(p) {
+        planet_pop[p] += fx_mul(planet_pop[p], D.growth_rate + planet_mod_pop_growth(p));
+    }
+}
+```
+
+## What the checksum covers
+
+`game_checksum()` covers the schema, the define values, modifier keys and bundles,
+the modifier capacity, and the stages with their sources, `clear` lists and dispatch
+mode. It does not cover `history/`. Two peers with different rule files, or a save
+made with different rules, are refused.
