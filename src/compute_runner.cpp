@@ -161,6 +161,37 @@ struct ComputeRunner::Impl {
         return run;
     }
 
+    // The queued host writes, in the order they were queued. Copies to one buffer go out as
+    // one command; a write that overlaps an earlier one of the same batch waits for it
+    // behind a barrier, so the later write wins (copies without one may run in any order).
+    void record_staged(VkCommandBuffer cmd) {
+        std::vector<std::vector<VkBufferCopy>> regions(buffers.size());
+        std::vector<std::map<uint64_t, uint64_t>> written(buffers.size());  // disjoint [lo, hi) per buffer
+        std::vector<uint32_t> touched;
+        const auto emit = [&] {
+            for (uint32_t b : touched) {
+                vkCmdCopyBuffer(cmd, staging.buffer, buffers[b].buffer, static_cast<uint32_t>(regions[b].size()),
+                                regions[b].data());
+                regions[b].clear();
+                written[b].clear();
+            }
+            touched.clear();
+        };
+        for (const auto& [binding, region] : staged_copies) {
+            auto& w = written[binding];
+            const uint64_t lo = region.dstOffset, hi = lo + region.size;
+            auto next = w.lower_bound(hi);  // first range starting at or after hi: no overlap from here on
+            if (next != w.begin() && std::prev(next)->second > lo) {
+                emit();
+                barrier(cmd, TRANSFER, VK_ACCESS_2_TRANSFER_WRITE_BIT, TRANSFER, VK_ACCESS_2_TRANSFER_WRITE_BIT);
+            }
+            if (regions[binding].empty()) touched.push_back(binding);
+            regions[binding].push_back(region);
+            written[binding].emplace(lo, hi);
+        }
+        emit();
+    }
+
     // Record a one-off command buffer, submit it and wait.
     template <class F>
     void run_once(F&& record) {
@@ -315,8 +346,7 @@ void ComputeRunner::tick(const std::vector<bool>& run) {
         pre = m.ctx.allocate_command_buffer();
         VK_CHECK(vkBeginCommandBuffer(pre, &once));
         barrier(pre, COMPUTE, SHADER_RW, TRANSFER, VK_ACCESS_2_TRANSFER_WRITE_BIT);
-        for (const auto& [binding, region] : m.staged_copies)
-            vkCmdCopyBuffer(pre, m.staging.buffer, m.buffers[binding].buffer, 1, &region);
+        m.record_staged(pre);
         barrier(pre, TRANSFER, VK_ACCESS_2_TRANSFER_WRITE_BIT, COMPUTE | TRANSFER,
                 SHADER_RW | VK_ACCESS_2_TRANSFER_WRITE_BIT);
         VK_CHECK(vkEndCommandBuffer(pre));
@@ -430,8 +460,7 @@ void ComputeRunner::flush_queued() {
     once.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     VK_CHECK(vkBeginCommandBuffer(cmd, &once));
     barrier(cmd, COMPUTE, SHADER_RW, TRANSFER, VK_ACCESS_2_TRANSFER_WRITE_BIT);
-    for (const auto& [binding, region] : m.staged_copies)
-        vkCmdCopyBuffer(cmd, m.staging.buffer, m.buffers[binding].buffer, 1, &region);
+    m.record_staged(cmd);
     VK_CHECK(vkEndCommandBuffer(cmd));
     m.ctx.submit_and_wait(cmd);
     m.ctx.free_command_buffer(cmd);
