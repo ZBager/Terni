@@ -188,12 +188,14 @@ VulkanContext::VulkanContext(uint32_t device_index, bool enable_validation) {
     // ---- 5. a fence: the GPU signals it when a submission finishes, the CPU waits on it
     VkFenceCreateInfo fci{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
     VK_CHECK(vkCreateFence(device_, &fci, nullptr, &fence_));
+    VK_CHECK(vkCreateFence(device_, &fci, nullptr, &async_fence_));
 }
 
 VulkanContext::~VulkanContext() {
     if (device_) {
         vkDeviceWaitIdle(device_);
         vkDestroyFence(device_, fence_, nullptr);
+        vkDestroyFence(device_, async_fence_, nullptr);
         vkDestroyCommandPool(device_, pool_, nullptr);
         vkDestroyDevice(device_, nullptr);
     }
@@ -274,6 +276,34 @@ void VulkanContext::submit_and_wait(const std::vector<VkCommandBuffer>& cmds) {
     VK_CHECK(vkQueueSubmit2(queue_, 1, &si, fence_));
     VK_CHECK(vkWaitForFences(device_, 1, &fence_, VK_TRUE, UINT64_MAX));
     VK_CHECK(vkResetFences(device_, 1, &fence_));
+}
+
+void VulkanContext::submit(const std::vector<VkCommandBuffer>& cmds) {
+    if (async_pending_) throw std::logic_error("VulkanContext::submit: the previous submission is still pending");
+    std::vector<VkCommandBufferSubmitInfo> cbi(cmds.size(), {VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO});
+    for (size_t i = 0; i < cmds.size(); ++i) cbi[i].commandBuffer = cmds[i];
+    VkSubmitInfo2 si{VK_STRUCTURE_TYPE_SUBMIT_INFO_2};
+    si.commandBufferInfoCount = static_cast<uint32_t>(cbi.size());
+    si.pCommandBufferInfos = cbi.data();
+    VK_CHECK(vkQueueSubmit2(queue_, 1, &si, async_fence_));
+    async_pending_ = true;
+}
+
+bool VulkanContext::submitted_done() {
+    if (!async_pending_) return true;
+    const VkResult r = vkGetFenceStatus(device_, async_fence_);
+    if (r == VK_NOT_READY) return false;
+    VK_CHECK(r);
+    VK_CHECK(vkResetFences(device_, 1, &async_fence_));
+    async_pending_ = false;
+    return true;
+}
+
+void VulkanContext::wait_submitted() {
+    if (!async_pending_) return;
+    VK_CHECK(vkWaitForFences(device_, 1, &async_fence_, VK_TRUE, UINT64_MAX));
+    VK_CHECK(vkResetFences(device_, 1, &async_fence_));
+    async_pending_ = false;
 }
 
 VkShaderModule VulkanContext::create_shader(const std::vector<uint32_t>& spirv) {

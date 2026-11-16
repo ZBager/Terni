@@ -17,19 +17,17 @@ is a priority, not a promise.
 3. **A CPU path** for machines without a usable Vulkan GPU: either a software Vulkan
    driver shipped with the game (it runs the same shaders unchanged), or rules that also
    compile as C++. Both need parity tests.
-4. **A tick that does not block**: submit, keep rendering, collect the results a frame
-   later.
-5. **Device health**: measure tick times and warn, or switch device, when the chosen GPU
+4. **Device health**: measure tick times and warn, or switch device, when the chosen GPU
    is busy with other work.
-6. **Entities at run time** (create and destroy rows during play, with stable ids and
+5. **Entities at run time** (create and destroy rows during play, with stable ids and
    counts in saves). Pools of rows work for now; this comes when a game needs it.
-7. **A larger example game** that exercises markets, inheritance and workgroup stages.
+6. **A larger example game** that exercises markets, inheritance and workgroup stages.
 
 ## Phase 3: public releases
 
-8. **Versioned releases** with a changelog and a stable API from 1.0, and a shared
+7. **Versioned releases** with a changelog and a stable API from 1.0, and a shared
    library build for engines that load Terni from other languages.
-9. **Mod tooling**: `terni_script_check` and the order warnings as one command a
+8. **Mod tooling**: `terni_script_check` and the order warnings as one command a
    modder runs before publishing.
 
 Not planned: DirectX or Metal back ends, and consoles.

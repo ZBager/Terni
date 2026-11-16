@@ -92,13 +92,15 @@ Runs a `Game` on one device. The `Game` must outlive it. Not thread-safe.
 | --- | --- |
 | `GameSim(const Game&, const GameSimOptions& = {})` | Compiles or loads the rules, uploads the state. Throws `std::runtime_error` on failure |
 | `void tick()` | One tick: uploads, every stage, per-tick readbacks; blocks until done |
+| `void begin_tick()` / `bool tick_ready()` / `void end_tick()` | The same tick without blocking: submit, poll, collect ([Embedding](embedding.md#a-tick-that-does-not-block)) |
+| `bool tick_in_flight()` | Begun and not yet collected |
 | `uint64_t ticks()` | Completed ticks |
 | `std::vector<OrderIssue> tick_checked()` | A tick that also checks every stage for order dependence ([Determinism](determinism.md)) |
 | `std::vector<int32_t> read_field(entity, field, first_row = 0, rows = all)` | Raw words, read from the GPU now |
 | `void write_field(entity, field, row, words)` | Raw words from `row` on (vector or span); applied before the next tick |
 | `void write_field(entity, field, row, index, words)` | Values `index` onwards of one row of a sized field; the rest of the row is untouched |
 | `uint32_t read_each_tick(entity, field, first_row = 0, rows = in use)` | Registers a per-tick readback; returns an id |
-| `std::span<const int32_t> tick_result(id)` | Its words as of the last tick; valid until the next |
+| `std::span<const int32_t> tick_result(id)` | Its words as of the last collected tick; valid until the tick after the next one begins |
 | `ModifierHandle add_modifier(bundle, entity, row, scale = fx::ONE, duration = 0)` | Adds an instance; an invalid handle if the store is full |
 | `bool set_modifier_scale(handle, scale)`, `bool remove_modifier(handle)` | False if the handle is stale |
 | `bool modifier_alive(handle)`, `size_t modifier_count()` | |
@@ -173,4 +175,5 @@ pre-recorded command buffer per tick, with batched uploads and readbacks. `GameS
 built on it; use it directly only for models that do not fit the world description.
 `tick(run)` takes one flag per stage to skip some stages in that tick; each set of
 stages that run together is recorded once and reused. The constructor's `constants`
-are specialization constants (ids 2 and up) given to every shader.
+are specialization constants (ids 2 and up) given to every shader. `tick_submit()`,
+`tick_done()` and `tick_wait()` split `tick()` for hosts that keep working meanwhile.

@@ -622,11 +622,15 @@ struct GameSim::Impl {
         bool stale = false;          // a tick ran since `rows` was refreshed
         TickRead read{};             // the per-tick readback, once active
         std::vector<uint32_t> rows;  // capacity rows
+        // host writes made while a tick was in flight: they apply to the tick after it, so
+        // they go back on top of that tick's results when it is collected
+        std::vector<std::pair<uint32_t, uint32_t>> pending;  // (row, value)
     };
     std::vector<Parents> parents;
     std::vector<int> key_parents;  // per modifier key: index into `parents`, or -1
     std::vector<uint64_t> row_words;  // per binding: words per row (order check reports)
-    uint64_t now = 0;
+    uint64_t now = 0;      // completed ticks
+    bool in_flight = false;  // begin_tick() without end_tick()
     CompileStats stats;
     std::unique_ptr<ComputeRunner> runner;
     explicit Impl(const Game& g) : game(g), mods(g) {}
@@ -635,6 +639,7 @@ struct GameSim::Impl {
     uint32_t parent_row(uint32_t key, uint32_t row) {
         Parents& p = parents[size_t(key_parents.at(key))];
         if (!p.active) {
+            settle();
             runner->flush_queued();  // queued host writes belong to the current state
             p.rows.resize(game.entities[p.entity].capacity);
             runner->read(p.binding, p.rows.data(), p.rows.size() * 4);
@@ -658,7 +663,33 @@ struct GameSim::Impl {
     }
     void after_tick() {
         ++now;
-        for (auto& p : parents) p.stale = p.active;
+        for (auto& p : parents) {
+            p.stale = p.active;
+            if (!p.active || p.pending.empty()) continue;
+            refresh(p);
+            for (const auto& [row, value] : p.pending) p.rows[row] = value;
+            p.pending.clear();
+        }
+    }
+    // The tick host calls belong to: while tick N runs they already act between N and N+1,
+    // exactly as if made after end_tick(), so peers that collect at other moments agree.
+    uint64_t host_now() const { return now + (in_flight ? 1 : 0); }
+    // Collect a tick in flight; for calls that need the GPU state as of the last tick.
+    void settle() {
+        if (!in_flight) return;
+        runner->tick_wait();
+        in_flight = false;
+        after_tick();
+    }
+    // A host write to rows of a field: keep the inherit mirrors in step.
+    void mirror_write(uint32_t entity, uint32_t field, uint32_t row, const int32_t* values, size_t n) {
+        for (auto& p : parents) {
+            if (!p.active || p.entity != entity || p.field != field) continue;
+            if (p.stale) refresh(p);  // the last tick's values first, then this write on top
+            std::memcpy(p.rows.data() + row, values, n * 4);
+            if (in_flight)
+                for (size_t k = 0; k < n; ++k) p.pending.push_back({uint32_t(row + k), uint32_t(values[k])});
+        }
     }
 
     // Bytes a per-tick readback copies with the current counts.
@@ -779,13 +810,27 @@ GameSim::GameSim(const Game& game, const GameSimOptions& options) : impl_(std::m
 GameSim::~GameSim() = default;
 
 void GameSim::tick() {
-    impl_->boundary();
-    impl_->runner->tick(impl_->stages_now());
-    impl_->after_tick();
+    begin_tick();
+    end_tick();
 }
+
+void GameSim::begin_tick() {
+    Impl& m = *impl_;
+    m.settle();  // one tick in flight at a time
+    m.boundary();
+    m.runner->tick_submit(m.stages_now());
+    m.in_flight = true;
+}
+
+bool GameSim::tick_ready() { return !impl_->in_flight || impl_->runner->tick_done(); }
+
+void GameSim::end_tick() { impl_->settle(); }
+
+bool GameSim::tick_in_flight() const { return impl_->in_flight; }
 
 std::vector<OrderIssue> GameSim::tick_checked() {
     Impl& m = *impl_;
+    m.settle();
     m.boundary();
     std::vector<bool> check(m.game.stages.size() + 1, true);
     check.back() = false;  // the built-in tick counter stage
@@ -816,6 +861,7 @@ uint64_t GameSim::ticks() const { return impl_->now; }
 
 std::vector<int32_t> GameSim::read_field(uint32_t entity, const std::string& field, uint32_t first_row, uint32_t rows) {
     Impl& m = *impl_;
+    m.settle();
     const EntityDef& e = m.game.entities.at(entity);
     const int f = e.field_index(field);
     if (f < 0) throw std::invalid_argument("read_field: '" + e.name + "' has no field '" + field + "'");
@@ -842,11 +888,7 @@ void GameSim::write_field(uint32_t entity, const std::string& field, uint32_t ro
     if (row >= e.capacity || words.size() % per_row != 0 || row + words.size() / per_row > e.capacity)
         throw std::out_of_range("write_field: rows out of range");
     m.runner->queue_write(m.field_binding[entity][size_t(f)], words.data(), words.size() * 4, uint64_t(row) * per_row * 4);
-    for (auto& p : m.parents)
-        if (p.active && p.entity == entity && p.field == uint32_t(f)) {
-            if (p.stale) m.refresh(p);  // the last tick's values first, then this write on top
-            std::memcpy(p.rows.data() + row, words.data(), words.size() * 4);
-        }
+    m.mirror_write(entity, uint32_t(f), row, words.data(), words.size());
 }
 
 void GameSim::write_field(uint32_t entity, const std::string& field, uint32_t row, uint32_t index,
@@ -869,15 +911,13 @@ void GameSim::write_field(uint32_t entity, const std::string& field, uint32_t ro
         throw std::out_of_range("write_field: row or values out of range");
     const uint64_t at = (uint64_t(row) * fd.size + index) * per_value;  // in words
     m.runner->queue_write(m.field_binding[entity][size_t(f)], words.data(), words.size() * 4, at * 4);
-    for (auto& p : m.parents)  // inherit fields hold one value per row, so a partial write is the whole row
-        if (p.active && p.entity == entity && p.field == uint32_t(f) && !words.empty()) {
-            if (p.stale) m.refresh(p);
-            std::memcpy(p.rows.data() + row, words.data(), 4);
-        }
+    // inherit fields hold one value per row, so a partial write of one is the whole row
+    if (!words.empty()) m.mirror_write(entity, uint32_t(f), row, words.data(), 1);
 }
 
 uint32_t GameSim::read_each_tick(uint32_t entity, const std::string& field, uint32_t first_row, uint32_t rows) {
     Impl& m = *impl_;
+    m.settle();
     const EntityDef& e = m.game.entities.at(entity);
     const int f = e.field_index(field);
     if (f < 0) throw std::invalid_argument("read_each_tick: '" + e.name + "' has no field '" + field + "'");
@@ -904,7 +944,7 @@ double GameSim::last_tick_ms() const { return impl_->runner->last_tick_ms(); }
 double GameSim::last_tick_gpu_ms() const { return impl_->runner->last_tick_gpu_ms(); }
 
 ModifierHandle GameSim::add_modifier(uint32_t bundle, uint32_t entity, uint32_t row, int32_t scale, uint32_t duration) {
-    return impl_->mods.add(bundle, entity, row, scale, duration, impl_->now);
+    return impl_->mods.add(bundle, entity, row, scale, duration, impl_->host_now());
 }
 bool GameSim::set_modifier_scale(ModifierHandle h, int32_t scale) { return impl_->mods.set_scale(h, scale); }
 bool GameSim::remove_modifier(ModifierHandle h) { return impl_->mods.remove(h); }
@@ -968,6 +1008,7 @@ uint64_t GameSim::checksum() const { return game_checksum(impl_->game); }
 
 std::vector<uint8_t> GameSim::save() {
     Impl& m = *impl_;
+    m.settle();
     // host writes queued for the next tick are part of the state being saved
     m.runner->flush_queued();
 
@@ -992,6 +1033,7 @@ std::vector<uint8_t> GameSim::save() {
 
 void GameSim::load(const std::vector<uint8_t>& data) {
     Impl& m = *impl_;
+    m.settle();  // before the tick count and everything else are replaced
     if (data.size() < 8 + 4 + 8 || std::memcmp(data.data(), SAVE_MAGIC, 8) != 0)
         throw std::runtime_error("save: not a Terni save");
     const uint64_t stored_hash = Reader{data.data() + data.size() - 8, 8}.u64();
@@ -1049,6 +1091,7 @@ void GameSim::load(const std::vector<uint8_t>& data) {
 
 StateSnapshot GameSim::snapshot() {
     Impl& m = *impl_;
+    m.settle();
     m.runner->read(1, m.state.data(), m.state.size() * 4);
     StateSnapshot s;
     s.add("terni.state", m.state);

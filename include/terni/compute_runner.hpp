@@ -54,6 +54,15 @@ public:
     // Submit one tick and wait. `run` has one entry per stage: false skips the stage (and
     // its `zero` buffers) in this tick; empty runs every stage.
     void tick(const std::vector<bool>& run = {});
+    // ---- a tick that does not block ----
+    // tick() is tick_submit() then tick_wait(). Between the two the host may keep working:
+    // queue_write() goes to the next tick, and tick_readback() still gives the last
+    // finished tick's results. read(), write(), flush_queued(), add_tick_readback() and
+    // tick_checked() wait for a tick in flight first.
+    void tick_submit(const std::vector<bool>& run = {});  // a tick still in flight is finished first
+    bool tick_done();                                      // never blocks
+    void tick_wait();                                      // blocks; nothing to do if none is in flight
+    bool tick_in_flight() const;                           // submitted and not yet waited for
     // Copy `bytes` of buffer `binding`, starting at byte `offset`, back to the host.
     void read(uint32_t binding, void* dst, uint64_t bytes, uint64_t offset = 0);
     // Copy host data into buffer `binding` at byte `offset` (between ticks).
@@ -74,7 +83,8 @@ public:
     // Copy only the first `bytes` (<= the registered size; 0 = nothing) from the next tick on.
     void set_tick_readback_bytes(uint32_t id, uint64_t bytes);
     uint64_t tick_readback_bytes(uint32_t id) const;  // bytes it copies now
-    // Host copy of a registered range as of the last completed tick.
+    // Host copy of a registered range as of the last finished tick (tick_wait()); valid
+    // until the tick after the next one is submitted.
     const void* tick_readback(uint32_t id) const;
 
     // ---- order check (tests) ----
@@ -94,7 +104,8 @@ public:
 
     std::string device_name() const;
     std::string report() const;  // upload time, memory, GPU time per stage
-    double last_tick_ms() const;      // wall time of the last tick() incl. batched transfers
+    double last_tick_ms() const;      // wall time of the last tick incl. batched transfers, from submission
+                                      // until it was seen done (tick_done() or the wait)
     double last_tick_gpu_ms() const;  // GPU time of the last tick's stages (timestamps; 0 if unsupported)
 
 private:

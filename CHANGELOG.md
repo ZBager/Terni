@@ -44,5 +44,11 @@ The first public version.
   now a specialization constant, so one compiled set of rules and one SPIR-V cache entry
   serve every capacity; rules can no longer test it in `#if`.
   `ComputeRunner` takes extra specialization constants.
+- **A tick that does not block**: `GameSim::begin_tick()`, `tick_ready()` and
+  `end_tick()` split `tick()`, so a host keeps rendering while the GPU runs the tick.
+  Commands made meanwhile apply to the next tick exactly as if made after `end_tick()`
+  (timed modifiers included), and `tick_result()` keeps the last collected results.
+  `ComputeRunner::tick_submit()`, `tick_done()` and `tick_wait()`;
+  `VulkanContext::submit()`, `submitted_done()` and `wait_submitted()`.
 - **Licence**: LGPL 2.1 with the Terni Linking Exception (static linking, no relinking or
   reverse-engineering terms for games, compiled shaders belong to the game).

@@ -92,13 +92,13 @@ const uint32_t pop_id   = sim.read_each_tick(province, "pop");
 // every tick
 apply_commands(sim);                      // write_field / add_modifier: applied before the next tick's stages
 sim.tick();                               // uploads, all stages, readbacks: one GPU submission
-std::span<const int32_t> owners = sim.tick_result(owner_id);   // valid until the next tick
+std::span<const int32_t> owners = sim.tick_result(owner_id);   // valid until the next tick begins
 std::span<const int32_t> pops   = sim.tick_result(pop_id);
 copy_into_your_view_model(owners, pops);
 ```
 
 - `tick()` blocks until the GPU is done. A tick of a large world takes a few
-  milliseconds; run it on a simulation thread if your frame budget is tight.
+  milliseconds; to keep rendering meanwhile, split it (see below).
   `GameSim` is not thread-safe: call it from one thread at a time.
 - `read_each_tick` copies only the rows in use, in the same submission as the tick.
   It is the cheap way to keep a host-side view of the fields the UI shows.
@@ -112,6 +112,35 @@ copy_into_your_view_model(owners, pops);
 - `last_tick_ms()` is the wall time of the last tick including transfers;
   `last_tick_gpu_ms()` is the GPU time of its stages. `report()` breaks the GPU time
   down per stage.
+
+### A tick that does not block
+
+`tick()` is `begin_tick()` followed by `end_tick()`. Call them apart, and the GPU
+runs the tick while your frame goes on:
+
+```cpp
+// in the frame loop
+if (sim.tick_in_flight() && sim.tick_ready()) {
+    sim.end_tick();                       // collect: ticks() advances, tick_result() moves on
+    copy_into_your_view_model(sim.tick_result(owner_id), sim.tick_result(pop_id));
+}
+if (!sim.tick_in_flight() && time_for_next_tick) {
+    apply_commands(sim);                  // the commands for the tick about to begin
+    sim.begin_tick();                     // returns at once
+}
+render();                                 // tick_result() still holds the last collected tick
+```
+
+- While a tick runs, `write_field`, `add_modifier` and the other commands are for the
+  tick after it, exactly as if you had made them after `end_tick()`. A timed modifier
+  added while tick 10 runs lasts from tick 11, as it would if added after tick 10. The
+  state never depends on when a host collects, so lockstep peers stay identical.
+- `tick_result()` keeps the last collected tick's results until `end_tick()`.
+  `modifier_total()` and `modifier_breakdown()` answer from the host as usual.
+- Calls that need the GPU state as it is collect the tick first, and so block:
+  `read_field`, `read_each_tick`, `save`, `load`, `snapshot`, `tick_checked`, and the
+  first `modifier_total` of a key inherited through a ref field.
+- One tick is in flight at a time: `begin_tick()` collects the previous one first.
 
 ### Host-side logic
 

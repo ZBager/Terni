@@ -47,11 +47,21 @@ struct ComputeRunner::Impl {
     GpuBuffer upload;  // lazily created for write()
     // batched transfers
     GpuBuffer staging;                                         // queued writes, grows on demand
+    GpuBuffer staging_busy;  // the staging of the tick in flight; the two swap at every submission
     uint64_t staged = 0;
     std::vector<std::pair<uint32_t, VkBufferCopy>> staged_copies;  // (binding, staging -> buffer)
     struct TickReadback { uint32_t binding; uint64_t offset, bytes, at, size; };  // size: bytes copied (<= bytes)
     std::vector<TickReadback> tick_reads;
-    GpuBuffer tick_rb;  // host-visible destination of all tick readbacks
+    // Host-visible destinations of the tick readbacks, two so that the last finished
+    // tick's results stay readable while the next tick writes the other one.
+    GpuBuffer tick_rb[2];
+    int rb_done = 0;  // which one holds the last finished tick
+    // The submitted tick (tick_submit), until finish() accounts for it.
+    struct Flight {
+        bool active = false, seen_done = false;
+        VkCommandBuffer pre = VK_NULL_HANDLE, post = VK_NULL_HANDLE;
+        std::chrono::steady_clock::time_point submitted, done;
+    } flight;
     double last_tick_ms = 0;
     double last_gpu_ms = 0;  // stages only, from GPU timestamps
     VkDescriptorSetLayout set_layout = VK_NULL_HANDLE;
@@ -198,6 +208,44 @@ struct ComputeRunner::Impl {
         emit();
     }
 
+    // Wait for the tick in flight, if any, and account for it: free its command buffers,
+    // its time and timestamps, and make its readbacks the current ones.
+    void finish() {
+        if (!flight.active) return;
+        ctx.wait_submitted();
+        if (!flight.seen_done) flight.done = std::chrono::steady_clock::now();
+        if (flight.pre) ctx.free_command_buffer(flight.pre);
+        if (flight.post) ctx.free_command_buffer(flight.post);
+        last_tick_ms = std::chrono::duration<double, std::milli>(flight.done - flight.submitted).count();
+        ++ticks;
+        if (queries) {
+            const size_t S = stages.size();
+            std::vector<uint64_t> ts(S + 1);
+            VK_CHECK(vkGetQueryPoolResults(ctx.device(), queries, 0, static_cast<uint32_t>(S + 1),
+                                           ts.size() * sizeof(uint64_t), ts.data(), sizeof(uint64_t),
+                                           VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT));
+            const double period = ctx.properties().limits.timestampPeriod;
+            for (size_t s = 0; s < S; ++s) stage_ns[s] += double(ts[s + 1] - ts[s]) * period;
+            last_gpu_ms = double(ts[S] - ts[0]) * period / 1e6;
+        }
+        rb_done ^= 1;
+        flight = {};
+    }
+
+    // Copies of the tick readbacks into tick_rb[rb_done ^ 1], recorded into `cmd`.
+    void record_readbacks(VkCommandBuffer cmd) {
+        barrier(cmd, COMPUTE, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, TRANSFER, VK_ACCESS_2_TRANSFER_READ_BIT);
+        for (const auto& r : tick_reads) {
+            if (r.size == 0) continue;  // a zero-sized copy is invalid in Vulkan
+            const VkBufferCopy region{r.offset, r.at, r.size};
+            vkCmdCopyBuffer(cmd, buffers[r.binding].buffer, tick_rb[rb_done ^ 1].buffer, 1, &region);
+        }
+        barrier(cmd, TRANSFER, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_2_HOST_BIT, VK_ACCESS_2_HOST_READ_BIT);
+    }
+    bool any_readback() const {
+        return std::any_of(tick_reads.begin(), tick_reads.end(), [](const auto& r) { return r.size > 0; });
+    }
+
     // Record a one-off command buffer, submit it and wait.
     template <class F>
     void run_once(F&& record) {
@@ -328,6 +376,8 @@ ComputeRunner::~ComputeRunner() {
     Impl& m = *impl_;
     VkDevice d = m.ctx.device();
     vkDeviceWaitIdle(d);
+    if (m.flight.pre) m.ctx.free_command_buffer(m.flight.pre);
+    if (m.flight.post) m.ctx.free_command_buffer(m.flight.post);
     for (VkPipeline p : m.pipelines) vkDestroyPipeline(d, p, nullptr);
     for (VkPipeline p : m.check_pipelines) vkDestroyPipeline(d, p, nullptr);
     for (auto& b : m.backup) m.ctx.destroy_buffer(b);
@@ -341,62 +391,69 @@ ComputeRunner::~ComputeRunner() {
     m.ctx.destroy_buffer(m.readback);
     if (m.upload.buffer) m.ctx.destroy_buffer(m.upload);
     if (m.staging.buffer) m.ctx.destroy_buffer(m.staging);
-    if (m.tick_rb.buffer) m.ctx.destroy_buffer(m.tick_rb);
+    if (m.staging_busy.buffer) m.ctx.destroy_buffer(m.staging_busy);
+    for (auto& rb : m.tick_rb)
+        if (rb.buffer) m.ctx.destroy_buffer(rb);
 }
 
 void ComputeRunner::tick(const std::vector<bool>& run) {
+    tick_submit(run);
+    impl_->finish();
+}
+
+void ComputeRunner::tick_submit(const std::vector<bool>& run) {
     Impl& m = *impl_;
+    m.finish();
     VkCommandBuffer tick_cmd = m.tick_cmd(m.run_mask(run));
-    const auto t0 = std::chrono::steady_clock::now();
     std::vector<VkCommandBuffer> cmds;
     VkCommandBufferBeginInfo once{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     once.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    VkCommandBuffer pre = VK_NULL_HANDLE, post = VK_NULL_HANDLE;
+    Impl::Flight f;
     if (!m.staged_copies.empty()) {
-        pre = m.ctx.allocate_command_buffer();
-        VK_CHECK(vkBeginCommandBuffer(pre, &once));
-        barrier(pre, COMPUTE, SHADER_RW, TRANSFER, VK_ACCESS_2_TRANSFER_WRITE_BIT);
-        m.record_staged(pre);
-        barrier(pre, TRANSFER, VK_ACCESS_2_TRANSFER_WRITE_BIT, COMPUTE | TRANSFER,
+        f.pre = m.ctx.allocate_command_buffer();
+        VK_CHECK(vkBeginCommandBuffer(f.pre, &once));
+        barrier(f.pre, COMPUTE, SHADER_RW, TRANSFER, VK_ACCESS_2_TRANSFER_WRITE_BIT);
+        m.record_staged(f.pre);
+        barrier(f.pre, TRANSFER, VK_ACCESS_2_TRANSFER_WRITE_BIT, COMPUTE | TRANSFER,
                 SHADER_RW | VK_ACCESS_2_TRANSFER_WRITE_BIT);
-        VK_CHECK(vkEndCommandBuffer(pre));
-        cmds.push_back(pre);
+        VK_CHECK(vkEndCommandBuffer(f.pre));
+        cmds.push_back(f.pre);
     }
     cmds.push_back(tick_cmd);
-    if (std::any_of(m.tick_reads.begin(), m.tick_reads.end(), [](const auto& r) { return r.size > 0; })) {
-        post = m.ctx.allocate_command_buffer();
-        VK_CHECK(vkBeginCommandBuffer(post, &once));
-        barrier(post, COMPUTE, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, TRANSFER, VK_ACCESS_2_TRANSFER_READ_BIT);
-        for (const auto& r : m.tick_reads) {
-            if (r.size == 0) continue;  // a zero-sized copy is invalid in Vulkan
-            VkBufferCopy region{r.offset, r.at, r.size};
-            vkCmdCopyBuffer(post, m.buffers[r.binding].buffer, m.tick_rb.buffer, 1, &region);
-        }
-        barrier(post, TRANSFER, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_2_HOST_BIT, VK_ACCESS_2_HOST_READ_BIT);
-        VK_CHECK(vkEndCommandBuffer(post));
-        cmds.push_back(post);
+    if (m.any_readback()) {
+        f.post = m.ctx.allocate_command_buffer();
+        VK_CHECK(vkBeginCommandBuffer(f.post, &once));
+        m.record_readbacks(f.post);
+        VK_CHECK(vkEndCommandBuffer(f.post));
+        cmds.push_back(f.post);
     }
-    m.ctx.submit_and_wait(cmds);
-    if (pre) m.ctx.free_command_buffer(pre);
-    if (post) m.ctx.free_command_buffer(post);
+    f.submitted = std::chrono::steady_clock::now();
+    m.ctx.submit(cmds);
+    f.active = true;
+    m.flight = f;
+    // the GPU reads this staging until the tick is done: the next tick's writes go to the other one
+    std::swap(m.staging, m.staging_busy);
     m.staged = 0;
     m.staged_copies.clear();
-    m.last_tick_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
-    ++m.ticks;
-    if (m.queries) {
-        const size_t S = m.stages.size();
-        std::vector<uint64_t> ts(S + 1);
-        VK_CHECK(vkGetQueryPoolResults(m.ctx.device(), m.queries, 0, static_cast<uint32_t>(S + 1),
-                                       ts.size() * sizeof(uint64_t), ts.data(), sizeof(uint64_t),
-                                       VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT));
-        const double period = m.ctx.properties().limits.timestampPeriod;
-        for (size_t s = 0; s < S; ++s) m.stage_ns[s] += double(ts[s + 1] - ts[s]) * period;
-        m.last_gpu_ms = double(ts[S] - ts[0]) * period / 1e6;
-    }
 }
+
+bool ComputeRunner::tick_done() {
+    Impl& m = *impl_;
+    if (!m.flight.active) return true;
+    if (!m.flight.seen_done && m.ctx.submitted_done()) {
+        m.flight.seen_done = true;
+        m.flight.done = std::chrono::steady_clock::now();
+    }
+    return m.flight.seen_done;
+}
+
+void ComputeRunner::tick_wait() { impl_->finish(); }
+
+bool ComputeRunner::tick_in_flight() const { return impl_->flight.active; }
 
 void ComputeRunner::read(uint32_t binding, void* dst, uint64_t bytes, uint64_t offset) {
     Impl& m = *impl_;
+    m.finish();
     ++m.sync_reads;
     const uint64_t chunk = m.readback.size;
     for (uint64_t off = 0; off < bytes; off += chunk) {
@@ -418,6 +475,7 @@ void ComputeRunner::read(uint32_t binding, void* dst, uint64_t bytes, uint64_t o
 
 void ComputeRunner::write(uint32_t binding, const void* src, uint64_t bytes, uint64_t offset) {
     Impl& m = *impl_;
+    m.finish();
     if (!m.upload.buffer)
         m.upload = m.ctx.create_buffer(m.readback.size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                                        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
@@ -448,14 +506,15 @@ void ComputeRunner::queue_write(uint32_t binding, const void* src, uint64_t byte
         write(binding, src, bytes, offset);
         return;
     }
-    if (m.staged + bytes > m.staging.size) {
-        flush_queued();  // keeps the order of writes
-        if (bytes > m.staging.size) {
-            const uint64_t size = std::min(limit, std::max<uint64_t>(bytes, std::max<uint64_t>(1 << 20, m.staging.size * 2)));
-            if (m.staging.buffer) m.ctx.destroy_buffer(m.staging);
-            m.staging = m.ctx.create_buffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-        }
+    if (m.staged + bytes > limit) flush_queued();  // keeps the order of writes
+    if (m.staged + bytes > m.staging.size) {      // grow, keeping what is staged (not in use by the GPU)
+        const uint64_t need = m.staged + bytes;
+        const uint64_t size = std::min(limit, std::max<uint64_t>(need, std::max<uint64_t>(1 << 20, m.staging.size * 2)));
+        GpuBuffer grown = m.ctx.create_buffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                              VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        if (m.staged) std::memcpy(grown.mapped, m.staging.mapped, m.staged);
+        if (m.staging.buffer) m.ctx.destroy_buffer(m.staging);
+        m.staging = grown;
     }
     std::memcpy(static_cast<char*>(m.staging.mapped) + m.staged, src, bytes);
     m.staged_copies.push_back({binding, VkBufferCopy{m.staged, offset, bytes}});
@@ -465,6 +524,7 @@ void ComputeRunner::queue_write(uint32_t binding, const void* src, uint64_t byte
 void ComputeRunner::flush_queued() {
     Impl& m = *impl_;
     if (m.staged_copies.empty()) return;
+    m.finish();
     VkCommandBuffer cmd = m.ctx.allocate_command_buffer();
     VkCommandBufferBeginInfo once{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     once.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
@@ -487,27 +547,29 @@ uint32_t ComputeRunner::add_tick_readback(uint32_t binding, uint64_t bytes, uint
     Impl& m = *impl_;
     if (binding >= m.buffers.size() || offset + bytes > m.buffers[binding].size)
         throw std::out_of_range("add_tick_readback: range outside buffer");
+    m.finish();  // the buffers below may be replaced
     const uint64_t at = m.tick_reads.empty() ? 0 : (m.tick_reads.back().at + m.tick_reads.back().bytes + 15) & ~uint64_t(15);
     m.tick_reads.push_back({binding, offset, bytes, at, bytes});
     const uint64_t total = at + bytes;
-    if (total > m.tick_rb.size) {  // grow (between ticks), keeping the last tick's results
-        const uint64_t size = std::max<uint64_t>(total, m.tick_rb.size * 2);
-        GpuBuffer grown = m.ctx.create_buffer(size, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                              VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                                              VK_MEMORY_PROPERTY_HOST_CACHED_BIT);
-        std::memset(grown.mapped, 0, grown.size);
-        if (m.tick_rb.buffer) {
-            std::memcpy(grown.mapped, m.tick_rb.mapped, m.tick_rb.size);
-            m.ctx.destroy_buffer(m.tick_rb);
+    for (auto& rb : m.tick_rb)
+        if (total > rb.size) {  // grow, keeping the last tick's results
+            const uint64_t size = std::max<uint64_t>(total, rb.size * 2);
+            GpuBuffer grown = m.ctx.create_buffer(size, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                                  VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                                                  VK_MEMORY_PROPERTY_HOST_CACHED_BIT);
+            std::memset(grown.mapped, 0, grown.size);
+            if (rb.buffer) {
+                std::memcpy(grown.mapped, rb.mapped, rb.size);
+                m.ctx.destroy_buffer(rb);
+            }
+            rb = grown;
         }
-        m.tick_rb = grown;
-    }
     return static_cast<uint32_t>(m.tick_reads.size() - 1);
 }
 
 const void* ComputeRunner::tick_readback(uint32_t id) const {
     const Impl& m = *impl_;
-    return static_cast<const char*>(m.tick_rb.mapped) + m.tick_reads.at(id).at;
+    return static_cast<const char*>(m.tick_rb[m.rb_done].mapped) + m.tick_reads.at(id).at;
 }
 
 void ComputeRunner::set_tick_readback_bytes(uint32_t id, uint64_t bytes) {
@@ -526,6 +588,7 @@ std::vector<ComputeRunner::OrderDiff> ComputeRunner::tick_checked(const std::vec
     const auto t0 = std::chrono::steady_clock::now();
     const size_t S = m.stages.size(), B = m.buffers.size();
     if (check.size() != S || row_words.size() != B) throw std::invalid_argument("tick_checked: one entry per stage / buffer");
+    m.finish();
     flush_queued();  // host writes come first, as in tick()
     if (m.check_pipelines.empty()) m.check_pipelines = m.make_pipelines(1);
     std::vector<uint64_t> at(B);  // where each buffer sits in check_rb
@@ -611,16 +674,8 @@ std::vector<ComputeRunner::OrderDiff> ComputeRunner::tick_checked(const std::vec
         run(s, false, 0);  // the normal parallel run: its result is kept
         compare(s, true, forwards, read_state());
     }
-    if (std::any_of(m.tick_reads.begin(), m.tick_reads.end(), [](const auto& r) { return r.size > 0; }))
-        m.run_once([&](VkCommandBuffer cmd) {  // per-tick readbacks, as in tick()
-            barrier(cmd, COMPUTE, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, TRANSFER, VK_ACCESS_2_TRANSFER_READ_BIT);
-            for (const auto& r : m.tick_reads) {
-                if (r.size == 0) continue;
-                const VkBufferCopy region{r.offset, r.at, r.size};
-                vkCmdCopyBuffer(cmd, m.buffers[r.binding].buffer, m.tick_rb.buffer, 1, &region);
-            }
-            barrier(cmd, TRANSFER, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_2_HOST_BIT, VK_ACCESS_2_HOST_READ_BIT);
-        });
+    if (m.any_readback()) m.run_once([&](VkCommandBuffer cmd) { m.record_readbacks(cmd); });  // as in tick()
+    m.rb_done ^= 1;
     m.last_tick_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
     m.last_gpu_ms = 0;  // not measured
     return diffs;

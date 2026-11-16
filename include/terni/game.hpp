@@ -300,8 +300,22 @@ public:
     GameSim(const Game& game, uint32_t device, const std::string& shader_library_dir = "", bool validation = false);
     ~GameSim();
 
-    void tick();
-    uint64_t ticks() const;  // completed ticks
+    void tick();             // begin_tick() then end_tick()
+    uint64_t ticks() const;  // completed ticks (a tick in flight counts once end_tick() collects it)
+
+    // ---- a tick that does not block ----
+    // begin_tick() submits the next tick and returns at once; the host keeps rendering and
+    // collects it with end_tick(), e.g. a frame later. In between, writes, modifier changes
+    // and commands are for the tick after it, exactly as if made after end_tick(), so the
+    // result never depends on when a host collects. tick_result() still gives the last
+    // collected tick's results. read_field(), read_each_tick(), save(), load(), snapshot(),
+    // tick_checked() and a first modifier_total()/modifier_breakdown() of an inherited key
+    // collect the tick first (they block). One tick is in flight at a time: begin_tick()
+    // collects the previous one first.
+    void begin_tick();
+    bool tick_ready();            // the tick in flight is done (or none is); never blocks
+    void end_tick();              // blocks until the tick is done; nothing to do if none is in flight
+    bool tick_in_flight() const;  // begun and not yet collected
 
     // ---- determinism check (tests) ----
     // A tick like tick(), with the same result, in which every stage first runs twice more
@@ -338,7 +352,8 @@ public:
     uint32_t read_each_tick(uint32_t entity, const std::string& field, uint32_t first_row = 0,
                             uint32_t rows = 0xFFFFFFFFu);
     // Words of a registered field as of the last completed tick, for the rows it covers
-    // (valid until the next tick; after load(), stale until the next tick).
+    // (valid until the tick after the next one begins; after load(), stale until the next
+    // tick is collected).
     std::span<const int32_t> tick_result(uint32_t id) const;
 
     // ---- modifiers ----
@@ -373,6 +388,7 @@ public:
     std::string report() const;
     CompileStats compile_stats() const;
     double last_tick_ms() const;      // wall time of the last tick, uploads and per-tick readbacks included
+                                      // (begun to seen done: by tick_ready() or end_tick())
     double last_tick_gpu_ms() const;  // GPU time of the last tick's stages alone (timestamps)
     uint64_t sync_reads() const;      // reads so far that waited for the GPU (read_field, snapshot, save, ...)
 

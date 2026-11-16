@@ -79,6 +79,12 @@ public:
     // Submit and block until the GPU has finished it.
     void submit_and_wait(VkCommandBuffer cmd);
     void submit_and_wait(const std::vector<VkCommandBuffer>& cmds);  // one submission, in order
+    // One submission that is not waited for: at most one at a time. submitted_done() asks
+    // without blocking; wait_submitted() blocks until it is done (both true/return at once
+    // if nothing is pending).
+    void submit(const std::vector<VkCommandBuffer>& cmds);
+    bool submitted_done();
+    void wait_submitted();
 
     VkShaderModule load_shader(const std::string& spirv_path);
     VkShaderModule create_shader(const std::vector<uint32_t>& spirv);
@@ -100,6 +106,8 @@ private:
     uint32_t queue_family_ = 0;
     VkCommandPool pool_ = VK_NULL_HANDLE;
     VkFence fence_ = VK_NULL_HANDLE;
+    VkFence async_fence_ = VK_NULL_HANDLE;  // submit()
+    bool async_pending_ = false;
     VkPhysicalDeviceProperties props_{};
     VkPhysicalDeviceMemoryProperties mem_props_{};
     uint32_t timestamp_valid_bits_ = 0;

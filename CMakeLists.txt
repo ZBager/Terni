@@ -189,6 +189,8 @@ if(TERNI_BUILD_TESTS)
   add_test(NAME partial_writes COMMAND test_partial_write)
   terni_test(test_capacity tests/test_capacity.cpp)
   add_test(NAME capacities COMMAND test_capacity)
+  terni_test(test_async_tick tests/test_async_tick.cpp)
+  add_test(NAME ticks_that_do_not_block COMMAND test_async_tick)
 
   # These two check the shader math against __int128 on the CPU (GCC and Clang, including
   # MinGW). The SPIR-V they test is the same whichever compiler built the host.
