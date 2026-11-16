@@ -183,6 +183,8 @@ if(TERNI_BUILD_TESTS)
   terni_test(test_portable_text tests/test_portable_text.cpp)
   target_include_directories(test_portable_text PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   add_test(NAME portable_text COMMAND test_portable_text)
+  terni_test(test_schedule tests/test_schedule.cpp)
+  add_test(NAME stage_schedule COMMAND test_schedule)
 
   # These two check the shader math against __int128 on the CPU (GCC and Clang, including
   # MinGW). The SPIR-V they test is the same whichever compiler built the host.

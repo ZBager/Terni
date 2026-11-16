@@ -642,6 +642,12 @@ struct GameSim::Impl {
         std::memcpy(p.rows.data(), runner->tick_readback(p.read.readback), runner->tick_readback_bytes(p.read.readback));
         p.stale = false;
     }
+    // Which stages run in the coming tick (the built-in last one always does).
+    std::vector<bool> stages_now() const {
+        std::vector<bool> run(game.stages.size() + 1, true);
+        for (size_t s = 0; s < game.stages.size(); ++s) run[s] = game.stages[s].runs_in(now);
+        return run;
+    }
     void after_tick() {
         ++now;
         for (auto& p : parents) p.stale = p.active;
@@ -742,28 +748,28 @@ GameSim::GameSim(const Game& game, const GameSimOptions& options) : impl_(std::m
     }
 
     std::vector<ComputeStageSpec> stages;
-    std::vector<uint32_t> clear;
     for (size_t i = 0; i < game.stages.size(); ++i) {
         const auto& s = game.stages[i];
         const uint32_t capacity = game.entity(s.for_each)->capacity;
         // workgroup dispatch: one 256-thread group per entity (FOR_EACH_GROUP strides past 65535)
         const uint32_t elements = s.dispatch == Dispatch::Workgroup ? std::min(capacity, 65535u) * 256u : capacity;
-        stages.push_back({s.name, elements, std::move(spirv[i])});
+        std::vector<uint32_t> zero;  // cleared only in the ticks the stage runs, so a total lasts until its next run
         for (const auto& c : s.clear)
             for (size_t k = 0; k < m.column_names.size(); ++k)
-                if (m.column_names[k] == c) clear.push_back(static_cast<uint32_t>(k + 2));
+                if (m.column_names[k] == c) zero.push_back(static_cast<uint32_t>(k + 2));
+        stages.push_back({s.name, elements, std::move(spirv[i]), std::move(zero)});
     }
-    stages.push_back({"terni_tick", 1, std::move(spirv.back())});  // built-in last stage (rule_sources)
+    stages.push_back({"terni_tick", 1, std::move(spirv.back()), {}});  // built-in last stage (rule_sources)
 
     m.runner = std::make_unique<ComputeRunner>(static_cast<uint32_t>(device), options.validation, "", buffers, stages,
-                                               clear, true);
+                                               std::vector<uint32_t>{}, true);
 }
 
 GameSim::~GameSim() = default;
 
 void GameSim::tick() {
     impl_->boundary();
-    impl_->runner->tick();
+    impl_->runner->tick(impl_->stages_now());
     impl_->after_tick();
 }
 
@@ -772,7 +778,7 @@ std::vector<OrderIssue> GameSim::tick_checked() {
     m.boundary();
     std::vector<bool> check(m.game.stages.size() + 1, true);
     check.back() = false;  // the built-in tick counter stage
-    const auto diffs = m.runner->tick_checked(check, m.row_words);
+    const auto diffs = m.runner->tick_checked(check, m.row_words, m.stages_now());
     m.after_tick();
     std::vector<OrderIssue> out;
     for (const auto& d : diffs) {
@@ -915,6 +921,7 @@ uint64_t game_checksum(const Game& game) {
         w.str(s.name), w.str(s.for_each), w.str(s.source), w.u32(static_cast<uint32_t>(s.clear.size()));
         for (const auto& c : s.clear) w.str(c);
         if (s.dispatch == Dispatch::Workgroup) w.str("dispatch=workgroup");  // absent for the default
+        if (s.every != 1) w.str("schedule"), w.u32(s.every), w.u32(s.offset);  // absent for every tick
     }
     return fnv64(w.buf.data(), w.buf.size());
 }

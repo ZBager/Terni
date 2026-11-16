@@ -31,6 +31,7 @@ Describes a world in code. Every call validates; problems are collected in
 | `void modifier_capacity(n)` | Most modifier instances alive at once (default 65,536) |
 | `void stage(name, for_each, glsl, clear = {})` | Adds a stage at the end of the tick |
 | `void stage_dispatch(stage, Dispatch::Workgroup)` | One 256-thread workgroup per row |
+| `void stage_schedule(stage, every, offset = 0)` | Run the stage only in the ticks where `terni.tick % every == offset` |
 | `uint32_t create(entity, id = "")` | Adds a starting row; returns the row |
 | `void set(entity, row, field, raw, index = 0)` | Sets a starting value (`index` within a sized field) |
 | `void add_modifier(bundle, entity, row, scale = fx::ONE, duration = 0)` | A modifier at the start |
@@ -167,3 +168,5 @@ used by `load_game`, and by `terni_script_check`, which checks whole mod folders
 `terni/compute_runner.hpp` runs any list of storage buffers and compute stages as one
 pre-recorded command buffer per tick, with batched uploads and readbacks. `GameSim` is
 built on it; use it directly only for models that do not fit the world description.
+`tick(run)` takes one flag per stage to skip some stages in that tick; each set of
+stages that run together is recorded once and reused.

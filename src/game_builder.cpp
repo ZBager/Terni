@@ -192,6 +192,20 @@ void WorldBuilder::stage_dispatch(const std::string& stage, Dispatch dispatch, L
     error(where, "dispatch: unknown stage '" + stage + "'");
 }
 
+void WorldBuilder::stage_schedule(const std::string& stage, uint32_t every, uint32_t offset, Location where) {
+    if (every == 0) return error(where, "stage '" + stage + "': every must be at least 1");
+    if (offset >= every)
+        return error(where, "stage '" + stage + "': offset " + std::to_string(offset) + " must be less than every (" +
+                                std::to_string(every) + ")");
+    for (auto& s : game_->stages)
+        if (s.name == stage) {
+            s.every = every;
+            s.offset = offset;
+            return;
+        }
+    error(where, "schedule: unknown stage '" + stage + "'");
+}
+
 uint32_t WorldBuilder::create(uint32_t entity, const std::string& id, Location where) {
     Game& g = *game_;
     EntityTable& t = g.tables.at(entity);

@@ -97,6 +97,11 @@ void main() {
 Convert to whole units (`agg` fields, `to_agg`) before adding, list the field in
 `clear`, and read the total in a **later** stage, never in the stage that adds to it.
 
+Work that happens once a month belongs in a stage with a schedule
+(`every = 30 offset = 29` in `stages.txt`) rather than in an `if` on `terni.tick`: on the
+other days the stage is not dispatched at all. Fields it lists in `clear` are zeroed
+only when it runs, so last month's total stays readable all month.
+
 When thousands of threads add to a few rows, `terni/slot_table.glsl` pre-sums them
 per workgroup in shared memory first. Define `TABLE_SLOTS` and `VALUES` and include it
 in the rule:

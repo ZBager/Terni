@@ -395,6 +395,23 @@ private:
                 if (v == "workgroup") b_.stage_dispatch(name, Dispatch::Workgroup, at(d, *dp));
                 else if (v != "thread") error(at(d, *dp), "dispatch must be `thread` or `workgroup`, not '" + v + "'");
             }
+            const auto* ev = it.block->find("every");
+            const auto* of = it.block->find("offset");
+            if (ev || of) {
+                int64_t every = 1, offset = 0;
+                bool good = true;
+                if (ev && (!parse_value(str(ev->scalar), FieldType::Count, every) || every < 1)) {
+                    error(at(d, *ev), "every must be a whole number of ticks, at least 1, not '" + str(ev->scalar) + "'");
+                    good = false;
+                }
+                if (of && (!parse_value(str(of->scalar), FieldType::Count, offset) || offset < 0)) {
+                    error(at(d, *of), "offset must be a whole number of ticks, not '" + str(of->scalar) + "'");
+                    good = false;
+                }
+                if (good)
+                    b_.stage_schedule(name, static_cast<uint32_t>(every), static_cast<uint32_t>(offset),
+                                      at(d, of ? *of : *ev));
+            }
         }
     }
 

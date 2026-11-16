@@ -28,5 +28,9 @@ The first public version.
   with the same checksums, SPIR-V cache keys and results on all of them; rule files
   read the same whatever their line endings. `CMakePresets.json` for each platform, and
   continuous integration that runs the whole suite on lavapipe on all three.
+- **Stage schedules**: `every = 30 offset = 29` in `stages.txt` (or
+  `WorldBuilder::stage_schedule`) runs a stage only in some ticks; other ticks do not
+  dispatch it, and its `clear` fields keep their values until it runs again.
+  `ComputeRunner::tick()` and `tick_checked()` take the stages to run.
 - **Licence**: LGPL 2.1 with the Terni Linking Exception (static linking, no relinking or
   reverse-engineering terms for games, compiled shaders belong to the game).

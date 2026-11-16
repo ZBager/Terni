@@ -72,7 +72,9 @@ One **tick** is:
 1. Host changes since the last tick are uploaded (field writes, modifier totals).
 2. Fields listed in a stage's `clear = { ... }` are set to zero (accumulators).
 3. Every stage runs in order, with a memory barrier between stages: a stage sees
-   everything the stages before it wrote.
+   everything the stages before it wrote. A stage with a schedule (`every = 30`) runs
+   only in its ticks; in the others it is skipped, and its `clear` fields keep their
+   values.
 4. The built-in last stage advances `terni.tick`.
 5. Fields registered with `read_each_tick` are copied back to the host.
 

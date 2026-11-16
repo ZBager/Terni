@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cstring>
 #include <locale>
+#include <map>
 #include <sstream>
 #include <stdexcept>
 
@@ -59,7 +60,7 @@ struct ComputeRunner::Impl {
     VkPipelineLayout layout = VK_NULL_HANDLE;
     std::vector<VkPipeline> pipelines;
     VkQueryPool queries = VK_NULL_HANDLE;
-    VkCommandBuffer tick_cmd = VK_NULL_HANDLE;
+    std::map<std::vector<bool>, VkCommandBuffer> tick_cmds;  // recorded ticks, by which stages run
     std::vector<double> stage_ns;
     uint64_t ticks = 0;
     double upload_ms = 0;
@@ -105,6 +106,59 @@ struct ComputeRunner::Impl {
         VK_CHECK(vkCreateComputePipelines(d, VK_NULL_HANDLE, static_cast<uint32_t>(S), cis.data(), nullptr, out.data()));
         for (VkShaderModule mod : modules) vkDestroyShaderModule(d, mod, nullptr);
         return out;
+    }
+
+    // Buffers to zero at the start of a tick in which the stages in `run` run.
+    std::vector<uint32_t> zeroed(const std::vector<bool>& run) const {
+        std::vector<uint32_t> out = zero_each_tick;
+        for (size_t s = 0; s < stages.size(); ++s)
+            if (run[s]) out.insert(out.end(), stages[s].zero.begin(), stages[s].zero.end());
+        std::sort(out.begin(), out.end());
+        out.erase(std::unique(out.begin(), out.end()), out.end());
+        return out;
+    }
+
+    // The tick in which the stages in `run` run, recorded once and resubmitted. A skipped
+    // stage still writes its timestamp, so it measures as zero.
+    VkCommandBuffer tick_cmd(const std::vector<bool>& run) {
+        if (auto it = tick_cmds.find(run); it != tick_cmds.end()) return it->second;
+        if (tick_cmds.size() >= 64) {  // many co-prime schedules: start over rather than grow (none is in flight)
+            for (const auto& [r, c] : tick_cmds) ctx.free_command_buffer(c);
+            tick_cmds.clear();
+        }
+        const size_t S = stages.size();
+        VkCommandBuffer cmd = ctx.allocate_command_buffer();
+        VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+        VK_CHECK(vkBeginCommandBuffer(cmd, &bi));
+        barrier(cmd, COMPUTE | TRANSFER, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                COMPUTE | TRANSFER, SHADER_RW | VK_ACCESS_2_TRANSFER_WRITE_BIT);
+        if (queries) {
+            vkCmdResetQueryPool(cmd, queries, 0, static_cast<uint32_t>(S + 1));
+            vkCmdWriteTimestamp2(cmd, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, queries, 0);
+        }
+        for (uint32_t b : zeroed(run)) vkCmdFillBuffer(cmd, buffers[b].buffer, 0, VK_WHOLE_SIZE, 0);
+        barrier(cmd, TRANSFER, VK_ACCESS_2_TRANSFER_WRITE_BIT, COMPUTE, SHADER_RW);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0, 1, &set, 0, nullptr);
+        const uint32_t forwards = 0;
+        vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(forwards), &forwards);
+        for (size_t s = 0; s < S; ++s) {
+            if (run[s]) {
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelines[s]);
+                vkCmdDispatch(cmd, groups(stages[s].elements), 1, 1);
+                barrier(cmd, COMPUTE, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, COMPUTE, SHADER_RW);
+            }
+            if (queries)
+                vkCmdWriteTimestamp2(cmd, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, queries, static_cast<uint32_t>(s + 1));
+        }
+        VK_CHECK(vkEndCommandBuffer(cmd));
+        tick_cmds.emplace(run, cmd);
+        return cmd;
+    }
+
+    std::vector<bool> run_mask(const std::vector<bool>& run) const {
+        if (run.empty()) return std::vector<bool>(stages.size(), true);
+        if (run.size() != stages.size()) throw std::invalid_argument("tick: one run entry per stage");
+        return run;
     }
 
     // Record a one-off command buffer, submit it and wait.
@@ -226,30 +280,7 @@ ComputeRunner::ComputeRunner(uint32_t device_index, bool validation, const std::
     }
     m.stage_ns.assign(S, 0.0);
 
-    // ---- one tick, recorded once and resubmitted every tick
-    m.tick_cmd = ctx.allocate_command_buffer();
-    VkCommandBuffer cmd = m.tick_cmd;
-    VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-    VK_CHECK(vkBeginCommandBuffer(cmd, &bi));
-    barrier(cmd, COMPUTE | TRANSFER, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT,
-            COMPUTE | TRANSFER, SHADER_RW | VK_ACCESS_2_TRANSFER_WRITE_BIT);
-    if (m.queries) {
-        vkCmdResetQueryPool(cmd, m.queries, 0, static_cast<uint32_t>(S + 1));
-        vkCmdWriteTimestamp2(cmd, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, m.queries, 0);
-    }
-    for (uint32_t b : zero_each_tick) vkCmdFillBuffer(cmd, m.buffers[b].buffer, 0, VK_WHOLE_SIZE, 0);
-    barrier(cmd, TRANSFER, VK_ACCESS_2_TRANSFER_WRITE_BIT, COMPUTE, SHADER_RW);
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m.layout, 0, 1, &m.set, 0, nullptr);
-    const uint32_t forwards = 0;
-    vkCmdPushConstants(cmd, m.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(forwards), &forwards);
-    for (size_t s = 0; s < S; ++s) {
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m.pipelines[s]);
-        vkCmdDispatch(cmd, m.groups(stages[s].elements), 1, 1);
-        barrier(cmd, COMPUTE, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, COMPUTE, SHADER_RW);
-        if (m.queries)
-            vkCmdWriteTimestamp2(cmd, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, m.queries, static_cast<uint32_t>(s + 1));
-    }
-    VK_CHECK(vkEndCommandBuffer(cmd));
+    m.tick_cmd(std::vector<bool>(S, true));  // the usual tick, recorded up front
 }
 
 ComputeRunner::~ComputeRunner() {
@@ -264,7 +295,7 @@ ComputeRunner::~ComputeRunner() {
     vkDestroyDescriptorPool(d, m.pool, nullptr);
     vkDestroyDescriptorSetLayout(d, m.set_layout, nullptr);
     if (m.queries) vkDestroyQueryPool(d, m.queries, nullptr);
-    m.ctx.free_command_buffer(m.tick_cmd);
+    for (const auto& [run, cmd] : m.tick_cmds) m.ctx.free_command_buffer(cmd);
     for (auto& b : m.buffers) m.ctx.destroy_buffer(b);
     m.ctx.destroy_buffer(m.readback);
     if (m.upload.buffer) m.ctx.destroy_buffer(m.upload);
@@ -272,8 +303,9 @@ ComputeRunner::~ComputeRunner() {
     if (m.tick_rb.buffer) m.ctx.destroy_buffer(m.tick_rb);
 }
 
-void ComputeRunner::tick() {
+void ComputeRunner::tick(const std::vector<bool>& run) {
     Impl& m = *impl_;
+    VkCommandBuffer tick_cmd = m.tick_cmd(m.run_mask(run));
     const auto t0 = std::chrono::steady_clock::now();
     std::vector<VkCommandBuffer> cmds;
     VkCommandBufferBeginInfo once{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
@@ -290,7 +322,7 @@ void ComputeRunner::tick() {
         VK_CHECK(vkEndCommandBuffer(pre));
         cmds.push_back(pre);
     }
-    cmds.push_back(m.tick_cmd);
+    cmds.push_back(tick_cmd);
     if (std::any_of(m.tick_reads.begin(), m.tick_reads.end(), [](const auto& r) { return r.size > 0; })) {
         post = m.ctx.allocate_command_buffer();
         VK_CHECK(vkBeginCommandBuffer(post, &once));
@@ -448,8 +480,10 @@ void ComputeRunner::set_tick_readback_bytes(uint32_t id, uint64_t bytes) {
 uint64_t ComputeRunner::tick_readback_bytes(uint32_t id) const { return impl_->tick_reads.at(id).size; }
 
 std::vector<ComputeRunner::OrderDiff> ComputeRunner::tick_checked(const std::vector<bool>& check,
-                                                                  const std::vector<uint64_t>& row_words) {
+                                                                  const std::vector<uint64_t>& row_words,
+                                                                  const std::vector<bool>& run_in) {
     Impl& m = *impl_;
+    const std::vector<bool> runs = m.run_mask(run_in);
     const auto t0 = std::chrono::steady_clock::now();
     const size_t S = m.stages.size(), B = m.buffers.size();
     if (check.size() != S || row_words.size() != B) throw std::invalid_argument("tick_checked: one entry per stage / buffer");
@@ -518,10 +552,11 @@ std::vector<ComputeRunner::OrderDiff> ComputeRunner::tick_checked(const std::vec
 
     m.run_once([&](VkCommandBuffer cmd) {  // tick start, as in the recorded tick
         after_everything(cmd);
-        for (uint32_t b : m.zero_each_tick) vkCmdFillBuffer(cmd, m.buffers[b].buffer, 0, VK_WHOLE_SIZE, 0);
+        for (uint32_t b : m.zeroed(runs)) vkCmdFillBuffer(cmd, m.buffers[b].buffer, 0, VK_WHOLE_SIZE, 0);
     });
     std::vector<uint32_t> forwards;
     for (size_t s = 0; s < S; ++s) {
+        if (!runs[s]) continue;
         if (!check[s]) {
             run(s, false, 0);
             continue;

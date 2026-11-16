@@ -125,13 +125,22 @@ planet_growth   = { for_each = planet }
 empire_income   = { for_each = planet  clear = { empire.income } }
 empire_treasury = { for_each = empire }
 province_sums   = { for_each = province  dispatch = workgroup }
+monthly_taxes   = { for_each = province  every = 30  offset = 29  clear = { realm.tax } }
 ```
 
 | Key | Meaning |
 | --- | --- |
 | `for_each` | The entity type whose rows the stage visits; sets the number of GPU threads |
-| `clear` | Fields set to zero at the start of every tick, before the first stage (accumulators) |
+| `clear` | Fields set to zero at the start of every tick in which the stage runs, before the first stage (accumulators) |
 | `dispatch` | `thread` (default, one thread per row) or `workgroup` (256 threads per row) |
+| `every` | Run the stage only every N ticks (default 1, every tick) |
+| `offset` | With `every`: which of those ticks, 0 to N-1 (default 0) |
+
+A stage with `every = 30 offset = 29` runs in the ticks where `terni.tick` (the ticks
+completed before it) is 29, 59, 89, and so on: the last day of each 30-day month. In the
+other ticks it is not dispatched at all, so it costs nothing. Its `clear` fields are
+zeroed only in the ticks it runs, so a monthly total stays readable, by the host and by
+other stages, until the next month replaces it.
 
 ### &lt;stage&gt;.glsl
 
@@ -149,8 +158,8 @@ void main() {
 ## What the checksum covers
 
 `game_checksum()` covers the schema, the define values, modifier keys and bundles,
-the modifier capacity, and the stages with their sources, `clear` lists and dispatch
-mode. It does not cover `history/`. Two peers with different rule files, or a save
+the modifier capacity, and the stages with their sources, `clear` lists, dispatch
+mode and schedule (`every`, `offset`). It does not cover `history/`. Two peers with different rule files, or a save
 made with different rules, are refused.
 
 Line endings do not count: a rule file with Windows line endings (CRLF) is read as if it

@@ -7,9 +7,10 @@
 //   - a list of storage buffers  (binding = index in the list)
 //   - a list of stages           (one compute shader each, run in order every tick,
 //                                 separated by memory barriers)
-//   - which buffers are zeroed at the start of every tick (atomic accumulators)
-// and the runner does the rest: device, upload, descriptors, pipelines, one
-// pre-recorded command buffer per tick, GPU timestamps and readback.
+//   - which buffers are zeroed at the start of every tick (atomic accumulators), or
+//     of every tick in which a given stage runs
+// and the runner does the rest: device, upload, descriptors, pipelines, pre-recorded
+// command buffers (one per set of stages that run together), GPU timestamps and readback.
 //
 
 #include <cstdint>
@@ -29,6 +30,7 @@ struct ComputeStageSpec {
     std::string shader;            // name; also the SPIR-V file name (without .spv) when `spirv` is empty
     uint32_t elements;             // threads to launch (grid-stride loops handle any count)
     std::vector<uint32_t> spirv;   // in-memory SPIR-V (e.g. compiled at load time); overrides the file
+    std::vector<uint32_t> zero;    // buffers zeroed at the start of every tick in which this stage runs
 };
 
 class ComputeRunner {
@@ -41,7 +43,9 @@ public:
     ComputeRunner(const ComputeRunner&) = delete;
     ComputeRunner& operator=(const ComputeRunner&) = delete;
 
-    void tick();  // submit one tick and wait
+    // Submit one tick and wait. `run` has one entry per stage: false skips the stage (and
+    // its `zero` buffers) in this tick; empty runs every stage.
+    void tick(const std::vector<bool>& run = {});
     // Copy `bytes` of buffer `binding`, starting at byte `offset`, back to the host.
     void read(uint32_t binding, void* dst, uint64_t bytes, uint64_t offset = 0);
     // Copy host data into buffer `binding` at byte `offset` (between ticks).
@@ -68,15 +72,16 @@ public:
     // ---- order check (tests) ----
     // One tick in which every stage with check[s] set runs three times from the state
     // before it: with the order-check pipeline (one workgroup visiting the items one at a
-    // time) forwards, then backwards, then normally, which is the result kept. Reports
-    // the buffers whose words differ between the forward run and the backward run
+    // time) forwards, then backwards, then normally, which is the result kept. `run` as in
+    // tick(). Reports the buffers whose words differ between the forward run and the backward run
     // (parallel = false) or the normal run (parallel = true), in rows of row_words[b] words.
     struct OrderDiff {
         uint32_t stage, binding;
         bool parallel;
         uint64_t first_row, rows;
     };
-    std::vector<OrderDiff> tick_checked(const std::vector<bool>& check, const std::vector<uint64_t>& row_words);
+    std::vector<OrderDiff> tick_checked(const std::vector<bool>& check, const std::vector<uint64_t>& row_words,
+                                        const std::vector<bool>& run = {});
     uint64_t sync_reads() const;  // read() calls so far; each waits for the GPU
 
     std::string device_name() const;

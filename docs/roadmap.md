@@ -11,33 +11,31 @@ is a priority, not a promise.
 2. **Changing capacities in a supported way**, e.g. `WorldBuilder::set_capacity(entity, rows)`.
    Capacities are part of the rules (they appear in the generated GLSL), so games that
    offer several map sizes need several sets of compiled rules.
-3. **A stage schedule** in `stages.txt` (`every = 30`, with an offset), so a monthly
-   stage is not dispatched every day.
-4. **Partial writes**: one element of a sized field (`write_field(..., row, index, words)`),
+3. **Partial writes**: one element of a sized field (`write_field(..., row, index, words)`),
    so hosts do not have to mirror a whole row to change one value.
-5. **`Game::define(name)`**, a public lookup of constants.
-6. **Modifiers that inherit in more than one step** (a province from its district, the
+4. **`Game::define(name)`**, a public lookup of constants.
+5. **Modifiers that inherit in more than one step** (a province from its district, the
    district from its region, the region from its realm). Today a key inherits through
    one ref field.
 
 ## Phase 2: what larger games need
 
-7. **A CPU path** for machines without a usable Vulkan GPU: either a software Vulkan
+6. **A CPU path** for machines without a usable Vulkan GPU: either a software Vulkan
    driver shipped with the game (it runs the same shaders unchanged), or rules that also
    compile as C++. Both need parity tests.
-8. **A tick that does not block**: submit, keep rendering, collect the results a frame
+7. **A tick that does not block**: submit, keep rendering, collect the results a frame
    later.
-9. **Device health**: measure tick times and warn, or switch device, when the chosen GPU
+8. **Device health**: measure tick times and warn, or switch device, when the chosen GPU
    is busy with other work.
-10. **Entities at run time** (create and destroy rows during play, with stable ids and
+9. **Entities at run time** (create and destroy rows during play, with stable ids and
     counts in saves). Pools of rows work for now; this comes when a game needs it.
-11. **A larger example game** that exercises markets, inheritance and workgroup stages.
+10. **A larger example game** that exercises markets, inheritance and workgroup stages.
 
 ## Phase 3: public releases
 
-12. **Versioned releases** with a changelog and a stable API from 1.0, and a shared
+11. **Versioned releases** with a changelog and a stable API from 1.0, and a shared
     library build for engines that load Terni from other languages.
-13. **Mod tooling**: `terni_script_check` and the order warnings as one command a
+12. **Mod tooling**: `terni_script_check` and the order warnings as one command a
     modder runs before publishing.
 
 Not planned: DirectX or Metal back ends, and consoles.

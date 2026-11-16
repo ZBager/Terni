@@ -19,6 +19,7 @@
 //                                                                     add_modifier = { name = good_harvest duration = 12 } }
 //   rules/stages.txt     tick order                       planet_growth = { for_each = planet }
 //                        one workgroup per entity         province_sums = { for_each = province dispatch = workgroup }
+//                        only some ticks                  monthly_taxes = { for_each = province every = 30 offset = 29 }
 //   rules/<stage>.glsl   body of each stage
 //
 // Field types (all 32-bit on the GPU):
@@ -115,9 +116,12 @@ struct StageDef {
     std::string name;
     Dispatch dispatch = Dispatch::Thread;
     std::string for_each;            // entity type the stage iterates
-    std::vector<std::string> clear;  // "entity.field" buffers zeroed at the start of each tick
+    std::vector<std::string> clear;  // "entity.field" buffers zeroed at the start of each tick the stage runs
     std::string source;              // GLSL body
+    uint32_t every = 1, offset = 0;  // runs in the ticks where terni.tick % every == offset
     Location where;
+
+    bool runs_in(uint64_t tick) const { return tick % every == offset; }  // tick = completed ticks before it
 };
 
 // Host-side world: one column (int32 words) per field, capacity rows each.
@@ -177,6 +181,9 @@ public:
     void stage(const std::string& name, const std::string& for_each, const std::string& glsl,
                const std::vector<std::string>& clear = {}, Location where = {});
     void stage_dispatch(const std::string& stage, Dispatch dispatch, Location where = {});
+    // Run a stage only in the ticks where terni.tick % every == offset (offset < every),
+    // e.g. every = 30 for a monthly stage. Skipped ticks do not dispatch it at all.
+    void stage_schedule(const std::string& stage, uint32_t every, uint32_t offset = 0, Location where = {});
 
     // starting state
     uint32_t create(uint32_t entity, const std::string& id = "", Location where = {});  // new row; returns row
