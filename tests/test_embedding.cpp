@@ -189,14 +189,24 @@ void main() {
         for (uint32_t r = 0; r < N; ++r) w.create(cell);
         auto world = w.finish();
         CHECK(world->ok());
-        __extension__ typedef __int128 i128;
+        // s += x << (32 * limb) on a 128-bit two's-complement number held as four 32-bit
+        // limbs (portable: no __int128)
+        auto add_shifted = [](uint32_t* s, int64_t x, int limb) {
+            const uint64_t ux = uint64_t(x), ext = x < 0 ? 0xffffffffu : 0u;
+            uint64_t carry = 0;
+            for (int k = limb; k < 4; ++k) {
+                const uint64_t part = k == limb ? uint32_t(ux) : k == limb + 1 ? uint32_t(ux >> 32) : ext;
+                const uint64_t t = s[k] + part + carry;
+                s[k] = uint32_t(t), carry = t >> 32;
+            }
+        };
         for (const auto& d : devices) {
             if (!d.usable) continue;
             GameSimOptions o;
             o.device = int(d.index);
             GameSim sim(*world, o);
             const uint32_t sums = sim.read_each_tick(cell, "sum");
-            std::vector<i128> expect(N, 0);
+            std::vector<uint32_t> expect(size_t(N) * 4, 0);
             std::vector<int32_t> weights(N), values(size_t(N) * 2);
             bool same = true;
             for (int t = 0; t < 20; ++t) {
@@ -204,17 +214,15 @@ void main() {
                     weights[r] = int32_t(rng::hash32(r * 31 + uint32_t(t))) >> (r % 9);
                     const int64_t v = int64_t((uint64_t(rng::hash32(r + 7u * uint32_t(t))) << 32) | rng::hash32(r ^ uint32_t(t)));
                     values[2 * r] = int32_t(uint32_t(v)), values[2 * r + 1] = int32_t(uint32_t(uint64_t(v) >> 32));
-                    expect[r] += i128(weights[r]) * v;
+                    // weight * v = weight * low half + (weight * high half) << 32, each exact in int64
+                    add_shifted(&expect[size_t(r) * 4], int64_t(weights[r]) * int64_t(uint32_t(uint64_t(v))), 0);
+                    add_shifted(&expect[size_t(r) * 4], int64_t(weights[r]) * int64_t(int32_t(uint32_t(uint64_t(v) >> 32))), 1);
                 }
                 sim.write_field(cell, "weight", 0, std::span<const int32_t>(weights));
                 sim.write_field(cell, "value", 0, std::span<const int32_t>(values));
                 sim.tick();
                 const auto got = sim.tick_result(sums);
-                for (uint32_t r = 0; r < N; ++r) {
-                    i128 g = 0;
-                    for (int k = 3; k >= 0; --k) g = (g << 32) | i128(uint32_t(got[size_t(r) * 4 + size_t(k)]));
-                    same &= g == expect[r];
-                }
+                for (size_t k = 0; k < size_t(N) * 4; ++k) same &= uint32_t(got[k]) == expect[k];
             }
             CHECK(same);
             CHECK(sim.read_field(cell, "sum") == std::vector<int32_t>(sim.tick_result(sums).begin(), sim.tick_result(sums).end()));

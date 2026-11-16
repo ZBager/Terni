@@ -152,3 +152,7 @@ void main() {
 the modifier capacity, and the stages with their sources, `clear` lists and dispatch
 mode. It does not cover `history/`. Two peers with different rule files, or a save
 made with different rules, are refused.
+
+Line endings do not count: a rule file with Windows line endings (CRLF) is read as if it
+had Unix ones (LF), so a game folder checked out on Windows has the same checksum as on
+Linux.

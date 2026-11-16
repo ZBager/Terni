@@ -1,0 +1,3 @@
+# LF everywhere, also in Windows checkouts: rule sources and the GLSL library feed game
+# checksums and SPIR-V cache keys, which must match across platforms.
+* text=auto eol=lf

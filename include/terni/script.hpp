@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception-1.0
 // Copyright (C) 2026 Rafał Zając
 #pragma once
-// Parser for Paradox script ("Clausewitz"/"Jomini" syntax) — the format of
+// Parser for Paradox script ("Clausewitz"/"Jomini" syntax) -- the format of
 // common/, history/, events/, gui/ ... files in HOI4, Stellaris, EU4, EU5, CK3.
 //
 // The parser is structural and lossless about meaning: it does not interpret
@@ -37,12 +37,12 @@ struct Block;
 
 // One item of a block. Exactly one of these shapes:
 //   key op value          (has_key, op != None)
-//   key { ... }           (has_key, op == None, block) — implicit '=' (e.g. GUI `block "x" { }`)
-//   value                 (!has_key)                   — list element, bare word or bare block
+//   key { ... }           (has_key, op == None, block) -- implicit '=' (e.g. GUI `block "x" { }`)
+//   value                 (!has_key)                   -- list element, bare word or bare block
 // A value is a scalar, a block, or a scalar tag followed by a block (`rgb { }`).
 // Conditional parameter blocks `[[PARAM] ...]` are items with `condition` set.
 struct Item {
-    std::string_view key;      // raw text (quotes stripped, escapes kept) — valid while the Document lives
+    std::string_view key;      // raw text (quotes stripped, escapes kept) -- valid while the Document lives
     bool has_key = false;
     bool key_quoted = false;
     Op op = Op::None;

@@ -208,7 +208,7 @@ std::string generate_prelude(const Game& game);
 // fields, defines and their values, modifier keys and bundles, stage order and
 // rule sources. Saves only load into a game with the same checksum, and lockstep
 // multiplayer peers compare it before playing together. Starting state (history)
-// is not included — that is what saves are for.
+// is not included -- that is what saves are for.
 uint64_t game_checksum(const Game& game);
 
 // Exact decimal text -> fixed-point raw value of a type (integer math only).
@@ -321,7 +321,7 @@ public:
     bool set_modifier_scale(ModifierHandle h, int32_t scale);  // false if the handle is stale
     bool remove_modifier(ModifierHandle h);                    // false if the handle is stale
     bool modifier_alive(ModifierHandle h) const;
-    // Own total of `key` on (entity, row) — without inheritance.
+    // Own total of `key` on (entity, row) -- without inheritance.
     int32_t modifier_own_total(uint32_t key, uint32_t entity, uint32_t row) const;
     // Own + inherited total, and the list of contributing instances (for tooltips). The
     // inherited part follows the ref field (e.g. owner) as of the last tick plus host writes
@@ -336,8 +336,8 @@ public:
     // modifier store (instances, free slots, pending expiries, sequence counter).
     // Binary, little-endian, versioned, with the game checksum and a content hash.
     std::vector<uint8_t> save();
-    // Restores a save into this simulation (any device). Throws std::runtime_error —
-    // leaving the simulation untouched — if the save is corrupt, truncated, from
+    // Restores a save into this simulation (any device). Throws std::runtime_error --
+    // leaving the simulation untouched -- if the save is corrupt, truncated, from
     // another format version, or from a game with a different checksum.
     void load(const std::vector<uint8_t>& data);
     uint64_t checksum() const;

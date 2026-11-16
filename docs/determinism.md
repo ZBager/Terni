@@ -97,9 +97,11 @@ on another device, and check that the continued run ends with the same hash.
 - Fixed-point arithmetic in C++ (`terni/fixed.hpp`) and GLSL (`fixed.glsl`) gives the same
   bits; the tests compare them on every device.
 - 64- and 128-bit helpers (`wide.glsl`) are exact on every device; the tests compare them
-  with C++ `__int128`.
+  with C++ `__int128` (with GCC and Clang, which have it).
 - Decimal values in data files become fixed point through integer math only, not through
   the C library, so the locale and the platform do not matter.
-- The generated GLSL is the same text on every machine.
+- The generated GLSL is the same text on every machine and with every compiler (GCC,
+  Clang, MSVC), and rule sources are read the same whatever their line endings, so
+  checksums and SPIR-V cache keys match across platforms.
 - Modifier totals are exact integer sums, and expiries happen in a fixed order.
 - Saves round-trip byte for byte and continue bit-identically on any device.

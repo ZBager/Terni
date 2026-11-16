@@ -24,5 +24,9 @@ The first public version.
   `Terni::runtime`, a build without the shader compiler; `cache_only`.
 - **Determinism checks**: load-time warnings for stages whose result can depend on thread
   order; `GameSim::tick_checked()` to confirm at run time.
+- **Platforms**: Linux, and Windows with Visual Studio 2022 and 2026 (MSVC) or MinGW-w64,
+  with the same checksums, SPIR-V cache keys and results on all of them; rule files
+  read the same whatever their line endings. `CMakePresets.json` for each platform, and
+  continuous integration that runs the whole suite on lavapipe on all three.
 - **Licence**: LGPL 2.1 with the Terni Linking Exception (static linking, no relinking or
   reverse-engineering terms for games, compiled shaders belong to the game).

@@ -166,7 +166,11 @@ void WorldBuilder::stage(const std::string& name, const std::string& for_each, c
     StageDef s;
     s.name = name;
     s.for_each = for_each;
-    s.source = glsl;
+    // CRLF -> LF: the same rules checked out with Windows line endings must give the same
+    // checksum and SPIR-V cache keys as everywhere else
+    s.source.reserve(glsl.size());
+    for (size_t i = 0; i < glsl.size(); ++i)
+        if (glsl[i] != '\r' || i + 1 == glsl.size() || glsl[i + 1] != '\n') s.source += glsl[i];
     s.where = where;
     if (!valid_identifier(name)) error(where, "invalid stage name '" + name + "'");
     if (!g.entity(for_each)) error(where, "stage '" + name + "': unknown for_each entity '" + for_each + "'");

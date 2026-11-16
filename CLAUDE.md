@@ -33,8 +33,11 @@ otherwise, and update it when an item is done or the plan changes.
   (`#` comments in CMake files). Do not change `LICENSE` or `LICENSE-EXCEPTION`.
 - **Build system: plain CMake.** Do not add a Makefile wrapper, pkg-config files or
   another build system; this was tried and deliberately removed.
-- **Windows means MinGW-w64.** An MSVC build is not a goal; do not add MSVC-specific code
-  paths or project files.
+- **Windows: MSVC (Visual Studio 2022 and 2026) and MinGW-w64 are both supported**, and
+  CI builds both. Keep code standard C++20: no GCC/Clang-only extensions (such as
+  `__int128`; tests that use it as a reference are built only where it exists), and no
+  non-ASCII characters in public headers (except the licence header), string literals
+  or generated text. Line endings must not matter: stage sources are read CRLF -> LF.
 
 ## Build and test
 
@@ -43,6 +46,11 @@ cmake -S . -B build -G Ninja && cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
+- `CMakePresets.json` has `linux`, `windows-msvc` and `windows-mingw` presets
+  (`cmake --preset linux`, output in `build-<preset>/`). CI (`.github/workflows/ci.yml`)
+  runs the suite on lavapipe on Linux, MSVC (VS 2022 and 2026) and MinGW, and checks the
+  mini_galaxy state hash; if that example changes, update the hash there and the pinned
+  values in `tests/test_portable_text.cpp`.
 - The GPU tests run on **every usable Vulkan device** and compare results bit for bit;
   lavapipe (Mesa's CPU driver) counts as a device. A change is done when the whole suite
   passes on every device in the machine.

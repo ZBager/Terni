@@ -29,13 +29,22 @@ endif()
 find_package(Vulkan REQUIRED)
 if(TERNI_RULE_COMPILER)
   # shaderc: compiles game rules (GLSL) at load time, so mods can change them
-  find_library(SHADERC_LIB NAMES shaderc_shared shaderc REQUIRED)
-  find_path(SHADERC_INCLUDE shaderc/shaderc.hpp REQUIRED)
+  # (the Vulkan SDK on Windows ships it next to the Vulkan loader and headers)
+  get_filename_component(_terni_vulkan_libdir "${Vulkan_LIBRARY}" DIRECTORY)
+  find_library(SHADERC_LIB NAMES shaderc_shared shaderc HINTS ${_terni_vulkan_libdir} "$ENV{VULKAN_SDK}/Lib" REQUIRED)
+  find_path(SHADERC_INCLUDE shaderc/shaderc.hpp HINTS ${Vulkan_INCLUDE_DIRS} "$ENV{VULKAN_SDK}/Include" REQUIRED)
 endif()
 find_package(Threads REQUIRED)
 
 set(TERNI_SHADER_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/shaders CACHE INTERNAL "Terni GLSL library folder")
-set(TERNI_WARNINGS -Wall -Wextra -Wpedantic -Wno-missing-field-initializers)  # Info{VK_STRUCTURE_TYPE_...} idiom
+if(MSVC)
+  # /utf-8: the sources, and the GLSL library embedded from them, are UTF-8. Without it
+  # MSVC reads them in the system code page, and the embedded bytes (and with them every
+  # SPIR-V cache key) could differ from other compilers.
+  set(TERNI_COMPILE_OPTIONS /W4 /permissive- /utf-8 /Zc:__cplusplus)
+else()
+  set(TERNI_COMPILE_OPTIONS -Wall -Wextra -Wpedantic -Wno-missing-field-initializers)  # Info{VK_STRUCTURE_TYPE_...} idiom
+endif()
 
 # ---------------------------------------------------------------------------
 # The GLSL library, embedded into the binary (rebuilt when any .glsl changes)
@@ -76,7 +85,7 @@ function(terni_library target export_name compiler_source)
     PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   target_link_libraries(${target} PUBLIC Vulkan::Vulkan PRIVATE Threads::Threads)
-  target_compile_options(${target} PRIVATE ${TERNI_WARNINGS})
+  target_compile_options(${target} PRIVATE ${TERNI_COMPILE_OPTIONS})
 endfunction()
 
 terni_library(terni_runtime runtime src/rule_compiler_none.cpp)
@@ -125,16 +134,16 @@ if(TERNI_BUILD_TOOLS)
   find_package(OpenMP REQUIRED)
   add_executable(terni_script_check tools/script_check.cpp)
   target_link_libraries(terni_script_check PRIVATE terni_core OpenMP::OpenMP_CXX)
-  target_compile_options(terni_script_check PRIVATE ${TERNI_WARNINGS})
+  target_compile_options(terni_script_check PRIVATE ${TERNI_COMPILE_OPTIONS})
 
   add_executable(terni_run tools/terni_run.cpp)
   target_link_libraries(terni_run PRIVATE terni_core)
-  target_compile_options(terni_run PRIVATE ${TERNI_WARNINGS})
+  target_compile_options(terni_run PRIVATE ${TERNI_COMPILE_OPTIONS})
 
   # docs/getting-started.md walks through this one
   add_executable(hello_towns examples/hello_towns/hello_towns.cpp)
   target_link_libraries(hello_towns PRIVATE terni_core)
-  target_compile_options(hello_towns PRIVATE ${TERNI_WARNINGS})
+  target_compile_options(hello_towns PRIVATE ${TERNI_COMPILE_OPTIONS})
 endif()
 
 # ---------------------------------------------------------------------------
@@ -149,7 +158,7 @@ if(TERNI_BUILD_TESTS)
     endif()
     add_executable(${name} ${source})
     target_link_libraries(${name} PRIVATE ${library})
-    target_compile_options(${name} PRIVATE ${TERNI_WARNINGS})
+    target_compile_options(${name} PRIVATE ${TERNI_COMPILE_OPTIONS})
     target_compile_definitions(${name} PRIVATE TERNI_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/tests/data"
                                                TERNI_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
                                                TERNI_TEST_BINARY_DIR="${CMAKE_CURRENT_BINARY_DIR}")
@@ -171,21 +180,31 @@ if(TERNI_BUILD_TESTS)
   add_test(NAME inherited_modifiers COMMAND test_inherit)
   terni_test(test_order_check tests/test_order_check.cpp)
   add_test(NAME order_check COMMAND test_order_check)
+  terni_test(test_portable_text tests/test_portable_text.cpp)
+  target_include_directories(test_portable_text PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  add_test(NAME portable_text COMMAND test_portable_text)
 
-  terni_test(test_gpu_parity tests/test_gpu_parity.cpp)
-  target_compile_definitions(test_gpu_parity PRIVATE TERNI_TEST_SHADER_DIR="${CMAKE_CURRENT_BINARY_DIR}/tests/shaders")
-  terni_add_shaders(test_gpu_parity
-    OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/tests/shaders
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/tests/shaders/parity_ops.comp
-            ${CMAKE_CURRENT_SOURCE_DIR}/tests/shaders/parity_reduce.comp)
-  add_test(NAME gpu_parity COMMAND test_gpu_parity)
+  # These two check the shader math against __int128 on the CPU (GCC and Clang, including
+  # MinGW). The SPIR-V they test is the same whichever compiler built the host.
+  include(CheckCXXSourceCompiles)
+  check_cxx_source_compiles("#ifndef __SIZEOF_INT128__\n#error no __int128\n#endif\nint main() { return 0; }"
+                            TERNI_HAVE_INT128)
+  if(TERNI_HAVE_INT128)
+    terni_test(test_gpu_parity tests/test_gpu_parity.cpp)
+    target_compile_definitions(test_gpu_parity PRIVATE TERNI_TEST_SHADER_DIR="${CMAKE_CURRENT_BINARY_DIR}/tests/shaders")
+    terni_add_shaders(test_gpu_parity
+      OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/tests/shaders
+      SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/tests/shaders/parity_ops.comp
+              ${CMAKE_CURRENT_SOURCE_DIR}/tests/shaders/parity_reduce.comp)
+    add_test(NAME gpu_parity COMMAND test_gpu_parity)
 
-  terni_test(test_wide tests/test_wide.cpp)
-  target_compile_definitions(test_wide PRIVATE TERNI_TEST_SHADER_DIR="${CMAKE_CURRENT_BINARY_DIR}/tests/shaders")
-  terni_add_shaders(test_wide
-    OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/tests/shaders
-    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/tests/shaders/parity_wide.comp)
-  add_test(NAME wide_integers COMMAND test_wide)
+    terni_test(test_wide tests/test_wide.cpp)
+    target_compile_definitions(test_wide PRIVATE TERNI_TEST_SHADER_DIR="${CMAKE_CURRENT_BINARY_DIR}/tests/shaders")
+    terni_add_shaders(test_wide
+      OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/tests/shaders
+      SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/tests/shaders/parity_wide.comp)
+    add_test(NAME wide_integers COMMAND test_wide)
+  endif()
 
   # Terni::runtime: runs rules from a cache that a Terni::core build filled
   terni_test(test_cache_fill tests/test_cache_fill.cpp)

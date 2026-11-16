@@ -17,7 +17,35 @@ namespace fs = std::filesystem;
 namespace terni {
 
 // ---- exact decimal -> fixed point -------------------------------------------
-__extension__ typedef __int128 i128;  // exact intermediate for decimal -> fixed conversion
+namespace {
+
+// Unsigned 128-bit integer as four 32-bit limbs, least significant first. Standard C++
+// on every compiler; parse_value needs at most 30 decimal digits (< 2^100) shifted
+// left by 16 bits, so nothing here can overflow.
+struct U128 {
+    uint32_t limb[4] = {};
+
+    void mul_add(uint32_t m, uint32_t add) {  // *this = *this * m + add
+        uint64_t carry = add;
+        for (uint32_t& l : limb) {
+            const uint64_t t = uint64_t(l) * m + carry;
+            l = uint32_t(t);
+            carry = t >> 32;
+        }
+    }
+    void div(uint32_t d) {  // *this = floor(*this / d)
+        uint64_t rem = 0;
+        for (int i = 3; i >= 0; --i) {
+            const uint64_t cur = (rem << 32) | limb[i];
+            limb[i] = uint32_t(cur / d);
+            rem = cur % d;
+        }
+    }
+    bool fits_u64() const { return limb[2] == 0 && limb[3] == 0; }
+    uint64_t low64() const { return (uint64_t(limb[1]) << 32) | limb[0]; }
+};
+
+}  // namespace
 
 bool parse_value(const std::string& text, FieldType type, int64_t& out) {
     if (type == FieldType::Ref) return false;
@@ -29,9 +57,9 @@ bool parse_value(const std::string& text, FieldType type, int64_t& out) {
     size_t i = 0;
     bool neg = false;
     if (i < text.size() && (text[i] == '-' || text[i] == '+')) neg = text[i++] == '-';
-    i128 mant = 0, scale = 1;
+    U128 mag;  // the magnitude; the sign is applied at the end
     bool dot = false;
-    int digits = 0;
+    int digits = 0, frac_digits = 0;
     for (; i < text.size(); ++i) {
         const char c = text[i];
         if (c == '.' && !dot) {
@@ -40,21 +68,23 @@ bool parse_value(const std::string& text, FieldType type, int64_t& out) {
         }
         if (c < '0' || c > '9') return false;
         if (++digits > 30) return false;  // far beyond any representable value
-        mant = mant * 10 + (c - '0');
-        if (dot) scale *= 10;
+        mag.mul_add(10, uint32_t(c - '0'));
+        if (dot) ++frac_digits;
     }
     if (digits == 0) return false;
     const int frac_bits = type == FieldType::Quantity ? fx::QF : type == FieldType::Rate ? fx::RF : 0;
-    if (frac_bits == 0 && scale != 1) return false;  // integers only for agg/int/count/money64
-    i128 raw = (mant << frac_bits) / scale;          // truncate toward zero: identical on every machine
-    if (neg) raw = -raw;
-    if (type == FieldType::Count && raw < 0) return false;
-    const i128 lo = type == FieldType::Money64 ? i128(INT64_MIN) : i128(INT32_MIN);
-    const i128 hi = type == FieldType::Money64 ? i128(INT64_MAX)
-                    : type == FieldType::Count ? i128(UINT32_MAX)
-                                               : i128(INT32_MAX);
-    if (raw < lo || raw > hi) return false;
-    out = static_cast<int64_t>(raw);
+    if (frac_bits == 0 && frac_digits > 0) return false;  // integers only for agg/int/count/money64
+    // (mant << frac_bits) / 10^frac_digits, truncated toward zero: identical on every
+    // machine. Dividing by 10 one step at a time gives the same floor as one division.
+    mag.mul_add(1u << frac_bits, 0);
+    for (int k = 0; k < frac_digits; ++k) mag.div(10);
+    if (!mag.fits_u64()) return false;
+    const uint64_t m = mag.low64();
+    const uint64_t limit = type == FieldType::Money64 ? (neg ? uint64_t(1) << 63 : uint64_t(INT64_MAX))
+                           : type == FieldType::Count ? (neg ? 0 : uint64_t(UINT32_MAX))
+                                                      : (neg ? uint64_t(1) << 31 : uint64_t(INT32_MAX));
+    if (m > limit) return false;
+    out = neg ? static_cast<int64_t>(0 - m) : static_cast<int64_t>(m);  // modular conversion (C++20): 2^63 -> INT64_MIN
     return true;
 }
 

@@ -1,0 +1,126 @@
+# SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception-1.0
+# Copyright (C) 2026 Rafał Zając
+#
+# Builds Terni and runs the whole test suite on Linux and Windows. No runner has a GPU:
+# the GPU tests run on lavapipe, Mesa's Vulkan driver for the CPU, which is a device like
+# any other. Every job also checks that the example game reaches the same state as on
+# every other platform and compiler.
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # State hash of examples/mini_galaxy after 200 ticks. Update it when the example's
+  # schema, history or rules change (and the pinned values in tests/test_portable_text.cpp).
+  MINI_GALAXY_HASH: ad93f051a2965dfb
+  VULKAN_SDK_VERSION: 1.4.363.1
+
+jobs:
+  linux:
+    name: Linux (GCC, lavapipe)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ninja-build libvulkan-dev glslc libshaderc-dev \
+            mesa-vulkan-drivers vulkan-validationlayers vulkan-tools
+      - name: Vulkan devices
+        run: vulkaninfo --summary
+      - run: cmake --preset linux
+      - run: cmake --build --preset linux
+      - run: ctest --preset linux
+      - name: Same state as every other platform
+        run: |
+          ./build-linux/terni_run examples/mini_galaxy --ticks 200 | tee run.txt
+          grep -q "hash $MINI_GALAXY_HASH" run.txt
+      - name: Validation layer reports nothing
+        run: |
+          VK_LOADER_DEBUG=layer VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation ./build-linux/test_embedding > validation.txt 2>&1
+          grep -q 'Insert instance layer "VK_LAYER_KHRONOS_validation"' validation.txt
+          if grep -E "VUID|Validation Error" validation.txt; then exit 1; fi
+
+  windows-msvc:
+    name: Windows (${{ matrix.vs }}, lavapipe)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-2025, vs: Visual Studio 2026 }
+          - { os: windows-2022, vs: Visual Studio 2022 }
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install the Vulkan SDK and lavapipe
+        uses: jakoch/install-vulkan-sdk-action@v1
+        with:
+          vulkan_version: ${{ env.VULKAN_SDK_VERSION }}
+          install_runtime: true
+          install_lavapipe: true
+          cache: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Put the Vulkan SDK (shaderc, glslc) and the Vulkan loader on PATH
+        shell: pwsh
+        run: |
+          "$env:VULKAN_SDK\Bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "$env:VULKAN_SDK\runtime\x64" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Vulkan devices
+        shell: pwsh
+        run: vulkaninfoSDK --summary
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - run: cmake --preset windows-msvc
+      - run: cmake --build --preset windows-msvc
+      - run: ctest --preset windows-msvc
+      - name: Same state as every other platform
+        shell: bash
+        run: |
+          ./build-windows-msvc/terni_run.exe examples/mini_galaxy --ticks 200 | tee run.txt
+          grep -q "hash $MINI_GALAXY_HASH" run.txt
+
+  windows-mingw:
+    name: Windows (MinGW-w64, lavapipe)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install lavapipe
+        uses: jakoch/install-vulkan-sdk-action@v1
+        with:
+          vulkan_version: ${{ env.VULKAN_SDK_VERSION }}
+          install_runtime_only: true
+          install_lavapipe: true
+          cache: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-vulkan-headers
+            mingw-w64-ucrt-x86_64-vulkan-loader
+            mingw-w64-ucrt-x86_64-shaderc
+      - run: cmake --preset windows-mingw
+      - run: cmake --build --preset windows-mingw
+      - run: ctest --preset windows-mingw
+      - name: Same state as every other platform
+        run: |
+          ./build-windows-mingw/terni_run.exe examples/mini_galaxy --ticks 200 | tee run.txt
+          grep -q "hash $MINI_GALAXY_HASH" run.txt

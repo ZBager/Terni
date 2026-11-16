@@ -35,14 +35,11 @@ is a priority, not a promise.
 
 ## Phase 3: public releases
 
-12. **Continuous integration** with lavapipe, so every change runs the parity and order
-    checks without a GPU.
-13. **Versioned releases** with a changelog and a stable API from 1.0, and a shared
+12. **Versioned releases** with a changelog and a stable API from 1.0, and a shared
     library build for engines that load Terni from other languages.
-14. **Mod tooling**: `terni_script_check` and the order warnings as one command a
+13. **Mod tooling**: `terni_script_check` and the order warnings as one command a
     modder runs before publishing.
 
-Not planned: an MSVC build (Windows builds use MinGW-w64), DirectX or Metal back
-ends, and consoles.
+Not planned: DirectX or Metal back ends, and consoles.
 
 Suggestions and use cases are welcome in the issue tracker.

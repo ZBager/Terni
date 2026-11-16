@@ -6,19 +6,21 @@ fifteen minutes.
 
 ## 1. Install the requirements
 
-Terni needs CMake 3.21 or newer, a C++20 compiler (GCC 11+ or Clang 14+), the Vulkan
-loader and headers, and shaderc (the library and the `glslc` tool). A Vulkan 1.3
-driver must be installed for at least one device; Mesa's lavapipe, a Vulkan driver
-that runs on the CPU, is enough to start.
+Terni needs CMake 3.21 or newer, a C++20 compiler (GCC 11+, Clang 14+, or Visual Studio
+2022 or 2026), the Vulkan loader and headers, and shaderc (the library and the `glslc`
+tool). A Vulkan 1.3 driver must be installed for at least one device; the drivers of
+current NVIDIA, AMD and Intel GPUs have one, and on Linux Mesa's lavapipe, a Vulkan
+driver that runs on the CPU, is enough to start.
 
 | System | Packages |
 | --- | --- |
 | Arch Linux | `cmake ninja gcc vulkan-headers vulkan-icd-loader shaderc vulkan-swrast` (lavapipe) |
 | Debian / Ubuntu | `cmake ninja-build g++ libvulkan-dev glslc libshaderc-dev mesa-vulkan-drivers` |
+| Windows (Visual Studio) | Visual Studio 2022 or 2026 with "Desktop development with C++" (includes CMake and Ninja), and the [Vulkan SDK](https://vulkan.lunarg.com/sdk/home#windows) (includes shaderc and `glslc`) |
 | Windows (MSYS2, UCRT64 shell) | `mingw-w64-ucrt-x86_64-{gcc,cmake,ninja,vulkan-headers,vulkan-loader,shaderc}` |
 
-The command-line tools also use OpenMP (part of GCC; `libomp` for Clang). Package
-names change between releases; if one is missing, search for "shaderc" or
+The command-line tools also use OpenMP (part of GCC and MSVC; `libomp` for Clang).
+Package names change between releases; if one is missing, search for "shaderc" or
 "vulkan loader" in your package manager.
 
 Check that Vulkan sees a device:
@@ -39,6 +41,26 @@ ctest --test-dir build
 The tests run every GPU test on every usable Vulkan device in the machine and compare
 the results bit for bit, so a machine with an NVIDIA card, an integrated AMD GPU and
 lavapipe runs each test three times.
+
+`CMakePresets.json` has the same steps ready for each platform; Visual Studio, VS Code
+(with the CMake Tools extension) and CLion read it too:
+
+```sh
+cmake --preset linux && cmake --build --preset linux && ctest --preset linux
+```
+
+On Windows with Visual Studio, open a "Developer PowerShell for VS" (so the compiler is
+on `PATH`), or open the folder in Visual Studio and pick the preset there:
+
+```sh
+cmake --preset windows-msvc
+cmake --build --preset windows-msvc
+ctest --preset windows-msvc
+```
+
+The Vulkan SDK installer puts its `Bin` folder on `PATH`; the tools and tests need the
+`shaderc_shared.dll` found there. With MSYS2, use the `windows-mingw` preset from a
+UCRT64 shell. The programs land in `build-<preset>/` instead of `build/`.
 
 ## 3. Run the examples
 

@@ -38,7 +38,7 @@ int main(int argc, char** argv) {
     for (const auto& w : game->warnings) std::printf("warning: %s\n", w.text().c_str());
     for (const auto& e : game->errors) std::printf("error: %s\n", e.text().c_str());
     if (!game->ok()) {
-        std::printf("%zu error(s) — not running\n", game->errors.size());
+        std::printf("%zu error(s) -- not running\n", game->errors.size());
         return 1;
     }
     std::printf("loaded %s: %zu entity types, %zu defines, %zu stages\n", game->root.c_str(), game->entities.size(),

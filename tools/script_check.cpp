@@ -122,7 +122,7 @@ int main(int argc, char** argv) {
                                     e.message.c_str());
             }
         }
-        std::printf("%s\n  %zu files, %.1f MiB, %zu items parsed in %.0f ms — %zu errors in %zu files, "
+        std::printf("%s\n  %zu files, %.1f MiB, %zu items parsed in %.0f ms -- %zu errors in %zu files, "
                     "%zu warnings in %zu files%s (skipped %zu text documents)\n",
                     root.c_str(), files.size(), double(bytes) / (1024.0 * 1024.0), items, ms, errs, err_files, warns,
                     warn_files, unreadable ? (", " + std::to_string(unreadable) + " unreadable").c_str() : "", documents);

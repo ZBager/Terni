@@ -5,11 +5,11 @@
 //
 // A graphics app needs a window, swapchain, render passes, ... A compute-only
 // app needs just five things, all created here:
-//   1. VkInstance        — connection to the Vulkan loader
-//   2. VkPhysicalDevice  — the GPU we picked (NVIDIA dGPU, AMD iGPU, ...)
-//   3. VkDevice          — our logical "session" on that GPU, with the features we enable
-//   4. VkQueue           — where we submit work (from a queue family that supports compute)
-//   5. VkCommandPool     — allocator for command buffers (recorded lists of GPU commands)
+//   1. VkInstance        -- connection to the Vulkan loader
+//   2. VkPhysicalDevice  -- the GPU we picked (NVIDIA dGPU, AMD iGPU, ...)
+//   3. VkDevice          -- our logical "session" on that GPU, with the features we enable
+//   4. VkQueue           -- where we submit work (from a queue family that supports compute)
+//   5. VkCommandPool     -- allocator for command buffers (recorded lists of GPU commands)
 
 #include <vulkan/vulkan.h>
 
@@ -54,7 +54,7 @@ enum class DevicePreference {
     Cpu,         // software Vulkan (lavapipe) first: headless servers, reference runs
 };
 
-// Choose a usable device. A non-null `uuid` that matches a usable device wins —
+// Choose a usable device. A non-null `uuid` that matches a usable device wins --
 // pass the physical device UUID of the host's own renderer to share its GPU.
 // Returns -1 if no usable device exists.
 int pick_device(DevicePreference preference = DevicePreference::Discrete, const std::array<uint8_t, 16>* uuid = nullptr);

@@ -2,7 +2,9 @@
 // Copyright (C) 2026 Rafał Zając
 // Data-driven game loading: error reporting, value conversion, rule compile errors.
 #include <cstdio>
+#include <cstdint>
 #include <string>
+#include <vector>
 
 #include "terni/fixed.hpp"
 #include "terni/game.hpp"
@@ -17,6 +19,92 @@ static int failures = 0;
             ++failures;                                                   \
         }                                                                 \
     } while (0)
+
+#ifdef __SIZEOF_INT128__
+// The __int128 version parse_value had before it became portable: the reference the
+// portable one must match exactly (GCC and Clang only).
+__extension__ typedef __int128 i128;
+static bool reference_parse_value(const std::string& text, FieldType type, int64_t& out) {
+    if (type == FieldType::Ref) return false;
+    if (text == "yes" || text == "no") {
+        if (type == FieldType::Quantity || type == FieldType::Rate) return false;
+        out = text == "yes" ? 1 : 0;
+        return true;
+    }
+    size_t i = 0;
+    bool neg = false;
+    if (i < text.size() && (text[i] == '-' || text[i] == '+')) neg = text[i++] == '-';
+    i128 mant = 0, scale = 1;
+    bool dot = false;
+    int digits = 0;
+    for (; i < text.size(); ++i) {
+        const char c = text[i];
+        if (c == '.' && !dot) {
+            dot = true;
+            continue;
+        }
+        if (c < '0' || c > '9') return false;
+        if (++digits > 30) return false;
+        mant = mant * 10 + (c - '0');
+        if (dot) scale *= 10;
+    }
+    if (digits == 0) return false;
+    const int frac_bits = type == FieldType::Quantity ? fx::QF : type == FieldType::Rate ? fx::RF : 0;
+    if (frac_bits == 0 && scale != 1) return false;
+    i128 raw = (mant << frac_bits) / scale;
+    if (neg) raw = -raw;
+    if (type == FieldType::Count && raw < 0) return false;
+    const i128 lo = type == FieldType::Money64 ? i128(INT64_MIN) : i128(INT32_MIN);
+    const i128 hi = type == FieldType::Money64 ? i128(INT64_MAX)
+                    : type == FieldType::Count ? i128(UINT32_MAX)
+                                               : i128(INT32_MAX);
+    if (raw < lo || raw > hi) return false;
+    out = static_cast<int64_t>(raw);
+    return true;
+}
+
+static void compare_with_reference() {
+    std::vector<std::string> inputs = {
+        "", "-", "+", ".", "-.", "0", "-0", "+0", "0.", ".5", "-.5", "1.2.3", "1e5", "yes", "no", " 1", "1 ",
+        "2147483647", "2147483648", "-2147483648", "-2147483649", "4294967295", "4294967296",
+        "9223372036854775807", "9223372036854775808", "-9223372036854775808", "-9223372036854775809",
+        "8388607.99609375", "8388607.996094", "8388608", "-8388608", "-8388608.00390625",
+        "32767.9999847412109375", "32767.99999", "32768", "-32768", "-32768.0000152587890625",
+        "0.000015258789", "0.0000152587890625", "-0.0000152587890625", "0.00390625", "-0.0039",
+        "999999999999999999999999999999", "9999999999999999999999999999999",
+        "0.00000000000000000000000000001", "-0.00000000000000000000000000001",
+        "000000000000000000000000000001", "35184372088832", "18446744073709551616",
+    };
+    uint64_t state = 0x9e3779b97f4a7c15ULL;
+    const auto next = [&] {
+        state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+        return uint32_t(state >> 33);
+    };
+    for (int n = 0; n < 200000; ++n) {
+        std::string s;
+        if (next() % 4 == 0) s += next() % 2 ? '-' : '+';
+        const uint32_t len = 1 + next() % 32, dot = next() % (len + 4);
+        for (uint32_t k = 0; k < len; ++k) {
+            if (k == dot) s += '.';
+            s += char('0' + (next() % 3 == 0 ? next() % 2 * 9 : next() % 10));  // many 0s and 9s
+        }
+        inputs.push_back(std::move(s));
+    }
+    int mismatches = 0;
+    for (const auto& s : inputs)
+        for (FieldType t : {FieldType::Quantity, FieldType::Rate, FieldType::Agg, FieldType::Int, FieldType::Count,
+                            FieldType::Ref, FieldType::Money64}) {
+            int64_t a = 0x5a5a, b = 0x5a5a;
+            const bool ok_a = parse_value(s, t, a), ok_b = reference_parse_value(s, t, b);
+            if (ok_a != ok_b || (ok_a && a != b)) {
+                if (++mismatches <= 10)
+                    std::printf("  parse_value(\"%s\", type %d): %d %lld, reference %d %lld\n", s.c_str(), int(t),
+                                int(ok_a), (long long)a, int(ok_b), (long long)b);
+            }
+        }
+    CHECK(mismatches == 0);
+}
+#endif
 
 static bool has_error(const Game& g, const std::string& text) {
     for (const auto& e : g.errors)
@@ -37,6 +125,16 @@ int main() {
         CHECK(!parse_value("1e5", FieldType::Rate, v));       // no float syntax
         CHECK(!parse_value("40000", FieldType::Rate, v));     // out of Q16.16 range
         CHECK(!parse_value("-1", FieldType::Count, v));
+        CHECK(parse_value("-0", FieldType::Count, v) && v == 0);
+        CHECK(parse_value("-9223372036854775808", FieldType::Money64, v) && v == INT64_MIN);
+        CHECK(!parse_value("9223372036854775808", FieldType::Money64, v));
+        CHECK(parse_value("-2147483648", FieldType::Int, v) && v == INT32_MIN);
+        CHECK(parse_value("4294967295", FieldType::Count, v) && v == UINT32_MAX);
+        CHECK(parse_value("0.00000000000000000000000000001", FieldType::Rate, v) && v == 0);
+        CHECK(!parse_value("9999999999999999999999999999999", FieldType::Money64, v));  // 31 digits
+#ifdef __SIZEOF_INT128__
+        compare_with_reference();
+#endif
     }
     {  // every kind of mistake is reported with file:line
         auto g = load_game(TERNI_TEST_DATA "/bad_game");

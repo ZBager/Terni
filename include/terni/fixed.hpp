@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception-1.0
 // Copyright (C) 2026 Rafał Zając
 #pragma once
-// Terni fixed-point arithmetic — pure 32-bit, deterministic on every CPU and GPU.
+// Terni fixed-point arithmetic -- pure 32-bit, deterministic on every CPU and GPU.
 //
 // Every simulation value is an int32 in one of three formats:
 //
-//   quantity   Q24.8   people, goods, money          range ±8.4M,   step 1/256
-//   rate       Q16.16  prices, ratios, shares, mood   range ±32768,  step 1/65536
+//   quantity   Q24.8   people, goods, money          range +/-8.4M, step 1/256
+//   rate       Q16.16  prices, ratios, shares, mood   range +/-32768, step 1/65536
 //   aggregate  int32   sums over many entities        whole units (to_agg floors)
 //
 // Rules that make mixed formats work:
@@ -17,7 +17,7 @@
 //   - values that grow forever (treasuries, research totals) are money64: an int64
 //     value, stored on the GPU as two 32-bit words added with carry (add_i64 in GLSL).
 //
-// The GPU mirror is shaders/terni/fixed.glsl — same operations, same bits.
+// The GPU mirror is shaders/terni/fixed.glsl -- same operations, same bits.
 // Never use floats in simulation state: they differ between CPUs, GPUs and compilers.
 
 #include <cstdint>
@@ -74,7 +74,7 @@ constexpr fixed clamp(fixed v, fixed lo, fixed hi) { return v < lo ? lo : (v > h
 constexpr fixed min(fixed a, fixed b) { return a < b ? a : b; }
 constexpr fixed max(fixed a, fixed b) { return a > b ? a : b; }
 
-// ---- display only — never feed back into the simulation ----------------------
+// ---- display only -- never feed back into the simulation ----------------------
 inline double qty_to_double(int64_t v) { return static_cast<double>(v) / double(1 << QF); }
 inline double rate_to_double(int64_t v) { return static_cast<double>(v) / double(1 << RF); }
 

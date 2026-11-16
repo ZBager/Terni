@@ -19,7 +19,13 @@ ctest --test-dir build
 
 The tests run on every usable Vulkan device in the machine. Install Mesa's lavapipe as
 well, so every change is checked against a CPU driver too. A change is ready when the
-whole suite passes on every device you have.
+whole suite passes on every device you have. `CMakePresets.json` has presets for Linux,
+Visual Studio and MSYS2 (see [getting started](docs/getting-started.md)).
+
+Continuous integration (`.github/workflows/ci.yml`) builds every push with GCC on Linux,
+with Visual Studio 2022 and 2026, and with MinGW-w64, and runs the whole suite on
+lavapipe. Keep the code standard C++20: no compiler extensions such as `__int128`, and
+only ASCII in string literals and generated text.
 
 ## Ground rules
 
