@@ -4,8 +4,21 @@
 
 #include <algorithm>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#else
+#include <dlfcn.h>
+#endif
 
 namespace terni {
 
@@ -13,7 +26,42 @@ namespace {
 
 const char* VALIDATION_LAYER = "VK_LAYER_KHRONOS_validation";
 
-VkInstance create_instance(bool enable_validation) {
+#ifdef VK_LUNARG_direct_driver_loading
+// Drivers given with add_vulkan_driver(); every instance is created with them.
+std::vector<VkDirectDriverLoadingInfoLUNARG>& added_drivers() {
+    static std::vector<VkDirectDriverLoadingInfoLUNARG> drivers;
+    return drivers;
+}
+
+// The entry point of the Vulkan driver library at `path`, which stays loaded; null if it
+// cannot be loaded or has none.
+PFN_vkGetInstanceProcAddrLUNARG driver_entry(const std::filesystem::path& path) {
+    const char* symbol = "vk_icdGetInstanceProcAddr";
+#ifdef _WIN32
+    // altered search path: the driver's own DLLs are looked for next to it
+    const HMODULE lib = LoadLibraryExW(path.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+    if (!lib) return nullptr;
+    const auto any = reinterpret_cast<void (*)()>(GetProcAddress(lib, symbol));  // by way of the type that casts to any other
+    return reinterpret_cast<PFN_vkGetInstanceProcAddrLUNARG>(any);
+#else
+    void* lib = dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL);
+    return lib ? reinterpret_cast<PFN_vkGetInstanceProcAddrLUNARG>(dlsym(lib, symbol)) : nullptr;
+#endif
+}
+#endif
+
+bool have_instance_extension(const char* name) {
+    uint32_t n = 0;
+    if (vkEnumerateInstanceExtensionProperties(nullptr, &n, nullptr) != VK_SUCCESS) return false;
+    std::vector<VkExtensionProperties> props(n);
+    if (vkEnumerateInstanceExtensionProperties(nullptr, &n, props.data()) < VK_SUCCESS) return false;
+    for (uint32_t i = 0; i < n; ++i)
+        if (std::strcmp(props[i].extensionName, name) == 0) return true;
+    return false;
+}
+
+// `no_driver`: where to note that the machine has no Vulkan driver at all, instead of throwing.
+VkInstance create_instance(bool enable_validation, bool* no_driver = nullptr) {
     VkApplicationInfo app{VK_STRUCTURE_TYPE_APPLICATION_INFO};
     app.pApplicationName = "Terni";
     app.apiVersion = VK_API_VERSION_1_3;  // 1.3 gives us synchronization2 in core
@@ -38,9 +86,27 @@ VkInstance create_instance(bool enable_validation) {
     ci.pApplicationInfo = &app;
     ci.enabledLayerCount = static_cast<uint32_t>(layers.size());
     ci.ppEnabledLayerNames = layers.data();
+#ifdef VK_LUNARG_direct_driver_loading
+    const char* direct = VK_LUNARG_DIRECT_DRIVER_LOADING_EXTENSION_NAME;
+    VkDirectDriverLoadingListLUNARG drivers{VK_STRUCTURE_TYPE_DIRECT_DRIVER_LOADING_LIST_LUNARG};
+    if (!added_drivers().empty()) {
+        drivers.mode = VK_DIRECT_DRIVER_LOADING_MODE_INCLUSIVE_LUNARG;  // next to the system's drivers
+        drivers.driverCount = static_cast<uint32_t>(added_drivers().size());
+        drivers.pDrivers = added_drivers().data();
+        ci.pNext = &drivers;
+        ci.enabledExtensionCount = 1;
+        ci.ppEnabledExtensionNames = &direct;
+    }
+#endif
 
-    VkInstance instance;
-    VK_CHECK(vkCreateInstance(&ci, nullptr, &instance));
+    VkInstance instance = VK_NULL_HANDLE;
+    const VkResult result = vkCreateInstance(&ci, nullptr, &instance);
+    if (result == VK_ERROR_INCOMPATIBLE_DRIVER) {
+        if (!no_driver) throw std::runtime_error("this machine has no Vulkan driver");
+        *no_driver = true;
+        return VK_NULL_HANDLE;
+    }
+    VK_CHECK(result);
     return instance;
 }
 
@@ -83,9 +149,33 @@ const char* type_name(VkPhysicalDeviceType t) {
 
 }  // namespace
 
+void add_vulkan_driver(const std::string& library_path) {
+#ifdef VK_LUNARG_direct_driver_loading
+    if (!have_instance_extension(VK_LUNARG_DIRECT_DRIVER_LOADING_EXTENSION_NAME))
+        throw std::runtime_error("add_vulkan_driver: the Vulkan loader on this machine cannot take a driver from "
+                                 "the application (it is older than 1.3.234)");
+    std::error_code ec;
+    const std::filesystem::path path = std::filesystem::absolute(std::filesystem::path(library_path), ec);
+    if (ec || !std::filesystem::exists(path, ec))
+        throw std::runtime_error("add_vulkan_driver: no file '" + library_path + "'");
+    VkDirectDriverLoadingInfoLUNARG info{VK_STRUCTURE_TYPE_DIRECT_DRIVER_LOADING_INFO_LUNARG};
+    info.pfnGetInstanceProcAddr = driver_entry(path);
+    if (!info.pfnGetInstanceProcAddr)
+        throw std::runtime_error("add_vulkan_driver: '" + library_path + "' could not be loaded or is not a Vulkan driver");
+    for (const auto& d : added_drivers())
+        if (d.pfnGetInstanceProcAddr == info.pfnGetInstanceProcAddr) return;  // the same driver twice
+    added_drivers().push_back(info);
+#else
+    throw std::runtime_error("add_vulkan_driver: Terni was built with Vulkan headers older than 1.3.234 ('" +
+                             library_path + "' not loaded)");
+#endif
+}
+
 std::vector<DeviceInfo> VulkanContext::list_devices() {
-    VkInstance instance = create_instance(false);
     std::vector<DeviceInfo> out;
+    bool no_driver = false;
+    VkInstance instance = create_instance(false, &no_driver);
+    if (no_driver) return out;  // no devices, usable or not
     auto devs = enumerate(instance);
     for (uint32_t i = 0; i < devs.size(); ++i) {
         VkPhysicalDeviceProperties props;
@@ -111,7 +201,7 @@ int pick_device(DevicePreference preference, const std::array<uint8_t, 16>* uuid
             if (d.usable && d.uuid == *uuid) return static_cast<int>(d.index);
     auto rank = [&](const DeviceInfo& d) {
         // lower is better
-        const bool cpu = d.type == "cpu (software)";
+        const bool cpu = d.cpu();
         switch (preference) {
             case DevicePreference::Discrete:
                 return d.type == "discrete" ? 0 : d.type == "integrated" ? 1 : cpu ? 3 : 2;

@@ -76,6 +76,35 @@ log("simulating on " + sim.device_name());
 
 Every usable device gives the same results, so players can choose freely.
 
+### Machines without a usable GPU
+
+Some machines have no Vulkan 1.3 device: an old GPU, a virtual machine, a server. A
+software Vulkan driver runs the same compiled rules on the CPU, with the same results
+bit for bit. Mesa's lavapipe is one, and it is what Terni's own tests run on. Ship its
+library with your game and hand it to Terni when the system offers nothing:
+
+```cpp
+if (terni::pick_device() < 0)                                    // nothing usable here
+    terni::add_vulkan_driver(install_dir + "/vulkan_lvp.dll");   // libvulkan_lvp.so on Linux
+terni::GameSim sim(*game, options);                              // finds the added device
+```
+
+- Call `add_vulkan_driver` before you list or pick devices: the driver's devices are
+  added to the system's, so indices change. It lasts for the whole process.
+- On a machine with no Vulkan driver at all, `list_devices()` is empty and
+  `pick_device()` returns -1; nothing throws until you start a `GameSim`.
+- It throws `std::runtime_error` if the file is not a Vulkan driver, or if the Vulkan
+  loader on the machine is older than 1.3.234 (late 2022).
+- Terni still needs the Vulkan loader itself (`vulkan-1.dll`, `libvulkan.so.1`). GPU
+  drivers install it; a machine that never had one needs it next to your game.
+- A CPU is slower than a GPU, by how much depends on the world. `DeviceInfo::cpu()`
+  tells you which kind you got, so you can tell the player.
+- A player with a working GPU can still choose the CPU device, and lockstep peers on
+  GPUs and CPUs stay in step.
+
+`terni_run <game folder> --driver <library>` runs a game with an added driver and
+compares it with every other device.
+
 ### Locale
 
 The generated shader code does not depend on the process locale. Your engine may set a
@@ -113,6 +142,34 @@ copy_into_your_view_model(owners, pops);
   `last_tick_gpu_ms()` is the GPU time of its stages. `report()` breaks the GPU time
   down per stage.
 
+### When the device gets busy
+
+A GPU that another program starts to use (a video encoder, a second game) can make
+ticks many times slower. Terni watches for that:
+
+```cpp
+const terni::DeviceHealth health = sim.device_health();
+if (health.slow) {
+    // e.g. ticks took 0.4 ms and now take 9 ms: tell the player, or go elsewhere
+    const int other = terni::pick_device(terni::DevicePreference::Integrated);
+    if (other >= 0) sim.move_to_device(uint32_t(other));
+}
+```
+
+- Ticks are judged 32 at a time, by their median, so a monthly stage or one late tick
+  does not count. `usual_ms` is the lowest median so far, `recent_ms` the latest one.
+- `slow` means the last 32 ticks took over 4 times the usual and at least 1 ms longer.
+  For another threshold, compare `recent_ms` and `usual_ms` yourself.
+- The times are wall times as `last_tick_ms()` gives them. With `begin_tick()`, a tick
+  counts as done when you first see it done, so poll at a steady rate.
+- `move_to_device(index)` continues on another device. The state moves bit for bit:
+  modifier handles, `read_each_tick` ids and their last results stay valid, queued
+  writes still apply at the next tick, and lockstep peers notice nothing. It takes
+  about as long as starting the simulation, so do it at a quiet moment.
+- Terni never moves by itself. Which device is better is your call: the other GPU may
+  be the one your renderer needs.
+- Health is measured again from zero after `move_to_device()` and `load()`.
+
 ### A tick that does not block
 
 `tick()` is `begin_tick()` followed by `end_tick()`. Call them apart, and the GPU
@@ -138,7 +195,8 @@ render();                                 // tick_result() still holds the last 
 - `tick_result()` keeps the last collected tick's results until `end_tick()`.
   `modifier_total()` and `modifier_breakdown()` answer from the host as usual.
 - Calls that need the GPU state as it is collect the tick first, and so block:
-  `read_field`, `read_each_tick`, `save`, `load`, `snapshot`, `tick_checked`, and the
+  `read_field`, `read_each_tick`, `save`, `load`, `snapshot`, `tick_checked`,
+  `move_to_device`, and the
   first `modifier_total` of a key inherited through a ref field (once for each field
   of a key that inherits in several steps).
 - One tick is in flight at a time: `begin_tick()` collects the previous one first.

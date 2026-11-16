@@ -33,6 +33,9 @@ game loads, so mods can change the rules themselves, not only the numbers.
   answered without waiting for the GPU.
 - **Determinism checks built in.** A warning at load time for rules whose result can
   depend on GPU thread order, and a checked tick that proves it at run time.
+- **Runs without a GPU too.** Ship a software Vulkan driver and the same rules run on
+  the CPU with the same results; a simulation can also move to another device while it
+  runs, when its GPU gets busy.
 - **Ships without a shader compiler.** Compile the rules at build time; players'
   machines only load SPIR-V (`Terni::runtime`, no shaderc needed).
 

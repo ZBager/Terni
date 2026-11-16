@@ -275,6 +275,19 @@ struct OrderIssue {
     uint64_t first_row = 0, rows = 0;  // the first differing row, and how many rows differ
 };
 
+// How the simulation's device is doing, from the wall time of its ticks (last_tick_ms()).
+// Ticks are judged 32 at a time, by their median, so a stage that runs once a month or a
+// single late tick does not count. Host measurements only: nothing here reaches the
+// simulation, and peers may well see different values.
+struct DeviceHealth {
+    double usual_ms = 0;   // a tick when the device was at its best: the lowest median so far
+    double recent_ms = 0;  // median of the last 32 ticks measured (0 until there are 32)
+    uint64_t ticks = 0;    // ticks measured since the start, load() or move_to_device()
+    // The last 32 ticks took over 4 times the usual and at least 1 ms longer: something
+    // else is keeping the device busy. A host can warn the player, or move_to_device().
+    bool slow = false;
+};
+
 struct GameSimOptions {
     int device = -1;                                      // Vulkan device index; -1 = choose (below)
     DevicePreference preference = DevicePreference::Discrete;
@@ -327,7 +340,7 @@ public:
     // and commands are for the tick after it, exactly as if made after end_tick(), so the
     // result never depends on when a host collects. tick_result() still gives the last
     // collected tick's results. read_field(), read_each_tick(), save(), load(), snapshot(),
-    // tick_checked() and a first modifier_total()/modifier_breakdown() of an inherited key
+    // tick_checked(), move_to_device() and a first modifier_total()/modifier_breakdown() of an inherited key
     // collect the tick first (they block). One tick is in flight at a time: begin_tick()
     // collects the previous one first.
     void begin_tick();
@@ -411,6 +424,17 @@ public:
                                       // (begun to seen done: by tick_ready() or end_tick())
     double last_tick_gpu_ms() const;  // GPU time of the last tick's stages alone (timestamps)
     uint64_t sync_reads() const;      // reads so far that waited for the GPU (read_field, snapshot, save, ...)
+
+    // ---- device health ----
+    DeviceHealth device_health() const;  // tick times lately against the usual; see DeviceHealth
+    // Continues on another device (an index from VulkanContext::list_devices() or
+    // pick_device()), e.g. when this one has become slow. The state moves bit for bit, so
+    // the simulation goes on exactly as it would have: handles, read_each_tick() ids and
+    // their last results stay valid, and lockstep peers need not know. Collects a tick in
+    // flight first, and takes about as long as starting the simulation (pipelines are
+    // made again, the state is copied over). Throws, changing nothing, if the device
+    // cannot be used.
+    void move_to_device(uint32_t device);
 
 private:
     struct Impl;

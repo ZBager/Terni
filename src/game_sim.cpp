@@ -27,6 +27,7 @@
 #include "terni/compute_runner.hpp"
 #include "terni/fixed.hpp"
 #include "terni/game.hpp"
+#include "device_health.hpp"
 #include "embedded_glsl.hpp"
 #include "rule_compiler.hpp"
 
@@ -621,6 +622,8 @@ struct GameSim::Impl {
         uint32_t entity, first_row;
         uint32_t rows;       // UINT32_MAX: every row in use, following the entity's count
         uint64_t row_words;  // field size x words per value
+        uint32_t binding = 0;
+        uint64_t most = 0, offset = 0;  // bytes reserved in the runner, and where the range starts
     };
     std::vector<TickRead> tick_reads;
     // Host copy of a ref field that modifier keys inherit through, so modifier_total()
@@ -643,8 +646,46 @@ struct GameSim::Impl {
     uint64_t now = 0;      // completed ticks
     bool in_flight = false;  // begin_tick() without end_tick()
     CompileStats stats;
+    std::vector<std::vector<uint32_t>> spirv;  // per stage, then the built-in last one; kept for move_to_device()
+    bool validation = false;
+    detail::DeviceHealthMonitor health;
+    uint64_t earlier_sync_reads = 0;  // on runners this simulation has moved away from
     std::unique_ptr<ComputeRunner> runner;
     explicit Impl(const Game& g) : game(g), mods(g) {}
+
+    // A runner on `device` that starts from the host's copies: `defines`, `state`,
+    // `columns` and the modifier totals given (the store's own if null).
+    std::unique_ptr<ComputeRunner> make_runner(uint32_t device, const std::vector<std::vector<int32_t>>* totals) const {
+        std::vector<ComputeBufferSpec> buffers;
+        buffers.push_back({"defines", defines.data(), defines.size() * 4});
+        buffers.push_back({"state", state.data(), state.size() * 4});
+        for (size_t c = 0; c < columns.size(); ++c)
+            buffers.push_back({column_names[c], columns[c].data(), columns[c].size() * 4});
+        for (size_t c = 0; c < mods.columns.size(); ++c) {
+            const std::vector<int32_t>& t = totals ? (*totals)[c] : mods.columns[c].totals;
+            buffers.push_back({"mod", t.data(), t.size() * 4});
+        }
+
+        std::vector<ComputeStageSpec> stages;
+        for (size_t i = 0; i < game.stages.size(); ++i) {
+            const auto& s = game.stages[i];
+            const uint32_t capacity = game.entity(s.for_each)->capacity;
+            // workgroup dispatch: one 256-thread group per entity (FOR_EACH_GROUP strides past 65535)
+            const uint32_t elements = s.dispatch == Dispatch::Workgroup ? std::min(capacity, 65535u) * 256u : capacity;
+            std::vector<uint32_t> zero;  // cleared only in the ticks the stage runs, so a total lasts until its next run
+            for (const auto& c : s.clear)
+                for (size_t k = 0; k < column_names.size(); ++k)
+                    if (column_names[k] == c) zero.push_back(static_cast<uint32_t>(k + 2));
+            stages.push_back({s.name, elements, spirv[i], std::move(zero)});
+        }
+        stages.push_back({"terni_tick", 1, spirv.back(), {}});  // built-in last stage (rule_sources)
+
+        std::vector<ComputeSpecConstant> capacities;
+        for (size_t e = 0; e < game.entities.size(); ++e)
+            capacities.push_back({CAPACITY_CONSTANT0 + uint32_t(e), game.entities[e].capacity});
+        return std::make_unique<ComputeRunner>(device, validation, "", buffers, stages, std::vector<uint32_t>{}, true,
+                                               capacities);
+    }
 
     // The rows that count towards `key` on (entity, row): the row itself, then the rows it
     // inherits from, nearest first. Stops at a ref that points at no row, as the accessor does.
@@ -672,7 +713,8 @@ struct GameSim::Impl {
             runner->flush_queued();  // queued host writes belong to the current state
             p.rows.resize(game.entities[p.entity].capacity);
             runner->read(p.binding, p.rows.data(), p.rows.size() * 4);
-            p.read = {runner->add_tick_readback(p.binding, p.rows.size() * 4, 0), p.entity, 0, UINT32_MAX, 1};
+            p.read = {0, p.entity, 0, UINT32_MAX, 1, p.binding, p.rows.size() * 4, 0};
+            p.read.readback = runner->add_tick_readback(p.binding, p.read.most, 0);
             runner->set_tick_readback_bytes(p.read.readback, tick_read_bytes(p.read));
             p.active = true;
         } else if (p.stale) {
@@ -690,8 +732,9 @@ struct GameSim::Impl {
         for (size_t s = 0; s < game.stages.size(); ++s) run[s] = game.stages[s].runs_in(now);
         return run;
     }
-    void after_tick() {
+    void after_tick(bool measured = true) {
         ++now;
+        if (measured) health.add(runner->last_tick_ms());
         for (auto& p : parents) {
             p.stale = p.active;
             if (!p.active || p.pending.empty()) continue;
@@ -777,9 +820,6 @@ GameSim::GameSim(const Game& game, const GameSimOptions& options) : impl_(std::m
     for (const auto& t : game.tables) m.state.push_back(t.count), m.counts.push_back(t.count);
     for (const auto& im : game.initial_modifiers) m.mods.add(im.bundle, im.entity, im.row, im.scale, im.duration, 0);
 
-    std::vector<ComputeBufferSpec> buffers;
-    buffers.push_back({"defines", m.defines.data(), m.defines.size() * 4});
-    buffers.push_back({"state", m.state.data(), m.state.size() * 4});
     m.field_binding.resize(game.entities.size());
     for (size_t e = 0; e < game.tables.size(); ++e) {
         const auto& t = game.tables[e];
@@ -789,18 +829,15 @@ GameSim::GameSim(const Game& game, const GameSimOptions& options) : impl_(std::m
             m.column_names.push_back(t.def->name + "." + t.def->fields[f].name);
         }
     }
-    for (size_t c = 0; c < m.columns.size(); ++c)
-        buffers.push_back({m.column_names[c], m.columns[c].data(), m.columns[c].size() * 4});
-    m.mod_binding0 = static_cast<uint32_t>(buffers.size());
+    m.mod_binding0 = static_cast<uint32_t>(2 + m.columns.size());
     for (auto& c : m.mods.columns) {
-        buffers.push_back({"mod", c.totals.data(), c.totals.size() * 4});
         c.dirty_lo = UINT32_MAX;  // initial modifiers are part of the upload
         c.dirty_hi = 0;
     }
     m.row_words.assign(2, 1);  // defines, state
     for (const auto& e : game.entities)
         for (const auto& f : e.fields) m.row_words.push_back(uint64_t(f.size) * f.words());
-    m.row_words.resize(buffers.size(), 1);  // modifier totals
+    m.row_words.resize(m.mod_binding0 + m.mods.columns.size(), 1);  // modifier totals
     for (const auto& k : game.modifier_keys) {
         std::vector<uint32_t> indices;
         uint32_t from = k.entity;
@@ -814,26 +851,46 @@ GameSim::GameSim(const Game& game, const GameSimOptions& options) : impl_(std::m
         m.key_parents.push_back(std::move(indices));
     }
 
-    std::vector<ComputeStageSpec> stages;
-    for (size_t i = 0; i < game.stages.size(); ++i) {
-        const auto& s = game.stages[i];
-        const uint32_t capacity = game.entity(s.for_each)->capacity;
-        // workgroup dispatch: one 256-thread group per entity (FOR_EACH_GROUP strides past 65535)
-        const uint32_t elements = s.dispatch == Dispatch::Workgroup ? std::min(capacity, 65535u) * 256u : capacity;
-        std::vector<uint32_t> zero;  // cleared only in the ticks the stage runs, so a total lasts until its next run
-        for (const auto& c : s.clear)
-            for (size_t k = 0; k < m.column_names.size(); ++k)
-                if (m.column_names[k] == c) zero.push_back(static_cast<uint32_t>(k + 2));
-        stages.push_back({s.name, elements, std::move(spirv[i]), std::move(zero)});
-    }
-    stages.push_back({"terni_tick", 1, std::move(spirv.back()), {}});  // built-in last stage (rule_sources)
-
-    std::vector<ComputeSpecConstant> capacities;
-    for (size_t e = 0; e < game.entities.size(); ++e)
-        capacities.push_back({CAPACITY_CONSTANT0 + uint32_t(e), game.entities[e].capacity});
-    m.runner = std::make_unique<ComputeRunner>(static_cast<uint32_t>(device), options.validation, "", buffers, stages,
-                                               std::vector<uint32_t>{}, true, capacities);
+    m.spirv = std::move(spirv);
+    m.validation = options.validation;
+    m.runner = m.make_runner(static_cast<uint32_t>(device), nullptr);
 }
+
+void GameSim::move_to_device(uint32_t device) {
+    Impl& m = *impl_;
+    m.settle();
+    // The state as the device has it, so that a snapshot() is the same wherever it is taken.
+    // Modifier totals too: the host's own may be ahead of them (changes since the last
+    // tick), and reach the new device at the next tick as they would have reached this
+    // one. So do the host writes queued for that tick.
+    m.runner->read(1, m.state.data(), m.state.size() * 4);
+    for (size_t c = 0; c < m.columns.size(); ++c)
+        m.runner->read(static_cast<uint32_t>(c + 2), m.columns[c].data(), m.columns[c].size() * 4);
+    std::vector<std::vector<int32_t>> totals;
+    for (size_t c = 0; c < m.mods.columns.size(); ++c) {
+        totals.emplace_back(m.mods.columns[c].totals.size());
+        m.runner->read(m.mod_binding0 + uint32_t(c), totals[c].data(), totals[c].size() * 4);
+    }
+    std::unique_ptr<ComputeRunner> next = m.make_runner(device, &totals);
+
+    // per-tick readbacks: the same ranges, holding the last tick's results
+    auto carry = [&](Impl::TickRead& r) {
+        const uint32_t id = next->add_tick_readback(r.binding, r.most, r.offset);
+        const uint64_t bytes = m.runner->tick_readback_bytes(r.readback);
+        next->set_tick_readback_bytes(id, bytes);
+        next->set_tick_readback(id, m.runner->tick_readback(r.readback), bytes);
+        r.readback = id;
+    };
+    for (auto& r : m.tick_reads) carry(r);
+    for (auto& p : m.parents)
+        if (p.active) carry(p.read);
+    next->take_queued(*m.runner);
+    m.earlier_sync_reads += m.runner->sync_reads();
+    m.runner = std::move(next);
+    m.health.reset();  // another device has other tick times
+}
+
+DeviceHealth GameSim::device_health() const { return impl_->health.health(); }
 
 GameSim::~GameSim() = default;
 
@@ -863,7 +920,7 @@ std::vector<OrderIssue> GameSim::tick_checked() {
     std::vector<bool> check(m.game.stages.size() + 1, true);
     check.back() = false;  // the built-in tick counter stage
     const auto diffs = m.runner->tick_checked(check, m.row_words, m.stages_now());
-    m.after_tick();
+    m.after_tick(false);  // a checked tick runs every stage three times: no measure of the device
     std::vector<OrderIssue> out;
     for (const auto& d : diffs) {
         OrderIssue issue;
@@ -883,7 +940,7 @@ std::vector<OrderIssue> GameSim::tick_checked() {
     return out;
 }
 
-uint64_t GameSim::sync_reads() const { return impl_->runner->sync_reads(); }
+uint64_t GameSim::sync_reads() const { return impl_->earlier_sync_reads + impl_->runner->sync_reads(); }
 
 uint64_t GameSim::ticks() const { return impl_->now; }
 
@@ -951,12 +1008,13 @@ uint32_t GameSim::read_each_tick(uint32_t entity, const std::string& field, uint
     if (f < 0) throw std::invalid_argument("read_each_tick: '" + e.name + "' has no field '" + field + "'");
     if (first_row > e.capacity) throw std::out_of_range("read_each_tick: first row beyond the capacity");
     const FieldDef& fd = e.fields[size_t(f)];
-    Impl::TickRead r{0, entity, first_row, rows, uint64_t(fd.size) * fd.words()};
+    Impl::TickRead r{0, entity, first_row, rows, uint64_t(fd.size) * fd.words(), m.field_binding[entity][size_t(f)]};
     // room for the most it can ever copy: a range that follows the count may grow up to
     // the capacity (load() restores other counts), but only the rows in use are copied
     const uint64_t most = rows == UINT32_MAX ? e.capacity - first_row : std::min(rows, e.capacity - first_row);
-    r.readback = m.runner->add_tick_readback(m.field_binding[entity][size_t(f)], most * r.row_words * 4,
-                                             uint64_t(first_row) * r.row_words * 4);
+    r.most = most * r.row_words * 4;
+    r.offset = uint64_t(first_row) * r.row_words * 4;
+    r.readback = m.runner->add_tick_readback(r.binding, r.most, r.offset);
     m.runner->set_tick_readback_bytes(r.readback, m.tick_read_bytes(r));
     m.tick_reads.push_back(r);
     return static_cast<uint32_t>(m.tick_reads.size() - 1);
@@ -1104,6 +1162,7 @@ void GameSim::load(const std::vector<uint8_t>& data) {
             std::memcpy(p.rows.data(), col.data(), p.rows.size() * 4);
             p.stale = false;
         }
+    m.health.reset();  // other counts, other tick times
     m.mods.restore_from(std::move(mods));
     for (size_t c = 0; c < m.mods.columns.size(); ++c) {  // upload recomputed totals now, so reads are consistent
         auto& col = m.mods.columns[c];

@@ -84,7 +84,7 @@ function(terni_library target export_name compiler_source)
   target_include_directories(${target}
     PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-  target_link_libraries(${target} PUBLIC Vulkan::Vulkan PRIVATE Threads::Threads)
+  target_link_libraries(${target} PUBLIC Vulkan::Vulkan PRIVATE Threads::Threads ${CMAKE_DL_LIBS})
   target_compile_options(${target} PRIVATE ${TERNI_COMPILE_OPTIONS})
 endfunction()
 
@@ -191,6 +191,9 @@ if(TERNI_BUILD_TESTS)
   add_test(NAME capacities COMMAND test_capacity)
   terni_test(test_async_tick tests/test_async_tick.cpp)
   add_test(NAME ticks_that_do_not_block COMMAND test_async_tick)
+  terni_test(test_device_health tests/test_device_health.cpp)
+  target_include_directories(test_device_health PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  add_test(NAME device_health COMMAND test_device_health)
 
   # These two check the shader math against __int128 on the CPU (GCC and Clang, including
   # MinGW). The SPIR-V they test is the same whichever compiler built the host.
@@ -226,6 +229,26 @@ if(TERNI_BUILD_TESTS)
     add_test(NAME runtime_without_shaderc
              COMMAND sh -c "d=$('${CMAKE_READELF}' -d \"$1\") || exit 1; printf '%s\\n' \"$d\" | grep -q NEEDED || exit 1; ! printf '%s\\n' \"$d\" | grep -i shaderc"
                      sh $<TARGET_FILE:test_runtime>)
+  endif()
+
+  # A software Vulkan driver given by the game (add_vulkan_driver). Found where Mesa's
+  # lavapipe is installed as a library; elsewhere pass -DTERNI_SOFTWARE_DRIVER=<library>.
+  find_library(TERNI_SOFTWARE_DRIVER NAMES vulkan_lvp
+               DOC "Software Vulkan driver library (lavapipe) for the software_driver tests")
+  if(TERNI_SOFTWARE_DRIVER)
+    if(TERNI_BUILD_TOOLS)
+      # ... is one more device, and agrees with all the others
+      add_test(NAME software_driver_parity
+               COMMAND terni_run ${CMAKE_CURRENT_SOURCE_DIR}/examples/mini_galaxy --ticks 200
+                       --driver ${TERNI_SOFTWARE_DRIVER})
+    endif()
+    if(NOT WIN32)  # the Vulkan loader ignores VK_DRIVER_FILES in elevated processes, as on Windows CI
+      # ... and is enough on a machine with no Vulkan driver of its own
+      terni_test(test_software_driver tests/test_software_driver.cpp)
+      add_test(NAME software_driver_alone COMMAND test_software_driver ${TERNI_SOFTWARE_DRIVER})
+      set_tests_properties(software_driver_alone PROPERTIES
+                           ENVIRONMENT "VK_DRIVER_FILES=${CMAKE_CURRENT_BINARY_DIR}/no_vulkan_drivers")
+    endif()
   endif()
 
   if(TERNI_BUILD_TOOLS)

@@ -77,6 +77,9 @@ public:
     void queue_write(uint32_t binding, const void* src, uint64_t bytes, uint64_t offset = 0);
     void flush_queued();    // apply queued writes now (e.g. before saving)
     void discard_queued();  // drop queued writes (e.g. when loading a save)
+    // Move the writes queued on `from` (a runner with the same buffers) to this one, in
+    // their order: for a host that carries on with another runner.
+    void take_queued(ComputeRunner& from);
     // A buffer range copied back to the host after every tick's last stage; returns an id.
     // `bytes` is the most it will ever copy (host memory is reserved for that much).
     uint32_t add_tick_readback(uint32_t binding, uint64_t bytes, uint64_t offset = 0);
@@ -86,6 +89,9 @@ public:
     // Host copy of a registered range as of the last finished tick (tick_wait()); valid
     // until the tick after the next one is submitted.
     const void* tick_readback(uint32_t id) const;
+    // Set that host copy, as if the last tick had brought back `src` (the first `bytes` of
+    // the range): for a host that carries results over from another runner.
+    void set_tick_readback(uint32_t id, const void* src, uint64_t bytes);
 
     // ---- order check (tests) ----
     // One tick in which every stage with check[s] set runs three times from the state

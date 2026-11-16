@@ -543,6 +543,13 @@ void ComputeRunner::discard_queued() {
     impl_->staged_copies.clear();
 }
 
+void ComputeRunner::take_queued(ComputeRunner& from) {
+    const Impl& f = *from.impl_;
+    for (const auto& [binding, region] : f.staged_copies)
+        queue_write(binding, static_cast<const char*>(f.staging.mapped) + region.srcOffset, region.size, region.dstOffset);
+    from.discard_queued();
+}
+
 uint32_t ComputeRunner::add_tick_readback(uint32_t binding, uint64_t bytes, uint64_t offset) {
     Impl& m = *impl_;
     if (binding >= m.buffers.size() || offset + bytes > m.buffers[binding].size)
@@ -570,6 +577,14 @@ uint32_t ComputeRunner::add_tick_readback(uint32_t binding, uint64_t bytes, uint
 const void* ComputeRunner::tick_readback(uint32_t id) const {
     const Impl& m = *impl_;
     return static_cast<const char*>(m.tick_rb[m.rb_done].mapped) + m.tick_reads.at(id).at;
+}
+
+void ComputeRunner::set_tick_readback(uint32_t id, const void* src, uint64_t bytes) {
+    Impl& m = *impl_;
+    const auto& r = m.tick_reads.at(id);
+    if (bytes > r.bytes) throw std::out_of_range("set_tick_readback: more than the registered range");
+    m.finish();  // a tick in flight would make its own results the current ones
+    std::memcpy(static_cast<char*>(m.tick_rb[m.rb_done].mapped) + r.at, src, bytes);
 }
 
 void ComputeRunner::set_tick_readback_bytes(uint32_t id, uint64_t bytes) {

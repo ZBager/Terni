@@ -30,6 +30,13 @@ The first public version.
   with the same checksums, SPIR-V cache keys and results on all of them; rule files
   read the same whatever their line endings. `CMakePresets.json` for each platform, and
   continuous integration that runs the whole suite on lavapipe on all three.
+- **Machines without a usable GPU**: `add_vulkan_driver()` loads a software Vulkan driver
+  shipped with the game (such as lavapipe), and the rules run on the CPU with the same
+  results; `DeviceInfo::cpu()`; `list_devices()` is empty, instead of throwing, where
+  there is no Vulkan driver; `terni_run --driver`.
+- **Device health**: `GameSim::device_health()` compares recent tick times with the usual
+  and says when the device has become slow; `GameSim::move_to_device()` continues on
+  another device with the same state, bit for bit.
 - **Stage schedules**: `every = 30 offset = 29` in `stages.txt` (or
   `WorldBuilder::stage_schedule`) runs a stage only in some ticks; other ticks do not
   dispatch it, and its `clear` fields keep their values until it runs again.

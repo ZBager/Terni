@@ -42,6 +42,7 @@ struct DeviceInfo {
     uint32_t index;
     std::string name;
     std::string type;  // "discrete", "integrated", "virtual", "cpu (software)", "other"
+    bool cpu() const { return type == "cpu (software)"; }  // a software driver: the rules run on the CPU
     bool usable;       // supports everything we need
     std::string why_not;
     std::array<uint8_t, 16> uuid{};  // VkPhysicalDeviceIDProperties::deviceUUID
@@ -53,6 +54,15 @@ enum class DevicePreference {
     Integrated,  // integrated GPU first (e.g. to leave a dedicated GPU to the renderer)
     Cpu,         // software Vulkan (lavapipe) first: headless servers, reference runs
 };
+
+// A Vulkan driver shipped with the game, for machines whose own drivers give no usable
+// device: a software driver such as Mesa's lavapipe runs the same rules on the CPU, with
+// the same results. Loads the driver library (vulkan_lvp.dll, libvulkan_lvp.so) and adds
+// its devices to the system's for every later list_devices(), pick_device() and GameSim
+// in this process. Call it before those: device indices change. Throws
+// std::runtime_error if the library cannot be loaded or is not a Vulkan driver, or if the
+// Vulkan loader cannot take drivers from the application (before 1.3.234).
+void add_vulkan_driver(const std::string& library_path);
 
 // Choose a usable device. A non-null `uuid` that matches a usable device wins --
 // pass the physical device UUID of the host's own renderer to share its GPU.

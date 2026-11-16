@@ -115,6 +115,8 @@ Runs a `Game` on one device. The `Game` must outlive it. Not thread-safe.
 | `CompileStats compile_stats()` | Stages compiled vs loaded from the cache, time spent |
 | `double last_tick_ms()`, `double last_tick_gpu_ms()` | Wall time incl. transfers; GPU time of the stages |
 | `uint64_t sync_reads()` | Reads so far that waited for the GPU |
+| `DeviceHealth device_health()` | Tick times lately against the usual, and whether the device has become slow |
+| `void move_to_device(device)` | Continues on another device with the same state, bit for bit; handles and `read_each_tick` ids stay valid. Throws, changing nothing, if the device cannot be used |
 
 ### Small types
 
@@ -124,6 +126,7 @@ Runs a `Game` on one device. The `Game` must outlive it. Not thread-safe.
 | `ModifierContribution` | `handle`, `bundle`, `entity`, `row` (where the instance sits), `value` (raw, scaled) |
 | `OrderIssue` | `stage`, `field`, `parallel` (false: forwards and backwards differ; true: the parallel run differs), `first_row`, `rows` |
 | `CompileStats` | `compiled`, `cached`, `ms` |
+| `DeviceHealth` | `usual_ms` (lowest median of 32 ticks so far), `recent_ms` (latest median), `ticks` (measured since the start, `load()` or `move_to_device()`), `slow` (over 4 times the usual and at least 1 ms longer) |
 | `StageDef` (in `Game::stages`) | `name`, `for_each`, `dispatch`, `clear`, `source`, `every`, `offset`; `runs_in(tick)` says whether it runs in the tick after `tick` completed ticks |
 | `EntityDef` (in `Game::entities`) | `name`, `capacity`, `fields`; `field(name)`, `field_index(name)` |
 
@@ -140,7 +143,8 @@ Runs a `Game` on one device. The `Game` must outlive it. Not thread-safe.
 
 | Call | Does |
 | --- | --- |
-| `static std::vector<DeviceInfo> VulkanContext::list_devices()` | Every Vulkan device: `index`, `name`, `type`, `usable`, `why_not`, `uuid`, `vendor_id` |
+| `static std::vector<DeviceInfo> VulkanContext::list_devices()` | Every Vulkan device: `index`, `name`, `type`, `usable`, `why_not`, `uuid`, `vendor_id`; `cpu()` is true for a software driver. Empty on a machine with no Vulkan driver |
+| `void add_vulkan_driver(library_path)` | Adds a driver shipped with the game (a software driver such as lavapipe) to the system's, for the rest of the process. Call before listing or picking devices. Throws if the file is not a Vulkan driver or the Vulkan loader is older than 1.3.234 |
 | `int pick_device(preference, const std::array<uint8_t,16>* uuid = nullptr)` | The device `GameSim` would choose; -1 if none is usable |
 
 ## Fixed point and randomness

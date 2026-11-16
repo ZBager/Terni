@@ -59,9 +59,9 @@ ctest --test-dir build --output-on-failure
   `VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation ./build/test_embedding` and check its
   output for `VUID` / `Validation Error`; a clean run prints none. Confirm the layer loaded
   (`VK_LOADER_DEBUG=layer`) before trusting silence. For changes to transfers or
-  submission, also run `test_partial_write` and `test_async_tick` with
+  submission, also run `test_partial_write`, `test_async_tick` and `test_device_health` with
   `VK_KHRONOS_VALIDATION_VALIDATE_SYNC=1` (CI does).
-- `./build/terni_run <game folder> [--ticks N] [--dump] [--prelude] [--device I]` runs a
+- `./build/terni_run <game folder> [--ticks N] [--dump] [--prelude] [--device I] [--driver LIBRARY]` runs a
   data folder on every device and compares state hashes; `--prelude` prints the generated
   GLSL. `./build/hello_towns` is the getting-started example.
 - `-DTERNI_RULE_COMPILER=OFF` builds only `Terni::runtime` (tools and tests need the
@@ -80,6 +80,8 @@ ctest --test-dir build --output-on-failure
 | `src/compute_runner.cpp` | Vulkan: buffers, pipelines, the per-tick command buffers, transfers, order-check runs |
 | `src/rule_compiler_*.cpp` | GLSL to SPIR-V with shaderc (`core`) or none (`runtime`) |
 | `src/order_lint.cpp` | Load-time warnings for order-dependent stages |
+| `src/vk_context.cpp` | The Vulkan instance and device, device choice, drivers added by the game |
+| `src/device_health.hpp` | Tick-time statistics behind `GameSim::device_health()` |
 | `shaders/terni/` | The GLSL library, embedded into the binary at build time |
 | `tests/` | Test programs; `tests/data/` holds small games for loader tests, most of them broken on purpose |
 | `examples/` | `mini_galaxy` (a data folder) and `hello_towns` (a world in code) |

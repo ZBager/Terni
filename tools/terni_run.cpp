@@ -3,7 +3,10 @@
 // terni_run — load a data-driven game folder, build its rules, run it on every
 // Vulkan device (GPUs and lavapipe) and check that all produce identical state.
 //
-//   terni_run <game folder> [--ticks N] [--device I]... [--prelude] [--vk-validation]
+//   terni_run <game folder> [--ticks N] [--device I]... [--driver LIBRARY] [--prelude] [--vk-validation]
+//
+// --driver adds a Vulkan driver library (e.g. lavapipe) to the system's, as a game that
+// ships its own software driver would.
 
 #include <chrono>
 #include <cstdio>
@@ -20,17 +23,20 @@ int main(int argc, char** argv) {
     int ticks = 100;
     bool show_prelude = false, validation = false, dump = false;
     std::vector<uint32_t> devices;
+    std::vector<std::string> drivers;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         if (a == "--ticks" && i + 1 < argc) ticks = std::stoi(argv[++i]);
         else if (a == "--device" && i + 1 < argc) devices.push_back(static_cast<uint32_t>(std::stoul(argv[++i])));
+        else if (a == "--driver" && i + 1 < argc) drivers.push_back(argv[++i]);
         else if (a == "--prelude") show_prelude = true;
         else if (a == "--dump") dump = true;
         else if (a == "--vk-validation") validation = true;
         else root = a;
     }
     if (root.empty()) {
-        std::puts("usage: terni_run <game folder> [--ticks N] [--device I]... [--prelude] [--dump] [--vk-validation]");
+        std::puts("usage: terni_run <game folder> [--ticks N] [--device I]... [--driver LIBRARY] [--prelude] [--dump] "
+                  "[--vk-validation]");
         return 2;
     }
 
@@ -47,9 +53,19 @@ int main(int argc, char** argv) {
         std::printf("  %-12s %u / %u\n", t.def->name.c_str(), t.count, t.def->capacity);
     if (show_prelude) std::printf("\n%s\n", generate_prelude(*game).c_str());
 
+    try {
+        for (const auto& d : drivers) add_vulkan_driver(d);
+    } catch (const std::exception& e) {
+        std::printf("error: %s\n", e.what());
+        return 1;
+    }
     if (devices.empty())
         for (const auto& d : VulkanContext::list_devices())
             if (d.usable) devices.push_back(d.index);
+    if (devices.empty()) {
+        std::puts("error: no usable Vulkan device (try --driver with a software driver such as lavapipe)");
+        return 1;
+    }
 
     struct Run {
         std::string name;
