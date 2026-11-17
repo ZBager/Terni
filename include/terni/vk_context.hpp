@@ -47,6 +47,11 @@ struct DeviceInfo {
     std::string why_not;
     std::array<uint8_t, 16> uuid{};  // VkPhysicalDeviceIDProperties::deviceUUID
     uint32_t vendor_id = 0;
+    // VkPhysicalDeviceIDProperties::deviceLUID: the adapter LUID that DirectX (DXGI) also
+    // reports, so a host that renders with DirectX can find its GPU. Only on Windows, and
+    // only if luid_valid.
+    std::array<uint8_t, 8> luid{};
+    bool luid_valid = false;
 };
 
 enum class DevicePreference {
@@ -64,10 +69,12 @@ enum class DevicePreference {
 // Vulkan loader cannot take drivers from the application (before 1.3.234).
 void add_vulkan_driver(const std::string& library_path);
 
-// Choose a usable device. A non-null `uuid` that matches a usable device wins --
-// pass the physical device UUID of the host's own renderer to share its GPU.
-// Returns -1 if no usable device exists.
-int pick_device(DevicePreference preference = DevicePreference::Discrete, const std::array<uint8_t, 16>* uuid = nullptr);
+// Choose a usable device. A usable device whose UUID matches a non-null `uuid` wins, then
+// one whose LUID matches a non-null `luid`: pass the ID of the host's own renderer to
+// share its GPU (the physical device UUID from a Vulkan renderer, the adapter LUID from a
+// DirectX one). Without a match, `preference` decides. Returns -1 if no usable device exists.
+int pick_device(DevicePreference preference = DevicePreference::Discrete, const std::array<uint8_t, 16>* uuid = nullptr,
+                const std::array<uint8_t, 8>* luid = nullptr);
 
 class VulkanContext {
 public:

@@ -49,8 +49,11 @@ lavapipe runs each test three times.
 cmake --preset linux && cmake --build --preset linux && ctest --preset linux
 ```
 
-On Windows with Visual Studio, open a "Developer PowerShell for VS" (so the compiler is
-on `PATH`), or open the folder in Visual Studio and pick the preset there:
+On Windows with Visual Studio, open an "x64 Native Tools Command Prompt for VS" (so the
+64-bit compiler is on `PATH`), or open the folder in Visual Studio and pick the preset
+there. The plain "Developer PowerShell for VS" starts with the 32-bit compiler, and the
+build then fails with `LNK1112` (module machine type 'x86' conflicts with 'x64'); in it,
+run `Enter-VsDevShell -VsInstallPath (& "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath) -DevCmdArguments "-arch=x64 -host_arch=x64"` first.
 
 ```sh
 cmake --preset windows-msvc

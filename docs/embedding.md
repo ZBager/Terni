@@ -70,7 +70,10 @@ log("simulating on " + sim.device_name());
 - `DevicePreference::Cpu`: a software Vulkan driver such as lavapipe; useful for
   dedicated servers and reference runs.
 - `options.device_uuid`: the UUID of your renderer's physical device, to run on the
-  same GPU (matched before the preference).
+  same GPU (matched before the preference). For a Vulkan renderer.
+- `options.device_luid`: the same for a renderer that uses DirectX on Windows: the
+  adapter LUID that DXGI reports (`DXGI_ADAPTER_DESC::AdapterLuid`, 8 bytes, low part
+  first). Matched after `device_uuid`.
 - `options.device`: an explicit index from `terni::VulkanContext::list_devices()`, for
   a settings menu. Each `DeviceInfo` says whether it is usable and why not.
 

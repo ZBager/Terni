@@ -72,6 +72,10 @@ The first public version.
   (timed modifiers included), and `tick_result()` keeps the last collected results.
   `ComputeRunner::tick_submit()`, `tick_done()` and `tick_wait()`;
   `VulkanContext::submit()`, `submitted_done()` and `wait_submitted()`.
+- **Sharing a DirectX renderer's GPU**: `GameSimOptions::device_luid` (and a `luid`
+  argument to `pick_device()`) runs the simulation on the GPU with a given adapter LUID,
+  the ID a DirectX renderer has for its GPU on Windows. `DeviceInfo` gives each device's
+  `luid` and `luid_valid`.
 - **Licence**: LGPL 2.1 with the Terni Linking Exception (static linking, no relinking or
   reverse-engineering terms for games, compiled shaders belong to the game). Version
   1.1 of the exception adds that Terni may be combined and shipped with libraries

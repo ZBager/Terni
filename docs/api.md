@@ -81,6 +81,7 @@ their world can fill the starting state before creating a `GameSim`.
 | `device` | -1 | A device index; -1 = choose by `preference` |
 | `preference` | `Discrete` | `Discrete`, `Integrated` or `Cpu` |
 | `device_uuid` | none | Run on the GPU with this UUID if usable (e.g. the renderer's) |
+| `device_luid` | none | Run on the GPU with this adapter LUID if usable (a DirectX renderer's; Windows) |
 | `spirv_cache_dir` | "" | Where compiled rules are kept and reused; "" = no cache |
 | `cache_only` | false | Never compile; every rule must be in the cache |
 | `shader_library_dir` | "" | A folder with `terni/*.glsl` instead of the embedded library |
@@ -150,9 +151,9 @@ Runs a `Game` on one device. The `Game` must outlive it. Not thread-safe.
 
 | Call | Does |
 | --- | --- |
-| `static std::vector<DeviceInfo> VulkanContext::list_devices()` | Every Vulkan device: `index`, `name`, `type`, `usable`, `why_not`, `uuid`, `vendor_id`; `cpu()` is true for a software driver. Empty on a machine with no Vulkan driver |
+| `static std::vector<DeviceInfo> VulkanContext::list_devices()` | Every Vulkan device: `index`, `name`, `type`, `usable`, `why_not`, `uuid`, `vendor_id`, `luid` and `luid_valid` (Windows); `cpu()` is true for a software driver. Empty on a machine with no Vulkan driver |
 | `void add_vulkan_driver(library_path)` | Adds a driver shipped with the game (a software driver such as lavapipe) to the system's, for the rest of the process. Call before listing or picking devices. Throws if the file is not a Vulkan driver or the Vulkan loader is older than 1.3.234 |
-| `int pick_device(preference, const std::array<uint8_t,16>* uuid = nullptr)` | The device `GameSim` would choose; -1 if none is usable |
+| `int pick_device(preference, const std::array<uint8_t,16>* uuid = nullptr, const std::array<uint8_t,8>* luid = nullptr)` | The device `GameSim` would choose: a UUID match, then a LUID match, then by preference; -1 if none is usable |
 
 ## Fixed point and randomness
 

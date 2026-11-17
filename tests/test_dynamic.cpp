@@ -470,7 +470,7 @@ int main() {
         sim.tick();
         CHECK(sim.read_field(w.army, "purse", row, 1) == std::vector<int32_t>({1, 2, 3, 4}));
         while (sim.entity_generation(w.army, row) < 2) sim.tick();  // a province's request takes the row
-        const int32_t lo = int32_t(uint32_t(5000000000ull)), hi = int32_t(5000000000ull >> 32);
+        const int32_t lo = int32_t(5000000000ull & 0xFFFFFFFFull), hi = int32_t(5000000000ull >> 32);  // both fit
         CHECK(sim.read_field(w.army, "purse", row, 1) == std::vector<int32_t>({lo, hi, lo, hi}));
     }
 

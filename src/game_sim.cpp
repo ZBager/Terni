@@ -1047,18 +1047,18 @@ struct GameSim::Impl {
             bool deaths = false;
             uint32_t top = 0;
             for (size_t w = 0; w < d.alive.size(); ++w) {
-                const uint32_t was = d.alive[w], now = bits[w];
-                d.cool[w] = d.prev[w] & ~now;
-                d.prev[w] = now;
-                if (now == was) continue;
-                deaths |= (was & ~now) != 0;
-                for (uint32_t born = now & ~was; born != 0; born &= born - 1) {
+                const uint32_t was = d.alive[w], is = bits[w];  // alive before and after the tick
+                d.cool[w] = d.prev[w] & ~is;
+                d.prev[w] = is;
+                if (is == was) continue;
+                deaths |= (was & ~is) != 0;
+                for (uint32_t born = is & ~was; born != 0; born &= born - 1) {
                     const uint32_t row = uint32_t(w) * 32 + uint32_t(std::countr_zero(born));
                     ++d.generation[row];
                     top = std::max(top, row + 1);
                 }
-                d.alive_count = d.alive_count - uint32_t(std::popcount(was)) + uint32_t(std::popcount(now));
-                d.alive[w] = now;
+                d.alive_count = d.alive_count - uint32_t(std::popcount(was)) + uint32_t(std::popcount(is));
+                d.alive[w] = is;
             }
             d.free_word = 0;  // rows that were cooling are free again
             if (top > counts[d.entity]) in_use(d.entity, top);
@@ -1146,7 +1146,8 @@ GameSim::GameSim(const Game& game, const GameSimOptions& options) : impl_(std::m
     int device = options.device;
     if (device < 0) {
         const std::array<uint8_t, 16>* uuid = options.device_uuid ? &*options.device_uuid : nullptr;
-        device = pick_device(options.preference, uuid);
+        const std::array<uint8_t, 8>* luid = options.device_luid ? &*options.device_luid : nullptr;
+        device = pick_device(options.preference, uuid, luid);
         if (device < 0) throw std::runtime_error("no usable Vulkan device (Vulkan 1.3 with synchronization2 required)");
     }
     m.defines = game.define_values;

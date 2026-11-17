@@ -188,17 +188,22 @@ std::vector<DeviceInfo> VulkanContext::list_devices() {
         p2.pNext = &id;
         vkGetPhysicalDeviceProperties2(devs[i], &p2);
         std::copy(std::begin(id.deviceUUID), std::end(id.deviceUUID), info.uuid.begin());
+        std::copy(std::begin(id.deviceLUID), std::end(id.deviceLUID), info.luid.begin());
+        info.luid_valid = id.deviceLUIDValid == VK_TRUE;
         out.push_back(std::move(info));
     }
     vkDestroyInstance(instance, nullptr);
     return out;
 }
 
-int pick_device(DevicePreference preference, const std::array<uint8_t, 16>* uuid) {
+int pick_device(DevicePreference preference, const std::array<uint8_t, 16>* uuid, const std::array<uint8_t, 8>* luid) {
     const auto devices = VulkanContext::list_devices();
     if (uuid)
         for (const auto& d : devices)
             if (d.usable && d.uuid == *uuid) return static_cast<int>(d.index);
+    if (luid)
+        for (const auto& d : devices)
+            if (d.usable && d.luid_valid && d.luid == *luid) return static_cast<int>(d.index);
     auto rank = [&](const DeviceInfo& d) {
         // lower is better
         const bool cpu = d.cpu();

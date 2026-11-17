@@ -18,7 +18,7 @@
     {
       "name": "windows-msvc",
       "displayName": "Windows, Visual Studio 2022 or 2026 (MSVC)",
-      "description": "Run from a Developer PowerShell or Developer Command Prompt for VS, or open the folder in Visual Studio",
+      "description": "Run from an x64 Native Tools Command Prompt for VS (the 64-bit compiler), or open the folder in Visual Studio",
       "inherits": "base",
       "cacheVariables": { "CMAKE_CXX_COMPILER": "cl" },
       "architecture": { "value": "x64", "strategy": "external" },

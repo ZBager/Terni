@@ -75,10 +75,26 @@ int main() {
         if (d.type == "integrated") CHECK(type_of(integrated) == "integrated");
         if (d.type == "cpu (software)") CHECK(type_of(cpu) == "cpu (software)");
         CHECK(pick_device(DevicePreference::Cpu, &d.uuid) == int(d.index));  // UUID match beats preference
+        if (d.luid_valid)  // Windows drivers
+            CHECK(pick_device(DevicePreference::Cpu, nullptr, &d.luid) == int(d.index));  // so does a LUID match
     }
     std::array<uint8_t, 16> unknown{};
     unknown.fill(0xAB);
     CHECK(pick_device(DevicePreference::Discrete, &unknown) == discrete);  // no match: preference decides
+    {
+        size_t usable = 0, with_luid = 0;
+        for (const auto& d : devices) usable += d.usable, with_luid += d.usable && d.luid_valid;
+        std::printf("LUIDs: %zu of %zu usable devices report one, each found by it\n", with_luid, usable);
+    }
+    std::array<uint8_t, 8> unknown_luid{};
+    unknown_luid.fill(0xAB);
+    CHECK(pick_device(DevicePreference::Discrete, nullptr, &unknown_luid) == discrete);
+    std::array<uint8_t, 8> zero_luid{};  // what devices without a LUID report: must match nothing
+    CHECK(pick_device(DevicePreference::Discrete, nullptr, &zero_luid) == discrete);
+    for (const auto& d : devices)  // UUID before LUID
+        for (const auto& other : devices)
+            if (d.usable && other.usable && other.luid_valid && other.index != d.index)
+                CHECK(pick_device(DevicePreference::Cpu, &d.uuid, &other.luid) == int(d.index));
 
     // ---- embedded GLSL library vs folder override: identical results
     GameSimOptions embedded;  // all defaults: picked device, embedded library, no cache

@@ -321,6 +321,8 @@ struct GameSimOptions {
     int device = -1;                                      // Vulkan device index; -1 = choose (below)
     DevicePreference preference = DevicePreference::Discrete;
     std::optional<std::array<uint8_t, 16>> device_uuid;   // share the host renderer's GPU (matched first)
+    std::optional<std::array<uint8_t, 8>> device_luid;    // the same by adapter LUID, for a DirectX
+                                                          // renderer (matched after device_uuid)
     std::string spirv_cache_dir;                          // "" = no cache; else compiled rules are stored
                                                           // there by content hash and reused next start
     bool cache_only = false;                              // never compile: every rule must already be in
