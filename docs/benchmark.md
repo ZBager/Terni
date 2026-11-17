@@ -15,7 +15,7 @@ state differs is reported as invalid, not given a time.
 
 ```sh
 cmake -S . -B build -G Ninja && cmake --build build
-./build/terni_bench                    # the medium world, every device, 1 to all CPU threads
+./build/terni_bench                    # the medium world (the baseline), every device, 1 to all CPU threads
 ./build/terni_bench --size large --json results.json
 ./build/terni_bench --list             # the sizes and the Vulkan devices
 ```
@@ -35,6 +35,7 @@ power mode.
 | `--lavapipe-threads N` | Threads of Mesa's lavapipe (sets `LP_NUM_THREADS`) |
 | `--threads LIST` | CPU reference thread counts: `1,2,8`; `powers` (default: 1, 2, 4, ... and all); `sweep` (every count from 1 to all); `all` |
 | `--no-cpu` | No CPU reference |
+| `--readback WHAT` | What comes back to system memory every tick: `ui` (default; province unrest and empire treasuries, as a game's map and interface would read) or `pops` (also every field of every pop, as a host that keeps a copy of the whole world would) |
 | `--stages` | Also print the GPU time of every stage |
 | `--json FILE` | Also write the results, the machine and the versions as JSON |
 
@@ -55,7 +56,7 @@ A small grand-strategy economy, built in code from a size and a seed
 | Empire | 100 | Keeps a treasury, pays for armies and administration, changes its tax once a month |
 | Army | up to 2,500, created and destroyed as provinces revolt | Wears down, is paid for, calms its province |
 
-The sizes:
+The sizes (`medium` is the baseline: the size results are quoted and compared at):
 
 | Size | Provinces | Pops | Empires | Markets | Fields | Ticks (warm-up + measured) |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
@@ -122,7 +123,7 @@ threads, or on the calling thread alone.
 
 ```
                                                  total ms           p10 - p90  compute ms  vs 1 CPU  start ms
-NVIDIA GeForce RTX 4050 Laptop GPU                  3.753       3.594 - 4.224       3.393     50.6x       ...
+NVIDIA GeForce RTX 4050 Laptop GPU                  0.650       0.642 - 0.663       0.579     48.3x       ...
 ```
 
 | Column | Meaning |
@@ -148,6 +149,12 @@ Things to keep in mind:
   back every tick: province unrest and empire treasuries, a few hundred KiB at most.
   Games that start a tick and collect it a frame later (`begin_tick()` / `end_tick()`)
   hide most of the difference.
+- **Reading everything back is expensive.** With `--readback pops`, every pop field is
+  copied to system memory every tick: 31 MiB at `medium`, 3 GiB at `colossal`. On a
+  discrete GPU that crosses PCIe and can cost more than the compute itself; on an
+  integrated GPU, which shares the system's memory, it costs less. What came back is
+  checked against the state after the last tick. The CPU reference has its state in
+  system memory already, so it is the same in both modes.
 - **Thread counts past the physical cores** use SMT (Hyper-Threading), which adds less
   than a core. The header shows physical cores and threads.
 
@@ -192,12 +199,25 @@ The largest sizes, total ms per tick:
 On the GPUs, a tick costs about the same per pop from `large` up, and the RTX 4050 runs
 50 to 60 times faster than one CPU thread and about 9 times faster than all twelve.
 
+With every pop read back each tick (`--readback pops`), total ms against compute ms:
+
+| Size (read back per tick) | RTX 4050 Laptop | Radeon 760M |
+| --- | ---: | ---: |
+| `medium` (31 MiB) | 3.54 (0.58) | 2.75 (1.79) |
+| `large` (183 MiB) | 19.8 (3.35) | 14.2 (8.57) |
+| `huge` (305 MiB) | 30.7 (5.66) | 23.2 (14.1) |
+| `giant` (1.5 GiB) | 151 (26.3) | 109 (65.5) |
+| `colossal` (3.0 GiB) | 297 (52.4) | 217 (131) |
+
+The RTX 4050 moves about 12 GB/s back over PCIe, so reading everything back takes five
+times as long as computing it, and the integrated Radeon overtakes it. Read back only
+what the host needs.
+
 ## Sending in results
 
 Results from other hardware are welcome, above all from GPUs not listed here. Run
-`terni_bench --size large --json results.json` (and `--size medium` if `large` does not
-fit in the GPU's memory; `huge`, `giant` and `colossal` too if you have the time), then
-open an issue with the
+`terni_bench --json results.json` (the `medium` world; other sizes too if you have the
+time), then open an issue with the
 [benchmark result template](https://github.com/ZBager/Terni/issues/new?template=benchmark-result.md)
 and attach the JSON file. The file holds the CPU and GPU names, core counts, operating
 system, compiler and Terni commit, and nothing else about the machine.

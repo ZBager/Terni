@@ -10,7 +10,7 @@ title: "Benchmark: <GPU> / <CPU>"
 **Command**
 
 ```
-terni_bench --size large --json results.json
+terni_bench --json results.json
 ```
 
 **Output** (the table that terni_bench printed)

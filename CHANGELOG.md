@@ -56,9 +56,10 @@ The first public version.
 - **Benchmark**: `terni_bench` runs a grand-strategy world (up to 100 million pops,
   markets, modifiers, armies that come and go) on every Vulkan device and on a
   multithreaded CPU implementation of the same rules, from 1 to all cores. Every run must
-  end with the same state hash. It reports the time per tick and per stage, and writes
-  JSON results; see `docs/benchmark.md`. `DeviceInfo::driver` gives a device's driver
-  name and version.
+  end with the same state hash. It reports the total time per tick (compute,
+  readback, submission) and the compute time alone, per stage too, and writes JSON
+  results (`docs/benchmark.md`). `--readback pops` also copies every pop to system
+  memory every tick. `DeviceInfo::driver` gives a device's driver name and version.
 - **Partial writes**: `GameSim::write_field(entity, field, row, index, words)` changes
   some values of one row of a sized field, so hosts need not mirror whole rows.
   Host writes queued for one tick now always apply in the order they were made, even

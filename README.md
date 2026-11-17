@@ -18,9 +18,11 @@ game loads, so mods can change the rules themselves, not only the numbers.
 - **Exact everywhere.** 32-bit fixed point, integer atomics and stateless randomness:
   the same world gives the same state hash on NVIDIA, AMD and the CPU (Mesa's
   lavapipe), across saves and over the network.
-- **Fast at scale.** One pre-recorded command buffer per tick. A world with 28,600
-  provinces and 5.8 million pop rows runs a tick in 0.42 ms of GPU time on a laptop
-  RTX 4050.
+- **Fast at scale.** One pre-recorded command buffer per tick. In Terni's benchmark, a
+  world of 1 million pops runs a tick in 0.65 ms on a laptop RTX 4050, readback
+  included: 48 times faster than the same simulation in C++ on one CPU thread, and 7
+  times faster than on all twelve. 100 million pops take 53 ms. `terni_bench` measures
+  your own hardware ([Benchmark](docs/benchmark.md)).
 - **Data-driven and moddable.** Entities, fields, constants, modifiers, starting
   state and stage order come from text files; rules are GLSL. Errors are reported as
   `file:line`, and a checksum over everything that defines behaviour keeps saves and

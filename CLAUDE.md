@@ -70,7 +70,7 @@ ctest --test-dir build --output-on-failure
 - `./build/terni_run <game folder> [--ticks N] [--dump] [--prelude] [--device I] [--driver LIBRARY]` runs a
   data folder on every device and compares state hashes; `--prelude` prints the generated
   GLSL. `./build/hello_towns` is the getting-started example.
-- `./build/terni_bench [--size tiny|small|medium|large|huge|giant|colossal] [--threads 1,2,8|powers|sweep|all] [--json FILE]`
+- `./build/terni_bench [--size tiny|small|medium|large|huge|giant|colossal] [--threads 1,2,8|powers|sweep|all] [--readback ui|pops] [--json FILE]`
   runs the benchmark world on every device and on the CPU reference, and fails if any
   run ends in a different state (`docs/benchmark.md`).
 - `-DTERNI_RULE_COMPILER=OFF` builds only `Terni::runtime` (tools and tests need the
@@ -78,6 +78,9 @@ ctest --test-dir build --output-on-failure
   test.
 - Do not benchmark while another program is using the GPU; tick times can rise
   twentyfold and mislead. Benchmark only Release builds.
+- `medium` is the benchmark's baseline: performance claims in the docs (README,
+  `docs/design.md`, `docs/embedding.md`, `docs/benchmark.md`) quote `terni_bench` at that
+  size, and are measured again and updated together when performance changes.
 
 ## Layout
 

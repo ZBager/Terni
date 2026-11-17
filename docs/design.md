@@ -2,8 +2,8 @@
 
 Every major choice in Terni serves one requirement: the same inputs must give the
 same bits on every machine, cheaply enough to run every tick of a lockstep game. This
-page explains the choices and what they cost, then what the experiments behind them
-measured.
+page explains the choices and what they cost, then what the benchmark and the first
+experiments measured.
 
 ## Decisions
 
@@ -12,7 +12,7 @@ measured.
 | 32-bit fixed point, no floats in the state | Floating-point results differ between GPUs, drivers and compilers; integer results do not. 32-bit was 1.4–3x faster than 64-bit in the experiments and needs no 64-bit GPU features, which many shader paths lack | Rules use `fx_mul`/`fx_div`; values past 32 bits need `money64` or the wide-integer library |
 | Terni's own Vulkan device and GLSL | Engines' shader pipelines differ (HLSL compiled through glslang, for example, has no 64-bit integers); Terni's own device runs the same SPIR-V everywhere and stays engine-independent | A second Vulkan device in the process; the simulation does not share the renderer's queue |
 | Worlds described as data, compiled to shaders at load time | Mods can change the rules, not only the numbers; the game checksum covers the rules, so peers must agree | A shader compiler at run time, or a cache prepared at build time (`Terni::runtime`) |
-| Terni owns the state; the host sends commands and reads results | One authoritative state on the GPU. Copying a CPU engine's state to the GPU every tick was slower than 12 CPU threads in an experiment | Hosts keep small read-only views, refreshed once per tick |
+| Terni owns the state; the host sends commands and reads results | One authoritative state on the GPU. Moving state between CPU and GPU every tick is costly: in the benchmark, reading every pop back each tick makes a tick on a laptop RTX 4050 more than five times longer | Hosts keep small read-only views, refreshed once per tick |
 | Modifiers stored on the host, decided by the host | Research, focuses and events are game logic that changes rarely; Terni only keeps exact totals and expiries | Every modifier change goes through the API |
 | One pre-recorded command buffer per tick, batched transfers | A tick costs one GPU round trip, uploads and readbacks included | Writes and reads take effect at tick boundaries |
 | Sums through integer atomics | Integer addition gives the same total in any order | Rules must not read rows other threads write in the same stage (checked) |
@@ -21,28 +21,48 @@ measured.
 | A destroyed row rests for one tick before it is used again | Every death and every new row shows in the one bit per row the host reads back each tick, and rules that hold a ref get a tick to see the entity gone | A row cannot be reused at once; refs checked less often than every tick compare generations |
 | A standalone library with no engine code | It is meant to be embedded by any engine | Engine plugins live in [TerniIntegrations](https://github.com/ZBager/TerniIntegrations), and games can embed Terni directly |
 
-## What the experiments measured
+## What the benchmark measures
 
-Terni began as a proof of concept comparing CPU and GPU versions of the same models:
+`terni_bench` ([Benchmark](benchmark.md)) runs a grand-strategy world on every Vulkan
+device and on a multithreaded C++ implementation of the same rules, which must give the
+same bits. Its baseline is the `medium` world, with 1 million pops. On a laptop with a
+Ryzen 5 7640HS (6 cores, 12 threads), an RTX 4050 and a Radeon 760M:
+
+- **The GPU pays for all but the smallest worlds.** With 1 million pops, a tick takes
+  0.65 ms on the RTX 4050, readback included, against 31.4 ms on one CPU thread and
+  4.8 ms on twelve: 48 and 7 times faster. The lead grows with the world: with 100
+  million pops it is 53 ms against 3.2 s and 483 ms. In the smallest world (1,024 pops)
+  the CPU wins, 0.03 ms against 0.06 ms: a GPU tick costs a submission and a wait,
+  however little work it has.
+- **Integrated GPUs pay too.** The Radeon 760M runs the 1-million-pop world in 1.9 ms,
+  17 times faster than one CPU thread and more than twice as fast as twelve.
+- **Keep the state on the GPU.** Reading every pop back each tick (31 MiB for 1 million
+  pops) takes the RTX 4050's tick from 0.65 ms to 3.5 ms. Reading back what an interface
+  shows costs almost nothing.
+- **A software driver is a fallback, not a replacement.** lavapipe runs the
+  1-million-pop world in 38 ms on twelve threads: 8 times slower than the C++ on the
+  same threads, and 59 times slower than the RTX 4050.
+- **Exact everywhere.** Every run, on every device and thread count, ends with the same
+  state hash.
+
+## What the first experiments measured
+
+Terni began as a proof of concept comparing CPU and GPU versions of the same models.
+These results are outside what the benchmark measures:
 
 - **Data layout beats hardware.** Flat arrays with 12 CPU threads were about 30x faster
   than object-per-pop code, before any GPU was involved.
 - **32-bit beats 64-bit.** 32-bit fixed point was 1.4–3x faster than 64-bit and needs no
   64-bit GPU features.
-- **Pop groups are cheap; individual pops are where the GPU pays.** With pop groups
-  (Stellaris-style, up to 1,000 people each), a 50-million-pop galaxy costs about 1 ms
-  per month on one CPU thread. Individual pops cost 150–370x more; there an RTX 4050 was
-  about 30x faster than one CPU thread and 6x faster than 12 threads (250 million pops:
-  1.85 s against 60 ms per month).
-- **Exact everywhere.** Every implementation gave identical bits on CPUs (1 to 12
-  threads), NVIDIA and AMD, for every model and size tested.
+- **Pop groups are cheap.** With pop groups (up to 1,000 people each), a
+  50-million-pop galaxy cost about 1 ms per month on one CPU thread; individual pops
+  cost 150–370x more. Games with pop groups may not need a GPU for their pops at all.
 
 ## What real games taught it
 
 Terni has since run games in development, from a small territory game to a grand
 strategy game with 32,000 provinces and 6.5 million pop rows, with lockstep
-multiplayer, saves and bots. A tick of 28,600 provinces with 15 stages takes 0.42 ms of
-GPU time on a laptop RTX 4050. Every match ended with the same state hash on an RTX
+multiplayer, saves and bots. Every match ended with the same state hash on an RTX
 4050, a Radeon 760M and lavapipe.
 
 The problems they found were about embedding, not about wrong results, and shaped

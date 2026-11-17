@@ -86,6 +86,8 @@ void usage() {
         "  --threads LIST          CPU reference thread counts: 1,2,8 | powers (default: 1, 2, 4, ... and all)\n"
         "                          | sweep (every count from 1 to all) | all\n"
         "  --no-cpu                no CPU reference\n"
+        "  --readback WHAT         read back every tick: ui (default: province unrest and empire\n"
+        "                          treasuries) or pops (also every field of every pop)\n"
         "  --stages                print the GPU time of every stage\n"
         "  --json FILE             also write the results as JSON\n"
         "  --list                  list the sizes and the Vulkan devices, and stop");
@@ -176,6 +178,7 @@ int main(int argc, char** argv) {
     std::vector<std::string> drivers;
     std::string thread_spec = "powers", json_path, lavapipe_threads;
     bool gpu = true, cpu = true, show_stages = false, list = false, resized = false;
+    std::string readback = "ui";
 
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -212,6 +215,13 @@ int main(int argc, char** argv) {
         else if (a == "--no-gpu") gpu = false;
         else if (a == "--no-cpu") cpu = false;
         else if (a == "--stages") show_stages = true;
+        else if (a == "--readback" && has_value) {
+            readback = argv[++i];
+            if (readback != "ui" && readback != "pops") {
+                std::printf("error: --readback takes ui or pops\n");
+                return 2;
+            }
+        }
         else if (a == "--list") list = true;
         else {
             usage();
@@ -303,7 +313,19 @@ int main(int argc, char** argv) {
         for (const auto& c : t.columns) state_bytes += c.size() * 4;
     std::printf("built the world in %.0f ms (%.0f MiB of fields); compiled %u rules in %.0f ms\n\n", build_ms,
                 double(state_bytes) / (1024.0 * 1024.0), compiled.compiled, compiled.ms);
-    std::printf("%u warm-up ticks, then %u measured:\n", warmup, ticks);
+    // read back every tick: the fields asked for, and the alive bits Terni brings back itself
+    uint64_t readback_bytes = uint64_t(config.provinces) * 4 + uint64_t(config.empires) * 8 +
+                              uint64_t(config.army_capacity() + 31) / 32 * 4;
+    if (readback == "pops")
+        for (const auto& f : game->entities[POP].fields) readback_bytes += config.pops() * f.size * f.words() * 4;
+    char amount[32];
+    if (readback_bytes >= 1024 * 1024) std::snprintf(amount, sizeof amount, "%.1f MiB", double(readback_bytes) / 1048576.0);
+    else std::snprintf(amount, sizeof amount, "%.0f KiB", double(readback_bytes) / 1024.0);
+    const std::string readback_text = std::string(readback == "pops"
+                                                      ? "every pop field, province unrest and empire treasuries"
+                                                      : "province unrest and empire treasuries") +
+                                      " (" + amount + " per tick)";
+    std::printf("%u warm-up ticks, then %u measured; read back: %s\n", warmup, ticks, readback_text.c_str());
 
     std::vector<Run> runs;
     std::vector<HostEvent> events;
@@ -320,10 +342,20 @@ int main(int argc, char** argv) {
             options.spirv_cache_dir = cache.string();
             const auto t0 = Clock::now();
             std::unique_ptr<GameSim> started;
+            std::vector<std::pair<std::string, uint32_t>> pop_reads;  // (field, read_each_tick id)
             try {
                 started = std::make_unique<GameSim>(*game, options);
+                r.start_ms = ms_since(t0);
+                // what a host's map and interface would read every tick ...
+                started->read_each_tick(PROVINCE, "unrest");
+                started->read_each_tick(EMPIRE, "treasury");
+                // ... or a host that keeps a copy of every pop
+                if (readback == "pops")
+                    for (const auto& f : game->entities[POP].fields)
+                        pop_reads.emplace_back("pop." + f.name, started->read_each_tick(POP, f.name));
             } catch (const std::exception& e) {
                 r.skipped = e.what();  // usually more memory or larger buffers than the device has
+                started.reset();
             }
             if (!started) {
                 std::printf(" skipped: %s\n", r.skipped.c_str());
@@ -331,11 +363,7 @@ int main(int argc, char** argv) {
                 continue;
             }
             GameSim& sim = *started;
-            r.start_ms = ms_since(t0);
             r.name = sim.device_name();
-            // what a host's map and interface would read every tick
-            sim.read_each_tick(PROVINCE, "unrest");
-            sim.read_each_tick(EMPIRE, "treasury");
             std::vector<double> wall, gpu_ms;
             for (uint32_t t = 0; t < warmup + ticks; ++t) {
                 const auto t1 = Clock::now();
@@ -350,7 +378,17 @@ int main(int argc, char** argv) {
             r.total = stats_of(wall);
             r.compute = stats_of(gpu_ms);
             r.gpu_report = sim.report();
+            // what came back with the last tick must be the state itself
+            std::vector<std::pair<std::string, uint64_t>> read_back;
+            for (const auto& [name, id] : pop_reads) {
+                const auto words = sim.tick_result(id);
+                read_back.emplace_back(name, hash_words(words.data(), words.size()));
+            }
             r.state = state_hashes(sim, *game);
+            for (const auto& got : read_back)
+                for (const auto& f : r.state.fields)
+                    if (f.first == got.first && f.second != got.second)
+                        throw std::runtime_error(got.first + " as read back with the last tick differs from the state");
         } catch (const std::exception& e) {
             r.error = e.what();
         }
@@ -420,11 +458,11 @@ int main(int argc, char** argv) {
                     identical ? "identical in every run" : "RUNS DIFFER, their times are not valid",
                     hex(first->state.combined()).c_str());
     std::printf("total ms: median time of a tick as the host sees it: compute, readback to system memory, and\n"
-                "submitting and waiting. Read back every tick: province unrest and empire treasuries.\n"
+                "submitting and waiting. Read back every tick:\n  %s.\n"
                 "compute ms: the stages alone (GPU timestamps; the CPU reference reads nothing back, so for it\n"
                 "the two are the same). p10 - p90: the spread of total ms. start ms: creating the simulation,\n"
                 "rules from the SPIR-V cache. lavapipe threads: %s.\n",
-                lavapipe_threads.empty() ? "one per logical core (LP_NUM_THREADS not set)" : lavapipe_threads.c_str());
+                readback_text.c_str(), lavapipe_threads.empty() ? "one per logical core (LP_NUM_THREADS not set)" : lavapipe_threads.c_str());
     if (show_stages)
         for (const auto& r : runs)
             if (!r.cpu && r.error.empty() && r.skipped.empty()) std::printf("\n%s\n  %s\n", r.name.c_str(), r.gpu_report.c_str());
@@ -450,7 +488,8 @@ int main(int argc, char** argv) {
           << ", \"physical_cores\": " << machine.physical_cores << ", \"logical_cores\": " << machine.logical_cores
           << ", \"os\": " << json_string(machine.os) << ", \"compiler\": " << json_string(machine.compiler)
           << ", \"lavapipe_threads\": " << json_string(lavapipe_threads.empty() ? "default" : lavapipe_threads)
-          << "},\n  \"build_world_ms\": " << build_ms << ",\n  \"compile_ms\": " << compiled.ms << ",\n  \"runs\": [";
+          << "},\n  \"readback\": " << json_string(readback) << ",\n  \"readback_mib_per_tick\": "
+          << double(readback_bytes) / (1024.0 * 1024.0) << ",\n  \"build_world_ms\": " << build_ms << ",\n  \"compile_ms\": " << compiled.ms << ",\n  \"runs\": [";
         for (size_t i = 0; i < runs.size(); ++i) {
             const Run& r = runs[i];
             o << (i ? "," : "") << "\n    {\"kind\": " << (r.cpu ? "\"cpu reference\"" : "\"vulkan\"");
