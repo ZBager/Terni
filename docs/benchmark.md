@@ -160,13 +160,18 @@ Things to keep in mind:
 
 ## Reference results
 
-`terni_bench 1`, 20 warm-up and 100 measured ticks. A laptop with a Ryzen 5 7640HS (6 cores,
-12 threads), a Radeon 760M integrated GPU and an RTX 4050 Laptop GPU; Linux, GCC 16,
-NVIDIA driver 620.70, Mesa 26.2 (RADV and lavapipe).
+`terni_bench 1`, 20 warm-up and 100 measured ticks, on two machines with Linux, GCC 16,
+NVIDIA driver 620.70 and Mesa 26.2 (RADV and lavapipe):
 
-`medium` (1,000,000 pops):
+- **Laptop**: Ryzen 5 7640HS (6 cores, 12 threads), Radeon 760M integrated GPU, RTX 4050
+  Laptop GPU.
+- **Desktop**: Ryzen 7 7800X3D (8 cores, 16 threads), its integrated Radeon GPU (2
+  compute units), RTX 4070 Ti.
 
-| Run | Total ms | Compute ms | vs 1 CPU thread |
+`medium` (1,000,000 pops), the baseline. Every run on both machines ended in the same
+state (hash `83415c984147cf51`).
+
+| Laptop | Total ms | Compute ms | vs 1 CPU thread |
 | --- | ---: | ---: | ---: |
 | RTX 4050 Laptop | 0.65 | 0.58 | 48x |
 | Radeon 760M | 1.87 | 1.75 | 17x |
@@ -175,6 +180,23 @@ NVIDIA driver 620.70, Mesa 26.2 (RADV and lavapipe).
 | CPU reference, 4 threads | 8.17 | | 3.8x |
 | CPU reference, 8 threads | 6.39 | | 4.9x |
 | CPU reference, 12 threads | 4.76 | | 6.6x |
+
+| Desktop | Total ms | Compute ms | vs 1 CPU thread |
+| --- | ---: | ---: | ---: |
+| RTX 4070 Ti | 0.18 | 0.14 | 163x |
+| Ryzen 7800X3D integrated Radeon | 3.91 | 3.83 | 7.6x |
+| lavapipe, 16 threads | 24.4 | 24.3 | 1.2x |
+| CPU reference, 1 thread | 29.7 | | 1x |
+| CPU reference, 2 threads | 14.9 | | 2.0x |
+| CPU reference, 4 threads | 7.84 | | 3.8x |
+| CPU reference, 8 threads | 5.22 | | 5.7x |
+| CPU reference, 16 threads | 3.92 | | 7.6x |
+
+The RTX 4070 Ti runs a tick 21 times faster than all 16 threads of the 7800X3D. Integrated
+GPUs differ widely: the laptop's Radeon 760M (8 compute units) is 2.5 times faster than
+its 12 CPU threads, while the 7800X3D's 2-compute-unit Radeon only matches its CPU.
+
+The larger sizes, on the laptop (the desktop follows below):
 
 `large` (6,000,000 pops):
 
@@ -212,6 +234,30 @@ With every pop read back each tick (`--readback pops`), total ms against compute
 The RTX 4050 moves about 12 GB/s back over PCIe, so reading everything back takes five
 times as long as computing it, and the integrated Radeon overtakes it. Read back only
 what the host needs.
+
+On the desktop, `colossal` (100M pops), every run in the same state as on the laptop
+(hash `efd84db0206e40e3`):
+
+| Desktop | Total ms | Compute ms | vs 1 CPU thread |
+| --- | ---: | ---: | ---: |
+| RTX 4070 Ti | 22.5 | 22.3 | 132x |
+| Ryzen 7800X3D integrated Radeon | 292 | 291 | 10x |
+| lavapipe | skipped | | |
+| CPU reference, 1 thread | 2,973 | | 1x |
+| CPU reference, 8 threads | 395 | | 7.5x |
+| CPU reference, 16 threads | 321 | | 9.3x |
+
+The RTX 4070 Ti runs 100 million pops 14 times faster than all 16 CPU threads. With every
+pop read back each tick, total ms against compute ms:
+
+| Size (read back per tick) | RTX 4070 Ti | Ryzen 7800X3D integrated Radeon |
+| --- | ---: | ---: |
+| `medium` (31 MiB) | 1.50 (0.16) | 4.80 (3.84) |
+| `colossal` (3.0 GiB) | 148 (22.1) | 381 (291) |
+
+The RTX 4070 Ti reads back about 25 GB/s over PCIe 4.0 x16, twice as fast as the laptop,
+but reading everything still takes almost six times as long as computing it. Even then,
+at `colossal` it is twice as fast as all 16 CPU threads.
 
 ## Sending in results
 

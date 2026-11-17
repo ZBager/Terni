@@ -70,9 +70,9 @@ invalid, not as a time. See [Benchmark](benchmark.md).
    version.
 4. **A smoke test** (done): the tiny world on every device and on the CPU reference,
    compared after every tick; timings are never checked in CI.
-5. **Documentation** (done, results from one machine so far): how to run it, what it
-   measures, how to read the results, and an issue template for sending them in. Still
-   to come: reference results from a desktop GPU, from Windows, and from Intel.
+5. **Documentation** (done, results from a laptop and a desktop so far): how to run it,
+   what it measures, how to read the results, and an issue template for sending them in.
+   Still to come: reference results from Windows and from Intel.
 
 ## Public releases
 

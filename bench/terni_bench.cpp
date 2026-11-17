@@ -320,7 +320,7 @@ int main(int argc, char** argv) {
         for (const auto& f : game->entities[POP].fields) readback_bytes += config.pops() * f.size * f.words() * 4;
     char amount[32];
     if (readback_bytes >= 1024 * 1024) std::snprintf(amount, sizeof amount, "%.1f MiB", double(readback_bytes) / 1048576.0);
-    else std::snprintf(amount, sizeof amount, "%.0f KiB", double(readback_bytes) / 1024.0);
+    else std::snprintf(amount, sizeof amount, "%.1f KiB", double(readback_bytes) / 1024.0);
     const std::string readback_text = std::string(readback == "pops"
                                                       ? "every pop field, province unrest and empire treasuries"
                                                       : "province unrest and empire treasuries") +
@@ -432,25 +432,30 @@ int main(int argc, char** argv) {
     for (const auto& r : runs)
         if (r.cpu && r.threads == 1) one_thread = &r;
 
-    std::printf("\n%-46s %10s %19s %11s %9s %9s\n", "", "total ms", "p10 - p90", "compute ms", "vs 1 CPU", "start ms");
+    // the first column fits the longest name (device names run to 60 characters and more)
+    auto label_of = [](const Run& r) {
+        return r.cpu ? "CPU reference, " + std::to_string(r.threads) + (r.threads == 1 ? " thread" : " threads") : r.name;
+    };
+    int width = 30;
+    for (const auto& r : runs) width = std::max(width, static_cast<int>(std::min<size_t>(label_of(r).size(), 80)));
+    std::printf("\n%-*s %10s %19s %11s %9s %9s\n", width, "", "total ms", "p10 - p90", "compute ms", "vs 1 CPU", "start ms");
     for (const auto& r : runs) {
-        std::string label = r.cpu ? "CPU reference, " + std::to_string(r.threads) + (r.threads == 1 ? " thread" : " threads")
-                                  : r.name;
-        if (label.size() > 46) label = label.substr(0, 46);
+        std::string label = label_of(r);
+        if (label.size() > size_t(width)) label = label.substr(0, size_t(width));
         if (!r.error.empty() || !r.skipped.empty()) {
-            std::printf("%-46s %s: %s\n", label.c_str(), r.error.empty() ? "skipped" : "failed",
+            std::printf("%-*s %s: %s\n", width, label.c_str(), r.error.empty() ? "skipped" : "failed",
                         (r.error.empty() ? r.skipped : r.error).c_str());
             continue;
         }
         if (!r.differs.empty()) {
-            std::printf("%-46s INVALID: %s differs from the first run\n", label.c_str(), r.differs.c_str());
+            std::printf("%-*s INVALID: %s differs from the first run\n", width, label.c_str(), r.differs.c_str());
             continue;
         }
         char range[32], speed[16] = "";
         std::snprintf(range, sizeof range, "%.3f - %.3f", r.total.p10, r.total.p90);
         if (one_thread && r.total.median > 0)
             std::snprintf(speed, sizeof speed, "%.1fx", one_thread->total.median / r.total.median);
-        std::printf("%-46s %10.3f %19s %11.3f %9s %9.0f\n", label.c_str(), r.total.median, range, r.compute.median,
+        std::printf("%-*s %10.3f %19s %11.3f %9s %9.0f\n", width, label.c_str(), r.total.median, range, r.compute.median,
                     speed, r.start_ms);
     }
     if (first)
