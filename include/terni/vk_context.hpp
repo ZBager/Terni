@@ -52,6 +52,9 @@ struct DeviceInfo {
     // only if luid_valid.
     std::array<uint8_t, 8> luid{};
     bool luid_valid = false;
+    // The driver's name and version as it reports them ("NVIDIA 580.95.05", "radv Mesa 25.2.4");
+    // empty if the device predates Vulkan 1.2. For logs and benchmark results.
+    std::string driver;
 };
 
 enum class DevicePreference {

@@ -184,12 +184,20 @@ std::vector<DeviceInfo> VulkanContext::list_devices() {
         DeviceInfo info{i, props.deviceName, type_name(props.deviceType), why.empty(), why};
         info.vendor_id = props.vendorID;
         VkPhysicalDeviceIDProperties id{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES};
+        VkPhysicalDeviceDriverProperties driver{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES};
         VkPhysicalDeviceProperties2 p2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
         p2.pNext = &id;
+        const bool has_driver = props.apiVersion >= VK_API_VERSION_1_2;  // core from 1.2
+        if (has_driver) id.pNext = &driver;
         vkGetPhysicalDeviceProperties2(devs[i], &p2);
         std::copy(std::begin(id.deviceUUID), std::end(id.deviceUUID), info.uuid.begin());
         std::copy(std::begin(id.deviceLUID), std::end(id.deviceLUID), info.luid.begin());
         info.luid_valid = id.deviceLUIDValid == VK_TRUE;
+        if (has_driver) {
+            const std::string name(driver.driverName, std::find(driver.driverName, std::end(driver.driverName), '\0'));
+            const std::string version(driver.driverInfo, std::find(driver.driverInfo, std::end(driver.driverInfo), '\0'));
+            info.driver = version.empty() ? name : name + " " + version;
+        }
         out.push_back(std::move(info));
     }
     vkDestroyInstance(instance, nullptr);

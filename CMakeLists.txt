@@ -22,8 +22,9 @@ if(PROJECT_IS_TOP_LEVEL AND TERNI_RULE_COMPILER)
 endif()
 option(TERNI_BUILD_TOOLS "Build terni_run and terni_script_check" ${_terni_develop})
 option(TERNI_BUILD_TESTS "Build the test suite (needs glslc)" ${_terni_develop})
-if((TERNI_BUILD_TOOLS OR TERNI_BUILD_TESTS) AND NOT TERNI_RULE_COMPILER)
-  message(FATAL_ERROR "TERNI_BUILD_TOOLS and TERNI_BUILD_TESTS need TERNI_RULE_COMPILER")
+option(TERNI_BUILD_BENCHMARK "Build terni_bench, the benchmark against a CPU reference" ${_terni_develop})
+if((TERNI_BUILD_TOOLS OR TERNI_BUILD_TESTS OR TERNI_BUILD_BENCHMARK) AND NOT TERNI_RULE_COMPILER)
+  message(FATAL_ERROR "TERNI_BUILD_TOOLS, TERNI_BUILD_TESTS and TERNI_BUILD_BENCHMARK need TERNI_RULE_COMPILER")
 endif()
 
 find_package(Vulkan REQUIRED)
@@ -147,6 +148,36 @@ if(TERNI_BUILD_TOOLS)
 endif()
 
 # ---------------------------------------------------------------------------
+# Benchmark: the same world on Vulkan devices and on a CPU reference (bench/)
+# ---------------------------------------------------------------------------
+if(TERNI_BUILD_BENCHMARK)
+  add_library(terni_bench_world STATIC bench/bench_world.cpp bench/cpu_reference.cpp)
+  target_include_directories(terni_bench_world PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/bench)
+  target_link_libraries(terni_bench_world PUBLIC terni_core PRIVATE Threads::Threads)
+  target_compile_options(terni_bench_world PRIVATE ${TERNI_COMPILE_OPTIONS})
+
+  # results name the commit they were measured at; configuring again follows new commits
+  set(_terni_commit "unknown")
+  find_package(Git QUIET)
+  if(GIT_FOUND AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
+    execute_process(COMMAND ${GIT_EXECUTABLE} rev-parse --short=12 HEAD WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                    OUTPUT_VARIABLE _terni_head OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET RESULT_VARIABLE _terni_git)
+    if(_terni_git EQUAL 0 AND _terni_head)
+      set(_terni_commit ${_terni_head})
+    endif()
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git/logs/HEAD)
+      set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/.git/logs/HEAD)
+    endif()
+  endif()
+  add_executable(terni_bench bench/terni_bench.cpp bench/machine.cpp)
+  target_link_libraries(terni_bench PRIVATE terni_bench_world)
+  target_compile_options(terni_bench PRIVATE ${TERNI_COMPILE_OPTIONS})
+  target_compile_definitions(terni_bench PRIVATE TERNI_BENCH_TERNI_VERSION="${PROJECT_VERSION}"
+                                                 TERNI_BENCH_COMMIT="${_terni_commit}"
+                                                 TERNI_BENCH_BUILD_TYPE="$<CONFIG>")
+endif()
+
+# ---------------------------------------------------------------------------
 # Tests: `ctest --test-dir build`
 # ---------------------------------------------------------------------------
 if(TERNI_BUILD_TESTS)
@@ -251,6 +282,12 @@ if(TERNI_BUILD_TESTS)
       set_tests_properties(software_driver_alone PROPERTIES
                            ENVIRONMENT "VK_DRIVER_FILES=${CMAKE_CURRENT_BINARY_DIR}/no_vulkan_drivers")
     endif()
+  endif()
+
+  if(TERNI_BUILD_BENCHMARK)
+    # the CPU reference of the benchmark stays in step with its rules
+    terni_test(test_bench tests/test_bench.cpp terni_bench_world)
+    add_test(NAME benchmark_world COMMAND test_bench)
   endif()
 
   if(TERNI_BUILD_TOOLS)

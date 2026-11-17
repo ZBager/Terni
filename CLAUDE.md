@@ -70,11 +70,14 @@ ctest --test-dir build --output-on-failure
 - `./build/terni_run <game folder> [--ticks N] [--dump] [--prelude] [--device I] [--driver LIBRARY]` runs a
   data folder on every device and compares state hashes; `--prelude` prints the generated
   GLSL. `./build/hello_towns` is the getting-started example.
+- `./build/terni_bench [--size tiny|small|medium|large|huge|giant|colossal] [--threads 1,2,8|powers|sweep|all] [--json FILE]`
+  runs the benchmark world on every device and on the CPU reference, and fails if any
+  run ends in a different state (`docs/benchmark.md`).
 - `-DTERNI_RULE_COMPILER=OFF` builds only `Terni::runtime` (tools and tests need the
   compiler). `-DTERNI_SCRIPT_CORPUS="<game folders>"` adds the optional `script_corpus`
   test.
 - Do not benchmark while another program is using the GPU; tick times can rise
-  twentyfold and mislead.
+  twentyfold and mislead. Benchmark only Release builds.
 
 ## Layout
 
@@ -91,6 +94,7 @@ ctest --test-dir build --output-on-failure
 | `shaders/terni/` | The GLSL library, embedded into the binary at build time |
 | `tests/` | Test programs; `tests/data/` holds small games for loader tests, most of them broken on purpose |
 | `examples/` | `mini_galaxy` (a data folder) and `hello_towns` (a world in code) |
+| `bench/` | `terni_bench`: the benchmark world and its rules, the CPU reference, machine details |
 | `docs/` | User documentation, written for outside game developers |
 
 ## Changes that require other changes
@@ -110,6 +114,11 @@ ctest --test-dir build --output-on-failure
 - **New rules in tests or examples** must load without order warnings, or mark a
   deliberate line with `// terni: order ok`.
 - **Data-folder syntax** (`game_load.cpp`): update `docs/data-format.md`.
+- **The benchmark world** (`bench/`): every rule in `bench_world.cpp` has a twin in
+  `cpu_reference.cpp`; change both together (`test_bench` compares them on every
+  device), and bump `BENCH_VERSION` whenever the world, its rules or the host's events
+  change, since old results no longer compare. Update `docs/benchmark.md` if the sizes or
+  the reference results change.
 - **Public API that the engine plugins use** (`GameSim`, `GameSimOptions`, `Game`,
   `VulkanContext::list_devices`, `compile_rules`): after pushing, move the pin in
   [TerniIntegrations](https://github.com/ZBager/TerniIntegrations) (`native/CMakeLists.txt`),

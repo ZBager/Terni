@@ -52,36 +52,27 @@ Every integration offers the same things:
 One command that anyone can run to measure Terni on their own hardware, against a CPU
 implementation of the same simulation, with results that can be compared between
 machines. Every result is checked: a run whose state hashes differ is reported as
-invalid, not as a time.
+invalid, not as a time. See [Benchmark](benchmark.md).
 
-1. **The benchmark world**, built in code from a seed and a size, with generic entity
-   types: empires, provinces, pops, markets with several goods, and armies that come and
-   go. Its stages use what real games use: per-row rules, sums over refs (`agg`),
-   modifiers with expiry, inherited values, a workgroup stage, `rng_roll` and dynamic
-   entities. Sizes from small (1,000 provinces, 50,000 pops) to large (30,000
-   provinces, several million pops). The world has a version; results are comparable
+1. **The benchmark world** (done): empires, provinces, pops, markets with eight goods,
+   and armies that come and go, built in code from a seed and a size, from 1,024 to 100
+   million pops. Its stages use what real games use: per-row rules, sums through
+   atomics, modifiers with expiry and inheritance, a workgroup stage, `rng_roll`, a
+   monthly stage and dynamic entities. The world has a version; results are comparable
    only within one version and one size.
-2. **The CPU reference**: the same stages written as plain C++, the way a careful CPU
-   engine would write them (flat arrays, no allocation per entity, `terni::fx` and
-   `terni::rng`), giving the same state hash as Terni after every tick. It runs on a
-   chosen number of threads, from 1 to every logical core, with a pool that is created
-   once and each stage's rows split statically between threads. It is a fair baseline,
-   not the fastest CPU code possible; hand-written SIMD is out of scope.
-3. **`terni_bench`**, a tool that runs the world on every usable Vulkan device
-   (lavapipe included) and on the CPU reference at a list of thread counts (or a sweep
-   from 1 to all). It reports, after warm-up ticks, the median and spread of the wall
-   time per tick, the GPU time per tick and per stage, and the load and compile times
-   with a cold and a warm SPIR-V cache. It prints a table and, on request, a JSON file
-   with the machine (CPU, cores, GPUs, drivers, OS, compiler) and the Terni version.
-   lavapipe's own thread count can be set too, for a comparison with the CPU reference
-   on the same cores.
-4. **A smoke test** in the suite: a tiny world for a few ticks on every device and on
-   the CPU reference at 1 and several threads, comparing hashes only. It keeps the CPU
-   reference from drifting from the rules; timings are never checked in CI.
-5. **Documentation**: how to run the benchmark, what it measures and what it does not,
-   how to read the results (including the sizes where the CPU is faster), reference
-   results from a few machines, and a way to send in results through the issue
-   tracker.
+2. **The CPU reference** (done): the same stages in plain C++, written the way a careful
+   CPU engine would be. It gives the same state hash as Terni after every tick, on 1 to
+   every logical core.
+3. **`terni_bench`** (done): runs the world on every usable Vulkan device and on the
+   CPU reference at a list of thread counts. It reports the time per tick (median and
+   spread), the GPU time per tick and per stage, the compile and start times, and
+   lavapipe's thread count, and writes JSON with the machine, the drivers and the Terni
+   version.
+4. **A smoke test** (done): the tiny world on every device and on the CPU reference,
+   compared after every tick; timings are never checked in CI.
+5. **Documentation** (done, results from one machine so far): how to run it, what it
+   measures, how to read the results, and an issue template for sending them in. Still
+   to come: reference results from a desktop GPU, from Windows, and from Intel.
 
 ## Public releases
 

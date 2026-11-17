@@ -53,6 +53,12 @@ The first public version.
   `WorldBuilder::stage_schedule`) runs a stage only in some ticks; other ticks do not
   dispatch it, and its `clear` fields keep their values until it runs again.
   `ComputeRunner::tick()` and `tick_checked()` take the stages to run.
+- **Benchmark**: `terni_bench` runs a grand-strategy world (up to 100 million pops,
+  markets, modifiers, armies that come and go) on every Vulkan device and on a
+  multithreaded CPU implementation of the same rules, from 1 to all cores. Every run must
+  end with the same state hash. It reports the time per tick and per stage, and writes
+  JSON results; see `docs/benchmark.md`. `DeviceInfo::driver` gives a device's driver
+  name and version.
 - **Partial writes**: `GameSim::write_field(entity, field, row, index, words)` changes
   some values of one row of a sized field, so hosts need not mirror whole rows.
   Host writes queued for one tick now always apply in the order they were made, even

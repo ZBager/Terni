@@ -60,6 +60,7 @@ cmake -S . -B build -G Ninja && cmake --build build
 ctest --test-dir build                        # unit tests and GPU parity on every Vulkan device
 ./build/hello_towns                           # a world described in code
 ./build/terni_run examples/mini_galaxy --ticks 100 --dump   # a world from a data folder
+./build/terni_bench                           # how fast your GPUs and CPU run a grand-strategy tick
 ```
 
 Requirements: CMake 3.21+, a C++20 compiler (GCC, Clang, or Visual Studio 2022 or
@@ -111,6 +112,7 @@ They are tested on Linux and Windows.
 | [Determinism](docs/determinism.md) | The contract, order checks, parity testing |
 | [API reference](docs/api.md) | The public types and calls (lower-level details are in the headers) |
 | [Design](docs/design.md) | Why Terni is built this way, and what it measured |
+| [Benchmark](docs/benchmark.md) | Measure Terni on your hardware against a CPU implementation of the same world |
 | [Roadmap](docs/roadmap.md) | What comes next |
 | [Licensing](docs/licensing.md) | What a game using Terni may do and must do |
 
