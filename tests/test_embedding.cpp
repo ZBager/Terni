@@ -3,6 +3,7 @@
 // What a host engine relies on when embedding Terni: the embedded GLSL library,
 // device selection (preference / UUID), the SPIR-V cache and cache-only starts, a
 // host's global locale, and per-tick transfers.
+#include <algorithm>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -11,6 +12,8 @@
 #include <span>
 #include <sstream>
 #include <string>
+#include <thread>
+#include <vector>
 
 #include "terni/game.hpp"
 #include "terni/rng.hpp"
@@ -161,6 +164,33 @@ int main() {
         CompileStats warm;
         CHECK(run(*game, normal, &warm) == reference);
         CHECK(warm.cached == stages && warm.compiled == 0);
+    }
+
+    // ---- several writers of one cache at once (worlds starting together, two programs)
+    {
+        const fs::path shared = fs::path(TERNI_TEST_BINARY_DIR) / "test_cache_shared";
+        fs::remove_all(shared);
+        std::vector<std::thread> writers;
+        std::vector<int> ok(4, 0);
+        for (size_t t = 0; t < ok.size(); ++t)
+            writers.emplace_back([&, t] {
+                try {
+                    compile_rules(*game, shared.string());
+                    ok[t] = 1;
+                } catch (const std::exception& e) {
+                    std::printf("concurrent compile_rules: %s\n", e.what());
+                }
+            });
+        for (auto& w : writers) w.join();
+        CHECK(std::count(ok.begin(), ok.end(), 1) == int(ok.size()));
+        size_t files = 0;
+        for (const auto& e : fs::directory_iterator(shared)) files += e.path().extension() != ".tmp";
+        CHECK(files == stages);  // one file per shader, no temporary files left
+        for (const auto& e : fs::directory_iterator(shared)) CHECK(e.path().extension() != ".tmp");
+        // compiling again leaves the files alone (another program may have them open)
+        const auto stamp = fs::last_write_time(fs::directory_iterator(shared)->path());
+        CHECK(compile_rules(*game, shared.string()).cached == stages);
+        CHECK(fs::last_write_time(fs::directory_iterator(shared)->path()) == stamp);
     }
 
     // ---- a host's global C++ locale (digit grouping, decimal comma) changes nothing

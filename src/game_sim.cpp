@@ -16,6 +16,7 @@
 // per entity type, <ENTITY>_CAPACITY, so the SPIR-V does not depend on capacities.
 
 #include <algorithm>
+#include <atomic>
 #include <bit>
 #include <chrono>
 #include <cstdio>
@@ -26,6 +27,7 @@
 #include <locale>
 #include <sstream>
 #include <stdexcept>
+#include <thread>
 
 #include "terni/compute_runner.hpp"
 #include "terni/fixed.hpp"
@@ -666,8 +668,14 @@ bool cache_load(const std::string& dir, uint64_t key, std::vector<uint32_t>& spi
 }
 
 // Written to a temporary file, then renamed: readers never see a partial file. A failed
-// write (a read-only folder, say) only costs a compile at the next start.
+// write (a read-only folder, say) only costs a compile at the next start. Several writers
+// at once (two worlds starting, two programs compiling) are safe: a file that already
+// holds the right shader is left alone (on Windows a file another process has open cannot
+// be replaced), each writer has its own temporary file, and a rename that loses to another
+// writer of the same shader is fine.
 void cache_store(const std::string& dir, uint64_t key, const std::vector<uint32_t>& spirv) {
+    std::vector<uint32_t> existing;
+    if (cache_load(dir, key, existing) && existing == spirv) return;
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
     Writer body;
@@ -677,7 +685,12 @@ void cache_store(const std::string& dir, uint64_t key, const std::vector<uint32_
     w.u64(key), w.u32(static_cast<uint32_t>(spirv.size())), w.u64(fnv64(body.buf.data(), body.buf.size()));
     w.buf.insert(w.buf.end(), body.buf.begin(), body.buf.end());
     const std::filesystem::path file = cache_file(dir, key);
-    const std::filesystem::path tmp = file.string() + ".tmp";
+    static std::atomic<uint64_t> writes{0};
+    std::ostringstream unique;
+    unique.imbue(std::locale::classic());
+    unique << std::hex << std::hash<std::thread::id>{}(std::this_thread::get_id()) << '-'
+           << std::chrono::steady_clock::now().time_since_epoch().count() << '-' << writes++;
+    const std::filesystem::path tmp = file.string() + "." + unique.str() + ".tmp";
     {
         std::ofstream out(tmp, std::ios::binary);
         out.write(reinterpret_cast<const char*>(w.buf.data()), std::streamsize(w.buf.size()));
