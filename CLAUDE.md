@@ -16,6 +16,9 @@ otherwise, and update it when an item is done or the plan changes.
   or documentation that refer to a particular engine, game or private project that uses
   Terni. Integrations live in those projects. Use generic examples (planets, empires,
   provinces, towns). Before committing, grep the diff for anything project-specific.
+  One exception: `docs/roadmap.md` may name public engines as targets of the planned
+  integrations. The integrations themselves, their code and their examples live in a
+  separate repository, never here.
 - **Determinism is the product.** No floating point in simulation state; fixed point
   through `fx_*` / `terni::fx`; sums through integer atomics on `agg` values; randomness
   only from `rng_roll(entity, tick, salt)`; a stage never reads a row another thread of the

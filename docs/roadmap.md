@@ -12,10 +12,38 @@ and the preparation of stable public releases. The order is a priority, not a pr
 
 ## Public releases
 
-1. **Versioned releases** with a changelog and a stable API from 1.0, and a shared
-   library build for engines that load Terni from other languages.
+1. **Versioned releases** with a changelog and a stable API from 1.0.
 2. **Mod tooling**: `terni_script_check` and the order warnings as one command a
    modder runs before publishing.
+
+## Engine integrations
+
+Plugins that let a game use Terni through an engine's own scripting and editor, without
+touching Vulkan or the C++ API. They live in a separate repository and link Terni as a
+library; Terni itself stays engine-agnostic, and changes here only when the change
+helps every host. They are done one at a time, each finished and tested before the
+next begins. Windows and Linux first.
+
+1. **Flax Engine**: a C++ plugin with generated C# bindings and Visual Scripting nodes.
+2. **Godot**: a GDExtension addon for GDScript and C#.
+3. **A C API and a shared library build**, in Terni itself, for engines that cannot
+   link the C++ library or that load Terni from other languages. The two integrations
+   below are built on it.
+4. **Unreal Engine**: a runtime plugin with a Blueprint API.
+5. **Unity**: a package of C# bindings.
+
+Every integration offers the same things:
+
+- Load a world, tick it (blocking or in the background), save and load, with the same
+  results as Terni on its own.
+- Read fields in bulk through subscriptions, never row by row; write fields and
+  modifiers, and create and destroy entities.
+- Choose the device, fall back to a software Vulkan driver, and ship precompiled SPIR-V
+  with `Terni::runtime`.
+- Report load, compile and run-time errors through the engine's own log and events.
+- Release everything cleanly on shutdown, scene changes and script or editor reloads.
+- An editor panel to configure a world, pick a device and inspect state.
+- Installation steps, API documentation and an example project.
 
 Not planned: DirectX or Metal back ends, and consoles.
 
