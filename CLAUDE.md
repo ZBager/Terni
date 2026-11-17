@@ -110,6 +110,11 @@ ctest --test-dir build --output-on-failure
 - **New rules in tests or examples** must load without order warnings, or mark a
   deliberate line with `// terni: order ok`.
 - **Data-folder syntax** (`game_load.cpp`): update `docs/data-format.md`.
+- **Public API that the engine plugins use** (`GameSim`, `GameSimOptions`, `Game`,
+  `VulkanContext::list_devices`, `compile_rules`): after pushing, move the pin in
+  [TerniIntegrations](https://github.com/ZBager/TerniIntegrations) (`native/CMakeLists.txt`),
+  update `native/bridge` if the API changed, and run both plugins' tests (see its
+  `CLAUDE.md`).
 - **Dynamic entity types**: rows that rules ask for are given out by the built-in stages
   of `spawn_stage_sources()`, rows the host asks for by `Impl::allocate()`, both by the
   same rule (lowest free row; a destroyed row rests one tick). `tests/test_dynamic.cpp`
