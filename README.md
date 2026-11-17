@@ -83,6 +83,22 @@ sim.tick();
 std::span<const int32_t> pop = sim.tick_result(pops);
 ```
 
+## Engine plugins
+
+[TerniIntegrations](https://github.com/ZBager/TerniIntegrations) has plugins that run
+a Terni game folder from an engine's own scripting and editor, without touching Vulkan
+or the C++ API:
+
+| Engine | Plugin |
+| --- | --- |
+| Flax Engine 1.13 | C++, C# and Visual Scripting; a Terni window in the editor; cooked games |
+| Godot 4.5+ | GDScript and C#; a Terni tab in the debugger; exported games |
+| Unreal Engine, Unity | Planned |
+
+Both run the simulation on the GPU the engine renders with, start and tick it without
+holding up frames, and ship the rule compiler with the game so mods can change rules.
+They are tested on Linux and Windows.
+
 ## Documentation
 
 | Guide | What it covers |
@@ -91,7 +107,7 @@ std::span<const int32_t> pop = sim.tick_result(pops);
 | [Concepts](docs/concepts.md) | Entities, fields, stages, the tick, modifiers, who owns what |
 | [Data format](docs/data-format.md) | `schema/`, `common/`, `history/` and `rules/` in detail |
 | [Writing rules](docs/writing-rules.md) | The generated GLSL names, fixed point, sums, randomness, the GLSL library |
-| [Embedding in an engine](docs/embedding.md) | Devices, the per-tick loop, shipping, saves, lockstep multiplayer |
+| [Embedding in an engine](docs/embedding.md) | Devices, the per-tick loop, shipping, saves, lockstep multiplayer; the ready-made engine plugins |
 | [Determinism](docs/determinism.md) | The contract, order checks, parity testing |
 | [API reference](docs/api.md) | The public types and calls (lower-level details are in the headers) |
 | [Design](docs/design.md) | Why Terni is built this way, and what it measured |

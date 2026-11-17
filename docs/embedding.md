@@ -5,6 +5,13 @@ instance and device, so it works next to any renderer (Vulkan, DirectX, OpenGL) 
 programs without one (dedicated servers, tests). This guide covers adding it to a
 build, running the tick in a game loop, shipping, saves and lockstep multiplayer.
 
+**Using Flax Engine or Godot?**
+[TerniIntegrations](https://github.com/ZBager/TerniIntegrations) has plugins for both
+that do what this guide describes (device choice, background ticks, shipping the
+compiled rules and the compiler, licence notices) and expose Terni to the engine's
+scripting languages and editor. Their source is also a worked example of embedding
+Terni.
+
 ## Adding Terni to your build
 
 As a subdirectory (a git submodule or a copy):
@@ -280,7 +287,10 @@ terni::GameSim sim(*game, options);
 ```
 
 If a rule is missing from the cache (a mod changed it), the start fails with one
-error that names every missing stage. The cache key covers the full rule source
+error that names every missing stage. To let mods change rules anyway, ship the build
+tool with the game and run it into the same cache folder when a start fails, then start
+again: the tool needs shaderc, the game does not. Several programs and worlds may compile
+into one cache folder at once. The cache key covers the full rule source
 (including the generated prelude, so the schema counts, but not capacities, which are
 set when the world starts), the GLSL library and the compile settings, but not the
 compiler version: a cache built on one machine works on every other. Every file carries a content hash, so a damaged file is never handed to
@@ -337,4 +347,7 @@ Terni's API is C++. A C API in Terni itself, with a shared library build, is on 
 shared library of their own: `extern "C"` functions over a handle, catching every
 exception and returning an error code, with the message available through a
 `last_error()` call. Keep the glue thin: load, start, tick, read and write fields by
-name, modifiers, save and load.
+name, modifiers, save and load. Engines whose own headers are not C++20, or that build
+without exceptions, can start from `terni_bridge` in
+[TerniIntegrations](https://github.com/ZBager/TerniIntegrations): Terni behind a C++14
+interface where no call throws.

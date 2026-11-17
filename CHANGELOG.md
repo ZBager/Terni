@@ -23,7 +23,8 @@ The first public version.
 - **Saves and multiplayer**: complete, versioned saves that continue bit-identically on
   any device; `game_checksum()` over everything that defines behaviour.
 - **Shipping**: a SPIR-V cache keyed by source, not by compiler; `compile_rules()`;
-  `Terni::runtime`, a build without the shader compiler; `cache_only`.
+  `Terni::runtime`, a build without the shader compiler; `cache_only`. Several worlds or
+  programs may compile into one cache folder at once.
 - **Determinism checks**: load-time warnings for stages whose result can depend on thread
   order; `GameSim::tick_checked()` to confirm at run time.
 - **Platforms**: Linux, and Windows with Visual Studio 2022 and 2026 (MSVC) or MinGW-w64,

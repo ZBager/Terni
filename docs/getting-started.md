@@ -194,6 +194,9 @@ As a subproject only the libraries are built. See
 [Embedding in an engine](embedding.md) for FetchContent, `find_package`, the
 build without the shader compiler, and how to run the tick inside a game loop.
 
+With Flax Engine or Godot, use the plugins in [TerniIntegrations](https://github.com/ZBager/TerniIntegrations) instead: they
+bring Terni to the engine's scripting and editor.
+
 ## Next
 
 - [Concepts](concepts.md): what a world is made of, and who owns what.

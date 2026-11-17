@@ -14,12 +14,14 @@ otherwise, and update it when an item is done or the plan changes.
 
 - **Terni is standalone and engine-agnostic.** Never add code, names, comments, examples
   or documentation that refer to a particular engine, game or private project that uses
-  Terni. Integrations live in those projects, and engine plugins in the separate
-  integrations repository. Use generic examples (planets, empires, provinces, towns).
+  Terni. Integrations live in those projects, and engine plugins in
+  [TerniIntegrations](https://github.com/ZBager/TerniIntegrations). Use generic examples (planets, empires, provinces, towns).
   Before committing, grep the diff for anything project-specific.
-  One exception: `docs/roadmap.md` may name public engines as targets of the planned
-  integrations. The integrations themselves, their code and their examples live in a
-  separate repository, never here.
+  One exception: documentation may name public engines (Flax Engine, Godot, Unreal
+  Engine, Unity) where it points to TerniIntegrations or plans its plugins (the README's
+  engine plugins section, the roadmap, the guides' pointers). The plugins themselves,
+  their code and their examples live in TerniIntegrations, never here; code, tests and
+  examples in Terni stay engine-agnostic.
 - **Determinism is the product.** No floating point in simulation state; fixed point
   through `fx_*` / `terni::fx`; sums through integer atomics on `agg` values; randomness
   only from `rng_roll(entity, tick, salt)`; a stage never reads a row another thread of the

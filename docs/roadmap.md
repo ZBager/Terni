@@ -14,16 +14,20 @@ is a priority, not a promise.
 ## Engine integrations
 
 Plugins that let a game use Terni through an engine's own scripting and editor, without
-touching Vulkan or the C++ API. They live in a separate repository and link Terni as a
-library; Terni itself stays engine-agnostic, and changes here only when the change
+touching Vulkan or the C++ API. They live in [TerniIntegrations](https://github.com/ZBager/TerniIntegrations) and link Terni as
+a library; Terni itself stays engine-agnostic, and changes here only when the change
 helps every host. They are done one at a time, each finished and tested before the
 next begins. Windows and Linux first.
 
-1. **Flax Engine** (done, not yet published): a plugin for C++, C# and Visual
+1. **Flax Engine** (done): a plugin for C++, C# and Visual
    Scripting, with background starts and ticks, cooked games that ship the rule
    compiler (so mods can change rules), and the simulation on the GPU the engine renders
    with. Tested on Linux and Windows. Still to come: shipping a software Vulkan driver.
-2. **Godot**: a GDExtension addon for GDScript and C#.
+2. **Godot** (done): a GDExtension addon for GDScript and C#, with
+   background starts and ticks, a Terni tab in the debugger, exported games that ship
+   the rule compiler, and the simulation on the GPU the engine renders with (Vulkan or
+   Direct3D 12). Tested on Linux and Windows. Still to come: shipping a software Vulkan
+   driver.
 3. **A C API and a shared library build**, in Terni itself, for engines that cannot
    link the C++ library or that load Terni from other languages. The two integrations
    below are built on it.
