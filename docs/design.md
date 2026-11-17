@@ -12,7 +12,7 @@ experiments measured.
 | 32-bit fixed point, no floats in the state | Floating-point results differ between GPUs, drivers and compilers; integer results do not. 32-bit was 1.4–3x faster than 64-bit in the experiments and needs no 64-bit GPU features, which many shader paths lack | Rules use `fx_mul`/`fx_div`; values past 32 bits need `money64` or the wide-integer library |
 | Terni's own Vulkan device and GLSL | Engines' shader pipelines differ (HLSL compiled through glslang, for example, has no 64-bit integers); Terni's own device runs the same SPIR-V everywhere and stays engine-independent | A second Vulkan device in the process; the simulation does not share the renderer's queue |
 | Worlds described as data, compiled to shaders at load time | Mods can change the rules, not only the numbers; the game checksum covers the rules, so peers must agree | A shader compiler at run time, or a cache prepared at build time (`Terni::runtime`) |
-| Terni owns the state; the host sends commands and reads results | One authoritative state on the GPU. Moving state between CPU and GPU every tick is costly: in the benchmark, reading every pop back each tick makes a tick on a laptop RTX 4050 more than five times longer | Hosts keep small read-only views, refreshed once per tick |
+| Terni owns the state; the host sends commands and reads results | One authoritative state on the GPU. Moving state between CPU and GPU every tick is costly: in the benchmark, reading every pop back each tick takes a laptop RTX 4050 almost six times as long as computing the tick | Hosts keep small read-only views, refreshed once per tick |
 | Modifiers stored on the host, decided by the host | Research, focuses and events are game logic that changes rarely; Terni only keeps exact totals and expiries | Every modifier change goes through the API |
 | One pre-recorded command buffer per tick, batched transfers | A tick costs one GPU round trip, uploads and readbacks included | Writes and reads take effect at tick boundaries |
 | Sums through integer atomics | Integer addition gives the same total in any order | Rules must not read rows other threads write in the same stage (checked) |
@@ -28,22 +28,25 @@ device and on a multithreaded C++ implementation of the same rules, which must g
 same bits. Its baseline is the `medium` world, with 1 million pops. On a laptop with a
 Ryzen 5 7640HS (6 cores, 12 threads), an RTX 4050 and a Radeon 760M:
 
-- **The GPU pays for all but the smallest worlds.** With 1 million pops, a tick takes
-  0.65 ms on the RTX 4050, readback included, against 31.4 ms on one CPU thread and
-  4.8 ms on twelve: 48 and 7 times faster. The lead grows with the world: with 100
-  million pops it is 53 ms against 3.2 s and 483 ms. In the smallest world (1,024 pops)
-  the CPU wins, 0.03 ms against 0.06 ms: a GPU tick costs a submission and a wait,
-  however little work it has.
-- **Integrated GPUs pay too.** The Radeon 760M runs the 1-million-pop world in 1.9 ms,
-  17 times faster than one CPU thread and more than twice as fast as twelve.
-- **Keep the state on the GPU.** Reading every pop back each tick (31 MiB for 1 million
-  pops) takes the RTX 4050's tick from 0.65 ms to 3.5 ms. Reading back what an interface
-  shows costs almost nothing.
-- **A software driver is a fallback, not a replacement.** lavapipe runs the
-  1-million-pop world in 38 ms on twelve threads: 8 times slower than the C++ on the
-  same threads, and 59 times slower than the RTX 4050.
+- **The GPU computes far faster.** With 1 million pops, the stages take 0.53 ms on the
+  RTX 4050 against 31.7 ms on one CPU thread and 5.1 ms on twelve: 60 and 10 times
+  faster. A desktop RTX 4070 Ti takes 0.16 ms. The lead grows with the world: with 100
+  million pops the RTX 4050 computes a tick in 52 ms, against 3.2 s and 483 ms. In the
+  smallest world (1,024 pops) the CPU wins, 0.03 ms against 0.06 ms: a GPU tick costs a
+  submission and a wait, however little work it has.
+- **Keep the state on the GPU.** The benchmark copies every pop back to system memory
+  each tick (31 MiB for 1 million pops). That takes the RTX 4050's tick from 0.53 ms to
+  3.5 ms in all, still 1.4 times faster than twelve CPU threads; the RTX 4070 Ti, with
+  twice the PCIe bandwidth, takes 1.5 ms, 2.8 times faster than sixteen. Reading back
+  only what an interface shows costs almost nothing (0.65 ms on the RTX 4050).
+- **Integrated GPUs pay too.** The Radeon 760M computes the 1-million-pop world in
+  1.7 ms, 19 times faster than one CPU thread. It shares the system's memory, so
+  reading every pop back costs it little: 2.6 ms in all, less than the RTX 4050.
+- **A software driver is a fallback, not a replacement.** lavapipe computes the
+  1-million-pop world in 38 ms on twelve threads: 7 times slower than the C++ on the
+  same threads, and 72 times slower than the RTX 4050.
 - **Exact everywhere.** Every run, on every device and thread count, ends with the same
-  state hash.
+  state hash, on five machines with NVIDIA, AMD and Intel GPUs, a Steam Deck among them.
 
 ## What the first experiments measured
 

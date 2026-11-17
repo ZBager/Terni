@@ -86,8 +86,8 @@ void usage() {
         "  --threads LIST          CPU reference thread counts: 1,2,8 | powers (default: 1, 2, 4, ... and all)\n"
         "                          | sweep (every count from 1 to all) | all\n"
         "  --no-cpu                no CPU reference\n"
-        "  --readback WHAT         read back every tick: ui (default: province unrest and empire\n"
-        "                          treasuries) or pops (also every field of every pop)\n"
+        "  --readback WHAT         read back every tick: pops (default: every field of every pop, and\n"
+        "                          ui) or ui (only province unrest and empire treasuries)\n"
         "  --stages                print the GPU time of every stage\n"
         "  --json FILE             also write the results as JSON\n"
         "  --list                  list the sizes and the Vulkan devices, and stop");
@@ -178,7 +178,7 @@ int main(int argc, char** argv) {
     std::vector<std::string> drivers;
     std::string thread_spec = "powers", json_path, lavapipe_threads;
     bool gpu = true, cpu = true, show_stages = false, list = false, resized = false;
-    std::string readback = "ui";
+    std::string readback = "pops";
 
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];

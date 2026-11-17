@@ -16,6 +16,7 @@ driver that runs on the CPU, is enough to start.
 | --- | --- |
 | Arch Linux | `cmake ninja gcc vulkan-headers vulkan-icd-loader shaderc vulkan-swrast` (lavapipe) |
 | Debian / Ubuntu | `cmake ninja-build g++ libvulkan-dev glslc libshaderc-dev mesa-vulkan-drivers` |
+| SteamOS (Steam Deck) | SteamOS installs packages without their header files, so build in an Arch Linux container: `distrobox create -i archlinux:latest -n terni`, `distrobox enter terni`, then the Arch Linux packages and `vulkan-radeon` |
 | Windows (Visual Studio) | Visual Studio 2022 or 2026 with "Desktop development with C++" (includes CMake and Ninja), and the [Vulkan SDK](https://vulkan.lunarg.com/sdk/home#windows) (includes shaderc and `glslc`) |
 | Windows (MSYS2, UCRT64 shell) | `mingw-w64-ucrt-x86_64-{gcc,libgomp,cmake,ninja,vulkan-headers,vulkan-loader,shaderc}` |
 

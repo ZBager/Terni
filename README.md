@@ -19,9 +19,10 @@ game loads, so mods can change the rules themselves, not only the numbers.
   the same world gives the same state hash on NVIDIA, AMD and the CPU (Mesa's
   lavapipe), across saves and over the network.
 - **Fast at scale.** One pre-recorded command buffer per tick. In Terni's benchmark, a
-  world of 1 million pops runs a tick in 0.65 ms on a laptop RTX 4050, readback
-  included: 48 times faster than the same simulation in C++ on one CPU thread, and 7
-  times faster than on all twelve. 100 million pops take 53 ms. `terni_bench` measures
+  world of 1 million pops computes a tick in 0.53 ms on a laptop RTX 4050 and 0.16 ms on
+  a desktop RTX 4070 Ti: 60 and 186 times faster than the same simulation in C++ on one
+  CPU thread. Even with every pop copied back to system memory every tick, the RTX 4070
+  Ti is 2.8 times faster than all 16 threads of a Ryzen 7800X3D. `terni_bench` measures
   your own hardware ([Benchmark](docs/benchmark.md)).
 - **Data-driven and moddable.** Entities, fields, constants, modifiers, starting
   state and stage order come from text files; rules are GLSL. Errors are reported as
@@ -53,7 +54,7 @@ in development, but the API can still change between versions.
 | Linux | Developed and tested here: NVIDIA (proprietary driver), AMD (RADV), lavapipe |
 | Windows | Visual Studio 2022 and 2026 (MSVC), and MinGW-w64 (MSYS2). Continuous integration runs the whole test suite with both, on lavapipe; parity also checked on an NVIDIA and an AMD GPU |
 | macOS, consoles, web | Not supported |
-| GPUs | Vulkan 1.3 with synchronization2; no 64-bit shader features needed. Intel GPUs are untested |
+| GPUs | Vulkan 1.3 with synchronization2; no 64-bit shader features needed. Intel: the benchmark gives identical results on an HD Graphics 620; the test suite has not yet run on an Intel GPU |
 
 ## Quick start
 

@@ -70,7 +70,7 @@ ctest --test-dir build --output-on-failure
 - `./build/terni_run <game folder> [--ticks N] [--dump] [--prelude] [--device I] [--driver LIBRARY]` runs a
   data folder on every device and compares state hashes; `--prelude` prints the generated
   GLSL. `./build/hello_towns` is the getting-started example.
-- `./build/terni_bench [--size tiny|small|medium|large|huge|giant|colossal] [--threads 1,2,8|powers|sweep|all] [--readback ui|pops] [--json FILE]`
+- `./build/terni_bench [--size tiny|small|medium|large|huge|giant|colossal] [--threads 1,2,8|powers|sweep|all] [--readback pops|ui] [--json FILE]`
   runs the benchmark world on every device and on the CPU reference, and fails if any
   run ends in a different state (`docs/benchmark.md`).
 - `-DTERNI_RULE_COMPILER=OFF` builds only `Terni::runtime` (tools and tests need the

@@ -58,8 +58,9 @@ The first public version.
   multithreaded CPU implementation of the same rules, from 1 to all cores. Every run must
   end with the same state hash. It reports the total time per tick (compute,
   readback, submission) and the compute time alone, per stage too, and writes JSON
-  results (`docs/benchmark.md`). `--readback pops` also copies every pop to system
-  memory every tick. `DeviceInfo::driver` gives a device's driver name and version.
+  results (`docs/benchmark.md`). By default every pop is copied back to system memory
+  every tick; `--readback ui` reads back only two fields, as a game's interface would.
+  `DeviceInfo::driver` gives a device's driver name and version.
 - **Partial writes**: `GameSim::write_field(entity, field, row, index, words)` changes
   some values of one row of a sized field, so hosts need not mirror whole rows.
   Host writes queued for one tick now always apply in the order they were made, even
