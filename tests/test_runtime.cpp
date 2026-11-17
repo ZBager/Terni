@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception-1.0
+// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception
 // Copyright (C) 2026 Rafał Zając
 // Terni::runtime: the library without the rule compiler (no shaderc). It loads every
 // rule from the SPIR-V cache that test_cache_fill made with Terni::core, reaches the

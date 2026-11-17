@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception-1.0
+// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception
 // Copyright (C) 2026 Rafał Zając
 // What a host engine relies on when embedding Terni: the embedded GLSL library,
 // device selection (preference / UUID), the SPIR-V cache and cache-only starts, a

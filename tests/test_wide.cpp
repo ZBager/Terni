@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception-1.0
+// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception
 // Copyright (C) 2026 Rafał Zając
 // GPU parity of the 64/128-bit helpers in shaders/terni/wide.glsl (products, comparisons,
 // truncating division with saturation) against __int128 on the CPU, on every device.

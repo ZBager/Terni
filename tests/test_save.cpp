@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception-1.0
+// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception
 // Copyright (C) 2026 Rafał Zając
 // Save / load: replay equivalence across devices, byte-identical round trips,
 // surviving modifier handles, and rejection of foreign / corrupt saves.

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception-1.0
+// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception
 // Copyright (C) 2026 Rafał Zając
 // Capacities chosen at run time: Game::set_capacity() resizes a loaded or built world,
 // the rules see the new <ENTITY>_CAPACITY (a specialization constant, also in the

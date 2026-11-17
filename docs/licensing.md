@@ -43,6 +43,16 @@ https://github.com/ZBager/Terni/blob/main/LICENSE
 https://github.com/ZBager/Terni/blob/main/LICENSE-EXCEPTION
 ```
 
+## Shipping the rule compiler
+
+`Terni::core` compiles rules with shaderc, which comes with glslang and SPIRV-Tools.
+They are under the Apache License 2.0 and BSD-style licences. The exception says
+plainly that Terni may be combined and shipped with libraries under the Apache
+License 2.0; they stay under their own licences. If your game ships them (as shared
+libraries, or linked into a program), include their licence texts and notices, as
+those licences ask. A game that ships only `Terni::runtime` and a SPIR-V cache
+contains none of them.
+
 ## Where the line is
 
 | Your work | Licence |

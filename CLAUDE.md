@@ -30,7 +30,7 @@ otherwise, and update it when an item is done or the plan changes.
   include shaderc; the `runtime_without_shaderc` test checks the binary.
 - **Licence header on every new source file** (C++, GLSL, CMake), as the first two lines:
   ```
-  // SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception-1.0
+  // SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception
   // Copyright (C) 2026 Rafał Zając
   ```
   (`#` comments in CMake files). Do not change `LICENSE` or `LICENSE-EXCEPTION`.

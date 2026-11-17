@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception-1.0
+// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception
 // Copyright (C) 2026 Rafał Zając
 // Stage schedules (`every`, `offset`): a scheduled stage runs only in its ticks, its
 // `clear` fields are zeroed only then (so a total lasts until the next run), saves

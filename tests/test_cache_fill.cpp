@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception-1.0
+// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception
 // Copyright (C) 2026 Rafał Zając
 // Fixture for test_runtime (Terni::core): fills a SPIR-V cache with compile_rules(),
 // which needs no Vulkan device, and writes the state hash a run of this build reaches,

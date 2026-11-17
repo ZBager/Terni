@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception-1.0
+# SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception
 # Copyright (C) 2026 Rafał Zając
 # Generates a C++ source holding the Terni GLSL library (shaders/terni/*.glsl), so
 # hosts don't have to ship or locate those files at runtime.

@@ -73,4 +73,7 @@ The first public version.
   `ComputeRunner::tick_submit()`, `tick_done()` and `tick_wait()`;
   `VulkanContext::submit()`, `submitted_done()` and `wait_submitted()`.
 - **Licence**: LGPL 2.1 with the Terni Linking Exception (static linking, no relinking or
-  reverse-engineering terms for games, compiled shaders belong to the game).
+  reverse-engineering terms for games, compiled shaders belong to the game). Version
+  1.1 of the exception adds that Terni may be combined and shipped with libraries
+  under the Apache License 2.0, such as shaderc. The SPDX line of the source files no
+  longer carries the exception's version.

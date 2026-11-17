@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception-1.0
+// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception
 // Copyright (C) 2026 Rafał Zając
 // Order lint: when a world is built, every stage's GLSL is scanned for fields whose final
 // values can depend on the order the stage's threads run in. The GPU runs the threads of

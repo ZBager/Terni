@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception-1.0
+// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception
 // Copyright (C) 2026 Rafał Zając
 // A tick that does not block: begin_tick() / tick_ready() / end_tick(). A host that
 // issues its commands while the previous tick runs (writes, partial writes, inherit-field

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception-1.0
+// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception
 // Copyright (C) 2026 Rafał Zając
 // GPU parity test: every GLSL primitive in shaders/terni/ must produce the same
 // bits as its C++ counterpart, on every Vulkan device in the machine.

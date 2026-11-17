@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception-1.0
+// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception
 // Copyright (C) 2026 Rafał Zając
 // Terni fixed-point arithmetic — GPU mirror of include/terni/fixed.hpp.
 // Pure 32-bit: only int/uint, so it compiles anywhere (no 64-bit extensions).

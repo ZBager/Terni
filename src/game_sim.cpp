@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception-1.0
+// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception
 // Copyright (C) 2026 Rafał Zając
 // GameSim: GLSL prelude generation, the SPIR-V cache (rules are compiled by
 // rule_compiler_*.cpp), the modifier store, and running a world on a Vulkan device.

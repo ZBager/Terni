@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception-1.0
+// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception
 // Copyright (C) 2026 Rafał Zając
 // A machine without a Vulkan driver: no devices and a clear error, until the game adds
 // the software driver it ships with add_vulkan_driver(); then the rules run on the CPU.

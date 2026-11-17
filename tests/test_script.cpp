@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception-1.0
+// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception
 // Copyright (C) 2026 Rafał Zając
 // Paradox script parser: one synthetic case per syntax feature found in
 // HOI4 / Stellaris / EU4 / EU5 / CK3 / Victoria 3.

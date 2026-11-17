@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception-1.0
+// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception
 // Copyright (C) 2026 Rafał Zając
 // Terni::runtime: no rule compiler, so no shaderc. Every rule comes from the SPIR-V
 // cache, filled beforehand by terni::compile_rules() in a build that has one.

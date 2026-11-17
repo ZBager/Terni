@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception-1.0
+// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception
 // Copyright (C) 2026 Rafał Zając
 // Partial writes: write_field(entity, field, row, index, words) changes some values of one
 // row of a sized field and leaves the rest as the GPU has it. Writes queued for one tick
