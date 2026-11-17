@@ -332,7 +332,9 @@ Terni does not include networking; it gives you a state that is the same everywh
 
 ## Wrapping Terni for C# or other languages
 
-Terni's API is C++. Engines in other languages usually add a small C API in a shared
-library: `extern "C"` functions over a handle, catching every exception and returning
-an error code, with the message available through a `last_error()` call. Keep the
-glue thin: load, start, tick, read and write fields by name, modifiers, save and load.
+Terni's API is C++. A C API in Terni itself, with a shared library build, is on the
+[roadmap](roadmap.md). Until then, engines in other languages add a small C API in a
+shared library of their own: `extern "C"` functions over a handle, catching every
+exception and returning an error code, with the message available through a
+`last_error()` call. Keep the glue thin: load, start, tick, read and write fields by
+name, modifiers, save and load.

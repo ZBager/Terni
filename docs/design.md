@@ -19,7 +19,7 @@ measured.
 | Fixed capacity per entity type, set before the world starts | Buffers stay static; no memory is allocated during play. Capacities are specialization constants, so one compiled set of rules serves every map size | A world cannot outgrow its capacities; entities that come and go live in the rows of a dynamic entity type, up to its capacity |
 | Entities are created at the end of a tick, never in the middle of a stage | Threads that each grabbed a free row would get different rows from run to run. Rules ask through a count field instead; built-in stages number the requests and the free rows in a fixed order, and request k takes free row k, as a single thread would | A new entity is alive from the next tick; the built-in stages pass over the rows of dynamic entity types every tick |
 | A destroyed row rests for one tick before it is used again | Every death and every new row shows in the one bit per row the host reads back each tick, and rules that hold a ref get a tick to see the entity gone | A row cannot be reused at once; refs checked less often than every tick compare generations |
-| A standalone library with no engine code | It is meant to be embedded by any engine | Integrations live in the games that use it |
+| A standalone library with no engine code | It is meant to be embedded by any engine | Engine plugins live in a separate repository (see the [roadmap](roadmap.md)), and games can embed Terni directly |
 
 ## What the experiments measured
 
@@ -65,5 +65,6 @@ several features:
 | Games kept their own pools of rows with an "alive" field, and their own rules for reusing them | Dynamic entity types: `dynamic = yes`, `spawn`, `create_entity()` |
 | A machine without a Vulkan 1.3 GPU could not run a game at all | `add_vulkan_driver()` with a software driver shipped by the game |
 | Another program on the GPU made ticks twenty times slower, unnoticed | `device_health()` and `move_to_device()` |
+| A host that renders with DirectX could not ask for the GPU it renders with | `GameSimOptions::device_luid` |
 
 The ones still open are on the [roadmap](roadmap.md).

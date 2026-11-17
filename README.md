@@ -49,7 +49,7 @@ in development, but the API can still change between versions.
 | Platform | Status |
 | --- | --- |
 | Linux | Developed and tested here: NVIDIA (proprietary driver), AMD (RADV), lavapipe |
-| Windows | Visual Studio 2022 and 2026 (MSVC), and MinGW-w64 (MSYS2). Continuous integration runs the whole test suite with both, on lavapipe |
+| Windows | Visual Studio 2022 and 2026 (MSVC), and MinGW-w64 (MSYS2). Continuous integration runs the whole test suite with both, on lavapipe; parity also checked on an NVIDIA and an AMD GPU |
 | macOS, consoles, web | Not supported |
 | GPUs | Vulkan 1.3 with synchronization2; no 64-bit shader features needed. Intel GPUs are untested |
 

@@ -14,8 +14,9 @@ otherwise, and update it when an item is done or the plan changes.
 
 - **Terni is standalone and engine-agnostic.** Never add code, names, comments, examples
   or documentation that refer to a particular engine, game or private project that uses
-  Terni. Integrations live in those projects. Use generic examples (planets, empires,
-  provinces, towns). Before committing, grep the diff for anything project-specific.
+  Terni. Integrations live in those projects, and engine plugins in the separate
+  integrations repository. Use generic examples (planets, empires, provinces, towns).
+  Before committing, grep the diff for anything project-specific.
   One exception: `docs/roadmap.md` may name public engines as targets of the planned
   integrations. The integrations themselves, their code and their examples live in a
   separate repository, never here.

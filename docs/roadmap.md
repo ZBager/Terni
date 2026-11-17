@@ -19,7 +19,10 @@ library; Terni itself stays engine-agnostic, and changes here only when the chan
 helps every host. They are done one at a time, each finished and tested before the
 next begins. Windows and Linux first.
 
-1. **Flax Engine**: a C++ plugin with generated C# bindings and Visual Scripting nodes.
+1. **Flax Engine** (done, not yet published): a plugin for C++, C# and Visual
+   Scripting, with background starts and ticks, cooked games that ship the rule
+   compiler (so mods can change rules), and the simulation on the GPU the engine renders
+   with. Tested on Linux and Windows. Still to come: shipping a software Vulkan driver.
 2. **Godot**: a GDExtension addon for GDScript and C#.
 3. **A C API and a shared library build**, in Terni itself, for engines that cannot
    link the C++ library or that load Terni from other languages. The two integrations

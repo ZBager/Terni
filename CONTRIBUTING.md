@@ -33,7 +33,8 @@ in string literals and generated text.
 - **Determinism first.** No floating point in simulation state, integer sums only, and
   identical results on every device. A change to arithmetic needs a parity test.
 - **Terni stays engine-independent.** No code, names or assumptions from a particular
-  engine or game; integrations belong in the projects that use Terni.
+  engine or game. Engine plugins live in a separate repository, and game-specific code
+  in the games.
 - **Public API changes** need a note in `CHANGELOG.md` and in the documentation in
   `docs/`.
 - **Style**: follow the surrounding code (4 spaces, lines up to 120 columns, comments
