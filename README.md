@@ -19,10 +19,10 @@ game loads, so mods can change the rules themselves, not only the numbers.
   the same world gives the same state hash on NVIDIA, AMD, Intel and the CPU (Mesa's
   lavapipe), across saves and over the network.
 - **Fast at scale.** One pre-recorded command buffer per tick. In Terni's benchmark, a
-  world of 1 million pops computes a tick in 0.53 ms on a laptop RTX 4050 and 0.16 ms on
-  a desktop RTX 4070 Ti: 60 and 186 times faster than the same simulation in C++ on one
+  world of 1 million pops computes a tick in 0.58 ms on a laptop RTX 4050 and 0.16 ms on
+  a desktop RTX 4070 Ti: 54 and 182 times faster than the same simulation in C++ on one
   CPU thread. Even with every pop copied back to system memory every tick, the RTX 4070
-  Ti is 2.8 times faster than all 16 threads of a Ryzen 7800X3D. `terni_bench` measures
+  Ti is 2.6 times faster than all 16 threads of a Ryzen 7800X3D. `terni_bench` measures
   your own hardware ([Benchmark](docs/benchmark.md)).
 - **Data-driven and moddable.** Entities, fields, constants, modifiers, starting
   state and stage order come from text files; rules are GLSL. Errors are reported as

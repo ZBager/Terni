@@ -110,7 +110,7 @@ terni::GameSim sim(*game, options);                              // finds the ad
   drivers install it; a machine that never had one needs it next to your game.
 - A CPU is slower than a GPU, by how much depends on the world. In the
   [benchmark](benchmark.md), lavapipe on 12 threads computes a world of 1 million pops
-  72 times slower than a laptop RTX 4050 and 22 times slower than an integrated Radeon
+  66 times slower than a laptop RTX 4050 and 21 times slower than an integrated Radeon
   760M, while a world of 50,000 pops still takes under 4 ms a tick. `DeviceInfo::cpu()`
   tells you which kind you got, so you can tell the player.
 - A player with a working GPU can still choose the CPU device, and lockstep peers on

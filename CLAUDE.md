@@ -97,7 +97,7 @@ ctest --test-dir build --output-on-failure
 | `shaders/terni/` | The GLSL library, embedded into the binary at build time |
 | `tests/` | Test programs; `tests/data/` holds small games for loader tests, most of them broken on purpose |
 | `examples/` | `mini_galaxy` (a data folder) and `hello_towns` (a world in code) |
-| `bench/` | `terni_bench`: the benchmark world and its rules, the CPU reference, machine details |
+| `bench/` | `terni_bench`: the benchmark world and its rules, the CPU reference, machine details; `bench/charts/` holds the results behind the charts in `docs/benchmark.md` and the Python scripts that draw them (documentation only, not part of the build) |
 | `docs/` | User documentation, written for outside game developers |
 
 ## Changes that require other changes
@@ -121,7 +121,8 @@ ctest --test-dir build --output-on-failure
   `cpu_reference.cpp`; change both together (`test_bench` compares them on every
   device), and bump `BENCH_VERSION` whenever the world, its rules or the host's events
   change, since old results no longer compare. Update `docs/benchmark.md` if the sizes or
-  the reference results change.
+  the reference results change, and redraw its charts: add the machine's JSON files with
+  `bench/charts/add_results.py`, then run `bench/charts/make_charts.py` (matplotlib).
 - **Public API that the engine plugins use** (`GameSim`, `GameSimOptions`, `Game`,
   `VulkanContext::list_devices`, `compile_rules`): after pushing, move the pin in
   [TerniIntegrations](https://github.com/ZBager/TerniIntegrations) (`native/CMakeLists.txt`),
