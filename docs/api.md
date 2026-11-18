@@ -106,9 +106,11 @@ Runs a `Game` on one device. The `Game` must outlive it. Not thread-safe.
 | `uint32_t read_each_tick(entity, field, first_row = 0, rows = in use)` | Registers a per-tick readback; returns an id |
 | `std::span<const int32_t> tick_result(id)` | Its words as of the last collected tick; valid until the tick after the next one begins |
 | `uint32_t create_entity(entity)` | A new row of a dynamic entity type: the lowest one not alive, fields at their defaults, alive from the next tick. `NO_ENTITY` if full. Collects a tick in flight |
-| `bool destroy_entity(entity, row)` | The row is no longer alive and its modifier instances are removed; false if it was not alive. Collects a tick in flight |
+| `bool destroy_entity(entity, row)` | The row is no longer alive and its modifier instances are removed; it rests through the next tick. False if it was not alive. Collects a tick in flight |
 | `bool entity_alive(entity, row)`, `uint32_t entity_generation(entity, row)` | As of the last collected tick plus creates and destroys since; never block |
 | `uint32_t entity_count(entity)`, `uint32_t entities_alive(entity)` | Rows in use (one past the highest row ever alive); rows alive |
+| `std::span<const uint32_t> alive_bits(entity)` | A dynamic entity type's alive bits, one per row (row `r` is bit `r % 32` of word `r / 32`), as `entity_alive` sees them; valid until the next create, destroy, tick or load. Never blocks |
+| `uint32_t entities_free(entity)` | Rows `create_entity` would find now: not alive and not resting. Collects a tick in flight |
 | `ModifierHandle add_modifier(bundle, entity, row, scale = fx::ONE, duration = 0)` | Adds an instance; an invalid handle if the store is full |
 | `bool set_modifier_scale(handle, scale)`, `bool remove_modifier(handle)` | False if the handle is stale |
 | `bool modifier_alive(handle)`, `size_t modifier_count()` | |

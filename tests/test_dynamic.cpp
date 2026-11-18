@@ -98,7 +98,8 @@ struct Model {
     std::vector<uint32_t> raise = std::vector<uint32_t>(PROVINCE_CAPACITY, 0);
     std::vector<int32_t> armies = std::vector<int32_t>(PROVINCE_CAPACITY, 0);
     std::vector<bool> alive = std::vector<bool>(ARMY_CAPACITY, false);
-    // prev: alive when the last tick ended, or created by the host since. cool: died in the last tick.
+    // prev: alive when the last tick ended, plus rows the host created since, minus rows it
+    // destroyed since. cool: died in the last tick, or destroyed by the host since.
     std::vector<bool> prev = alive, cool = alive;
     std::vector<uint32_t> generation = std::vector<uint32_t>(ARMY_CAPACITY, 0);
     std::vector<int32_t> home = std::vector<int32_t>(ARMY_CAPACITY, 0), strength = home, fresh = std::vector<int32_t>(ARMY_CAPACITY, 1),
@@ -129,6 +130,10 @@ struct Model {
         ++generation[a];
         home[a] = 0, strength[a] = 0, fresh[a] = 1, age[a] = 0, seen_generation[a] = 0;
         count = std::max(count, a + 1);
+    }
+    void destroy(uint32_t a) {  // the host: dead for the next tick, which may give the row out again
+        alive[a] = prev[a] = false;
+        cool[a] = true;
     }
     uint32_t create() {  // the host: the lowest row that is free between ticks
         for (uint32_t a = 0; a < ARMY_CAPACITY; ++a)
@@ -238,7 +243,7 @@ static StateSnapshot session(const World& w, uint32_t from, uint32_t to) {
             while (a < ARMY_CAPACITY && !m.alive[a]) ++a;
             if (a < ARMY_CAPACITY) {
                 ok &= sim.destroy_entity(w.army, a) && !sim.destroy_entity(w.army, a);
-                m.alive[a] = false;
+                m.destroy(a);
                 ok &= !sim.entity_alive(w.army, a) && modifiers_follow();
             }
         }
@@ -472,6 +477,72 @@ int main() {
         while (sim.entity_generation(w.army, row) < 2) sim.tick();  // a province's request takes the row
         const int32_t lo = int32_t(5000000000ull & 0xFFFFFFFFull), hi = int32_t(5000000000ull >> 32);  // both fit
         CHECK(sim.read_field(w.army, "purse", row, 1) == std::vector<int32_t>({lo, hi, lo, hi}));
+    }
+
+    // A destroyed row rests one tick, whoever destroyed it; alive_bits() and entities_free()
+    // say what create_entity() will find.
+    for (const auto& dev : devices) {
+        WorldBuilder b;
+        const uint32_t town = b.entity("town", 1), cart = b.entity("cart", 40);  // two words of bits, the last partial
+        b.field(town, "want", FieldType::Count);
+        b.entity_dynamic(cart);
+        b.field(cart, "age", FieldType::Int);
+        b.spawn(cart, "town", "want");
+        b.stage("wear", "cart", R"(
+void main() {
+    FOR_EACH_CART(c) {
+        cart_age[c] += 1;
+        if (c == 2u && terni.tick == 0u) cart_destroy(c);
+    }
+}
+)");
+        b.create(town);
+        for (int i = 0; i < 3; ++i) b.create(cart);
+        const auto g = b.finish();
+        CHECK(g->ok() && g->warnings.empty());
+        if (!g->ok()) break;
+        GameSim sim(*g, dev.index);
+        auto bits = sim.alive_bits(cart);
+        CHECK(bits.size() == 2 && bits[0] == 0b111u && bits[1] == 0u);
+        CHECK(sim.entities_free(cart) == 37);
+
+        sim.tick();  // the rules destroy row 2: it rests until the next tick has run
+        CHECK(!sim.entity_alive(cart, 2) && sim.entities_free(cart) == 37);
+        CHECK(sim.destroy_entity(cart, 1));  // the host destroys row 1: it rests through the same tick
+        bits = sim.alive_bits(cart);
+        CHECK(bits[0] == 0b001u && sim.entities_free(cart) == 37);
+        CHECK(sim.create_entity(cart) == 3 && sim.entities_free(cart) == 36);
+
+        sim.tick();  // both have rested
+        CHECK(sim.entities_free(cart) == 38);
+        CHECK(sim.create_entity(cart) == 1 && sim.create_entity(cart) == 2);
+        CHECK(sim.alive_bits(cart)[0] == 0b1111u);
+
+        // a row the host destroys may be given out by the spawning of the very next tick
+        CHECK(sim.destroy_entity(cart, 0) && sim.entities_free(cart) == 36);
+        sim.write_field(town, "want", 0, {1});
+        sim.tick();
+        CHECK(sim.entity_alive(cart, 0) && sim.entity_generation(cart, 0) == 2 && sim.entities_free(cart) == 36);
+
+        uint32_t made = 0;
+        while (sim.create_entity(cart) != NO_ENTITY) ++made;
+        CHECK(made == 36 && sim.entities_free(cart) == 0);
+        bits = sim.alive_bits(cart);
+        CHECK(bits[0] == 0xFFFFFFFFu && bits[1] == 0xFFu && sim.entities_alive(cart) == 40);
+
+        bool thrown_bits = false, thrown_free = false;
+        try {
+            (void)sim.alive_bits(town);
+        } catch (const std::invalid_argument&) {
+            thrown_bits = true;
+        }
+        try {
+            (void)sim.entities_free(town);
+        } catch (const std::invalid_argument&) {
+            thrown_free = true;
+        }
+        CHECK(thrown_bits && thrown_free);
+        std::printf("destroyed rows rest one tick on %-40.40s %s\n", dev.name.c_str(), failures == 0 ? "ok" : "FAIL");
     }
 
     // what cannot work is refused when the world is built

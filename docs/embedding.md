@@ -241,8 +241,20 @@ sim.destroy_entity(army, other_row);                 // false if it was not aliv
 - `read_field` shows what the device holds, so a row you created shows its defaults and
   the fields you wrote after the next tick. Rows that rules asked for are complete on
   the device as soon as their tick ends.
-- A destroyed row rests for one tick before it can be created again, whoever destroyed
-  it, so `create_entity` right after `destroy_entity` gives another row.
+- A destroyed row rests for one tick, whoever destroyed it: `create_entity` right after
+  `destroy_entity` gives another row, and the destroyed row is free again once the next
+  tick has run. The rules see it dead for that whole tick; rows they ask for in it may
+  already take it.
+- `entities_free(army)` says how many rows `create_entity` would find now, resting rows
+  left out, so a lockstep game can refuse a command for lack of room before applying
+  it. `alive_bits(army)` gives every row's alive bit in one call (row `r` is bit
+  `r % 32` of word `r / 32`), for a host that loops over the living rows itself.
+- Every row below the starting count (the rows history or `WorldBuilder::create` made)
+  is alive when the simulation starts. Leave room for later rows in the capacity, not
+  by starting with more rows and marking some unused in a field of your own.
+- `read_each_tick` on a dynamic type covers the rows in use, which grow during play up
+  to the capacity: `tick_result()` holds as many rows as are in use when the tick ends,
+  so copy what it gives, not a capacity's worth.
 - Rows that rules asked for are created at the end of their tick, before anything you
   create afterwards. `create_entity` and `destroy_entity` collect a tick in flight
   first, so the same calls give the same rows on every peer, whenever each collects.

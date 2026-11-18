@@ -439,6 +439,14 @@ public:
     uint32_t entity_generation(uint32_t entity, uint32_t row) const;
     uint32_t entity_count(uint32_t entity) const;    // rows in use: one past the highest row ever alive
     uint32_t entities_alive(uint32_t entity) const;  // rows alive among them
+    // Of a dynamic entity type: one bit per row (row r is bit r % 32 of word r / 32), as
+    // entity_alive() sees them. Valid until the next call that creates, destroys, ticks or
+    // loads. Never blocks. Throws for a type that is not dynamic.
+    std::span<const uint32_t> alive_bits(uint32_t entity) const;
+    // Of a dynamic entity type: how many rows create_entity() would find now, so that a
+    // command can be refused before it is applied. Collects a tick in flight first, as
+    // create_entity() does. Throws for a type that is not dynamic.
+    uint32_t entities_free(uint32_t entity);
 
     // ---- modifiers ----
     ModifierHandle add_modifier(uint32_t bundle, uint32_t entity, uint32_t row, int32_t scale = 1 << 16,

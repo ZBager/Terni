@@ -18,7 +18,7 @@ stable public releases. The order is a priority, not a promise.
 What games that embed Terni have run into, and what a studio checks before it depends
 on a library.
 
-1. **Dynamic entity types, fixed and documented.** A row the host destroys must rest
+1. **Dynamic entity types, fixed and documented** (done). A row the host destroys rests
    one tick, as documented, not two. The host gets the alive bits of a type in one call
    (`alive_bits(entity)`) and can ask how many rows `create_entity` would find free
    (`entities_free(entity)`), so a lockstep game can refuse a command up front. The

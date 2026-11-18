@@ -426,11 +426,15 @@ struct RuleSource {
 // A row is free if it is not alive now and was not alive when the last tick ended: one
 // that is destroyed stays out of use for a whole tick, so that every death and every new
 // row shows in the alive bits the host reads back, and rules holding a ref see it dead.
+// A row the host destroys between ticks is dead for the whole of the next tick already,
+// so it loses its prev bit and that tick's spawning may give it out again.
 //
 // Per dynamic entity type (capacity C, W = ceil(C / 32) words, B = ceil(W / 256) blocks),
 // after its alive bits and generations:
 //   terni_prev_<e>      alive when the last tick ended, plus rows the host created since
-//   terni_cool_<e>      rows that died in the last tick (the host must not take them yet)
+//                       and minus rows the host destroyed since
+//   terni_cool_<e>      rows that died in the last tick or that the host destroyed since
+//                       (the host must not take them yet)
 //   terni_eligible_<e>  free rows, fixed before assign changes the alive bits
 //   terni_scratch_<e>   [0, B) free rows before each block; [B] free rows in all; [B + 1, B + 1 + W)
 //                       free rows before each word within its block; then per spawn line (R
@@ -887,7 +891,8 @@ struct GameSim::Impl {
     // stages give out the rows rules ask for; the host follows through the alive bits that
     // come back with every tick, and gives out rows itself for create_entity(), by the
     // same rule: a row is free if it is not alive, did not die in the last tick and was
-    // not destroyed by the host since.
+    // not destroyed by the host since (cool); the spawn stages of the next tick may take
+    // a row the host destroyed (not prev).
     struct Dynamic {
         uint32_t entity = 0;
         uint32_t alive_binding = 0;        // then generation, and Terni's own (spawn_stage_sources)
@@ -1299,9 +1304,17 @@ bool GameSim::destroy_entity(uint32_t entity, uint32_t row) {
     Impl::Dynamic& d = m.dynamic(entity, "destroy_entity");
     m.settle();
     if (!d.is_alive(row)) return false;
-    d.alive[row / 32] &= ~(1u << (row % 32));
-    --d.alive_count;  // its prev bit stays: not free again until a tick has passed
-    m.runner->queue_write(d.alive_binding, &d.alive[row / 32], 4, uint64_t(row / 32) * 4);
+    // Dead for the rules from the next tick on, as a row a rule destroyed in the tick
+    // before: not free for the host until that tick has run (cool), free for its spawn
+    // stages (not prev). After it, the host's collect clears cool, as on the device.
+    const uint32_t w = row / 32, bit = 1u << (row % 32);
+    d.alive[w] &= ~bit;
+    d.prev[w] &= ~bit;
+    d.cool[w] |= bit;
+    --d.alive_count;
+    m.runner->queue_write(d.alive_binding, &d.alive[w], 4, uint64_t(w) * 4);
+    m.runner->queue_write(d.prev_binding(), &d.prev[w], 4, uint64_t(w) * 4);
+    m.runner->queue_write(d.cool_binding(), &d.cool[w], 4, uint64_t(w) * 4);
     m.mods.remove_on(entity, [&](uint32_t r) { return r == row; });
     return true;
 }
@@ -1310,6 +1323,28 @@ bool GameSim::entity_alive(uint32_t entity, uint32_t row) const {
     const Impl& m = *impl_;
     const int d = m.dynamic_of.at(entity);
     return d >= 0 ? m.dynamics[size_t(d)].is_alive(row) : row < m.counts[entity];
+}
+
+std::span<const uint32_t> GameSim::alive_bits(uint32_t entity) const {
+    const Impl& m = *impl_;
+    const int d = m.dynamic_of.at(entity);
+    if (d < 0)
+        throw std::invalid_argument("alive_bits: '" + m.game.entities[entity].name + "' is not a dynamic entity type");
+    return m.dynamics[size_t(d)].alive;
+}
+
+uint32_t GameSim::entities_free(uint32_t entity) {
+    Impl& m = *impl_;
+    Impl::Dynamic& d = m.dynamic(entity, "entities_free");
+    m.settle();
+    const uint32_t capacity = m.game.entities[entity].capacity;
+    uint32_t free = 0;
+    for (size_t w = 0; w < d.alive.size(); ++w) {
+        uint32_t open = ~(d.alive[w] | d.prev[w] | d.cool[w]);  // as allocate() sees them
+        if ((w + 1) * 32 > capacity) open &= (1u << (capacity % 32)) - 1u;  // past the capacity
+        free += uint32_t(std::popcount(open));
+    }
+    return free;
 }
 
 uint32_t GameSim::entity_generation(uint32_t entity, uint32_t row) const {
