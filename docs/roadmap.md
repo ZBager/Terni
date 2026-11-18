@@ -1,9 +1,9 @@
 # Roadmap
 
 Terni is pre-1.0. What larger games needed first is done, and so is a reproducible
-benchmark (only results from Windows are missing). What remains is ongoing work,
-integrations for game engines, and the preparation of stable public releases. The
-order is a priority, not a promise.
+benchmark (only results from Windows are missing). What remains is ongoing work, what
+games need before they ship, integrations for game engines, and the preparation of
+stable public releases. The order is a priority, not a promise.
 
 ## Ongoing
 
@@ -12,6 +12,41 @@ order is a priority, not a promise.
   available.
 - **A larger example game** that exercises markets, inheritance, workgroup stages and
   entities that come and go. It grows as the library does.
+
+## Before games ship
+
+What games that embed Terni have run into, and what a studio checks before it depends
+on a library.
+
+1. **Dynamic entity types, fixed and documented.** A row the host destroys must rest
+   one tick, as documented, not two. The host gets the alive bits of a type in one call
+   (`alive_bits(entity)`) and can ask how many rows `create_entity` would find free
+   (`entities_free(entity)`), so a lockstep game can refuse a command up front. The
+   guides say that a starting count makes every row below it alive, and that per-tick
+   readbacks grow with the rows in use.
+2. **Measurements that work next to a renderer.** GPU time per stage as data, not only
+   in `report()`. `device_health()` judged by what the device did (GPU timestamps), so
+   that a host that polls a background tick once a frame measures the device, not its
+   frame rate. A `terni_bench` mode that runs beside a graphics load and reports how
+   much the tick time spreads.
+3. **Saves that survive a patch.** Today a save loads only into the exact game that
+   made it. A game that adds a field, changes a rule or raises a capacity should still
+   load its players' saves, with the fields matched by name and new ones given their
+   defaults; peers in a lockstep game keep comparing the full checksum.
+4. **Rules from mods treated as code.** Measure robust buffer access and turn it on if
+   it costs little; report a lost device as its own error, so a game can save and start
+   again on another device; document what a broken or hostile rule can do.
+5. **Cheaper and richer spawning.** Spawn lines that run on a schedule like stages
+   (`every`, `offset`), or cost nothing in ticks when no row asks, so a type that
+   changes once a month does not pay every tick in proportion to its capacity. An
+   `ordinal` field that numbers the rows created for one asker in a tick (0, 1, ...),
+   so a new row can tell which of its parent's requests it answers.
+6. **Finding a desync.** State hashes per entity type in the public API, a tool that
+   names the first field and rows where two runs or two saves differ, and a long test
+   (thousands of ticks, saves, entities that come and go) compared across devices.
+7. **A page on when Terni fits**: worlds small enough for the CPU, aggregating rows
+   into groups first, what readbacks cost, and which work (pathfinding, planning) stays
+   on the CPU and reaches the simulation as commands.
 
 ## Engine integrations
 
@@ -31,7 +66,11 @@ next begins. Windows and Linux first.
    Direct3D 12). Tested on Linux and Windows. Still to come: shipping a software Vulkan
    driver.
 3. **A C API and a shared library build**, in Terni itself, for engines that cannot
-   link the C++ library or that load Terni from other languages. The two integrations
+   link the C++ library or that load Terni from other languages, with a C# wrapper that
+   does not depend on any engine (for dedicated servers and test tools). It covers what
+   lockstep games use: `tick_checked()`, counts and the modifier store's capacity before
+   the start, a generated starting state, state hashes per entity type, modifiers added
+   to many rows in one call, load warnings and compile statistics. The two integrations
    below are built on it.
 4. **Unreal Engine**: a runtime plugin with a Blueprint API.
 5. **Unity**: a package of C# bindings.
@@ -79,7 +118,11 @@ invalid, not as a time. See [Benchmark](benchmark.md).
 
 ## Public releases
 
-1. **Versioned releases** with a changelog and a stable API from 1.0.
+1. **Versioned releases** with a changelog and a stable API from 1.0: a written policy
+   on what counts as a breaking change (the API, the save format, `game_checksum`, the
+   cache format), a table of supported platforms, and built libraries and tools for
+   Linux, MSVC and MinGW with each release. The licence notices a game needs ship with
+   Terni itself, with an install rule. TerniIntegrations gets CI of its own.
 2. **Mod tooling**: `terni_script_check` and the order warnings as one command a
    modder runs before publishing.
 
