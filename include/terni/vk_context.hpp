@@ -18,9 +18,23 @@
 #include <string>
 #include <vector>
 
+namespace terni {
+// The device was lost (VK_ERROR_DEVICE_LOST): the driver reset the GPU, often because a
+// rule ran too long (an endless loop in a mod, say), or the GPU went away. The state on
+// the device is gone, and every call that ticks or reads the device throws it from then
+// on: create a new GameSim, on this device or another, and load the last save.
+class DeviceLost : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
+}  // namespace terni
+
 #define VK_CHECK(expr)                                                                         \
     do {                                                                                       \
         VkResult vk_check_result_ = (expr);                                                    \
+        if (vk_check_result_ == VK_ERROR_DEVICE_LOST)                                          \
+            throw ::terni::DeviceLost(std::string("Vulkan device lost in " #expr " at " __FILE__ ":") + \
+                                      std::to_string(__LINE__));                               \
         if (vk_check_result_ != VK_SUCCESS)                                                    \
             throw std::runtime_error(std::string("Vulkan error ") +                            \
                                      std::to_string(static_cast<int>(vk_check_result_)) +      \
@@ -28,6 +42,13 @@
     } while (0)
 
 namespace terni {
+
+// What a device does when a rule reads or writes past the end of a field.
+enum class BufferRobustness {
+    None,     // undefined: the device may crash or corrupt other memory
+    Bounded,  // robustBufferAccess: the access stays inside the buffer, in a way each driver chooses
+    Defined,  // robustBufferAccess2: reads give 0 and writes are dropped, the same on every device
+};
 
 // A VkBuffer is only a handle describing size/usage; the actual memory is a
 // separate VkDeviceMemory allocation bound to it. We keep them together.
@@ -52,6 +73,10 @@ struct DeviceInfo {
     // only if luid_valid.
     std::array<uint8_t, 8> luid{};
     bool luid_valid = false;
+    // What a rule that reads or writes past the end of a field does here. Terni turns on the
+    // most the device offers; Defined (all current desktop drivers) keeps a broken rule
+    // deterministic across devices.
+    BufferRobustness robustness = BufferRobustness::None;
     // The driver's name and version as it reports them ("NVIDIA 580.95.05", "radv Mesa 25.2.4");
     // empty if the device predates Vulkan 1.2. For logs and benchmark results.
     std::string driver;
@@ -113,6 +138,7 @@ public:
     VkPhysicalDevice physical_device() const { return physical_; }
     const VkPhysicalDeviceProperties& properties() const { return props_; }
     uint32_t timestamp_valid_bits() const { return timestamp_valid_bits_; }
+    BufferRobustness buffer_robustness() const { return robustness_; }
     // The device's timestamp clock now, in the units vkCmdWriteTimestamp2 writes (through
     // VK_KHR/EXT_calibrated_timestamps). False where the device cannot tell it.
     bool device_clock(uint64_t& ticks) const;
@@ -134,6 +160,7 @@ private:
     VkPhysicalDeviceProperties props_{};
     VkPhysicalDeviceMemoryProperties mem_props_{};
     uint32_t timestamp_valid_bits_ = 0;
+    BufferRobustness robustness_ = BufferRobustness::None;
     PFN_vkGetCalibratedTimestampsEXT get_calibrated_ = nullptr;  // null: no device clock
 };
 

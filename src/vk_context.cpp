@@ -3,6 +3,7 @@
 #include "terni/vk_context.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -137,6 +138,31 @@ std::string check_support(VkPhysicalDevice pd) {
     return {};
 }
 
+bool have_device_extension(VkPhysicalDevice pd, const char* name) {
+    uint32_t n = 0;
+    if (vkEnumerateDeviceExtensionProperties(pd, nullptr, &n, nullptr) != VK_SUCCESS) return false;
+    std::vector<VkExtensionProperties> exts(n);
+    if (vkEnumerateDeviceExtensionProperties(pd, nullptr, &n, exts.data()) < VK_SUCCESS) return false;
+    for (const auto& e : exts)
+        if (std::strcmp(e.extensionName, name) == 0) return true;
+    return false;
+}
+
+// What the device can promise for accesses past the end of a buffer, and the extension
+// that promises the most.
+BufferRobustness robustness_of(VkPhysicalDevice pd, const char** extension = nullptr) {
+    const char* robust2 = have_device_extension(pd, "VK_KHR_robustness2")   ? "VK_KHR_robustness2"
+                          : have_device_extension(pd, "VK_EXT_robustness2") ? "VK_EXT_robustness2"
+                                                                           : nullptr;
+    VkPhysicalDeviceRobustness2FeaturesEXT r2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT};
+    VkPhysicalDeviceFeatures2 query{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+    if (robust2) query.pNext = &r2;
+    vkGetPhysicalDeviceFeatures2(pd, &query);
+    if (extension) *extension = robust2;
+    if (!query.features.robustBufferAccess) return BufferRobustness::None;
+    return robust2 && r2.robustBufferAccess2 ? BufferRobustness::Defined : BufferRobustness::Bounded;
+}
+
 const char* type_name(VkPhysicalDeviceType t) {
     switch (t) {
         case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU: return "discrete";
@@ -193,6 +219,7 @@ std::vector<DeviceInfo> VulkanContext::list_devices() {
         std::copy(std::begin(id.deviceUUID), std::end(id.deviceUUID), info.uuid.begin());
         std::copy(std::begin(id.deviceLUID), std::end(id.deviceLUID), info.luid.begin());
         info.luid_valid = id.deviceLUIDValid == VK_TRUE;
+        info.robustness = robustness_of(devs[i]);
         if (has_driver) {
             const std::string name(driver.driverName, std::find(driver.driverName, std::end(driver.driverName), '\0'));
             const std::string version(driver.driverInfo, std::find(driver.driverInfo, std::end(driver.driverInfo), '\0'));
@@ -275,20 +302,28 @@ VulkanContext::VulkanContext(uint32_t device_index, bool enable_validation) {
     qci.queueCount = 1;
     qci.pQueuePriorities = &priority;
 
+    std::vector<const char*> extensions;
+    // Rules from mods may read or write past the end of a field. With robustBufferAccess2 such
+    // a read gives 0 and such a write is dropped, the same on every device, so a broken rule
+    // stays deterministic. Plain robustBufferAccess only keeps the access inside the buffer,
+    // in a way each driver chooses.
+    const char* robust2 = nullptr;
+    robustness_ = robustness_of(physical_, &robust2);
+    VkPhysicalDeviceRobustness2FeaturesEXT r2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT};
+    if (robustness_ != BufferRobustness::None) f2.features.robustBufferAccess = VK_TRUE;  // robustness2 needs it too
+    if (robustness_ == BufferRobustness::Defined) {
+        r2.robustBufferAccess2 = VK_TRUE;
+        r2.pNext = f2.pNext;
+        f2.pNext = &r2;
+        extensions.push_back(robust2);
+    }
+
     // Optional: the device clock at any moment (calibrated timestamps), so that a tick can
     // be timed from its submission on the device's own clock. KHR and EXT are the same call.
     const char* calibrated = nullptr;
-    if (timestamp_valid_bits_ != 0) {
-        uint32_t n = 0;
-        vkEnumerateDeviceExtensionProperties(physical_, nullptr, &n, nullptr);
-        std::vector<VkExtensionProperties> exts(n);
-        vkEnumerateDeviceExtensionProperties(physical_, nullptr, &n, exts.data());
-        for (const char* name : {"VK_KHR_calibrated_timestamps", "VK_EXT_calibrated_timestamps"}) {
-            for (const auto& e : exts)
-                if (std::strcmp(e.extensionName, name) == 0) calibrated = name;
-            if (calibrated) break;
-        }
-    }
+    if (timestamp_valid_bits_ != 0)
+        for (const char* name : {"VK_KHR_calibrated_timestamps", "VK_EXT_calibrated_timestamps"})
+            if (!calibrated && have_device_extension(physical_, name)) calibrated = name;
     if (calibrated) {  // the device domain must be one it can read
         const bool khr = std::strcmp(calibrated, "VK_KHR_calibrated_timestamps") == 0;
         const auto domains = reinterpret_cast<PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT>(vkGetInstanceProcAddr(
@@ -306,8 +341,9 @@ VulkanContext::VulkanContext(uint32_t device_index, bool enable_validation) {
     dci.pNext = &f2;  // features go via pNext when using VkPhysicalDeviceFeatures2
     dci.queueCreateInfoCount = 1;
     dci.pQueueCreateInfos = &qci;
-    dci.enabledExtensionCount = calibrated ? 1 : 0;
-    dci.ppEnabledExtensionNames = calibrated ? &calibrated : nullptr;
+    if (calibrated) extensions.push_back(calibrated);
+    dci.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
+    dci.ppEnabledExtensionNames = extensions.empty() ? nullptr : extensions.data();
     VK_CHECK(vkCreateDevice(physical_, &dci, nullptr, &device_));
     vkGetDeviceQueue(device_, queue_family_, 0, &queue_);
     if (calibrated)

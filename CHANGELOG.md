@@ -48,6 +48,11 @@ The first public version.
   free row first, and a destroyed row rests for one tick, whoever destroyed it (a row
   the host destroyed used to rest two). Saves hold who is alive. Games without dynamic entity types
   keep their checksums and compiled rules.
+- **Rules from mods**: Terni turns on Vulkan's robustBufferAccess2 where the device has
+  it (every current desktop driver, at no measurable cost), so a rule that reads or
+  writes past the end of a field reads 0 and writes nothing, the same on every device;
+  `DeviceInfo::robustness` says what each device does. A lost device, for example after
+  a rule ran too long, throws `terni::DeviceLost`.
 - **Machines without a usable GPU**: `add_vulkan_driver()` loads a software Vulkan driver
   shipped with the game (such as lavapipe), and the rules run on the CPU with the same
   results; `DeviceInfo::cpu()`; `list_devices()` is empty, instead of throwing, where

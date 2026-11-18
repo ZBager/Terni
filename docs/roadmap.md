@@ -35,9 +35,11 @@ on a library.
    game describes them, removed ones are dropped, sized fields and capacities may change,
    and what cannot be fitted is refused. Peers in a lockstep game keep comparing the full
    checksum.
-4. **Rules from mods treated as code.** Measure robust buffer access and turn it on if
-   it costs little; report a lost device as its own error, so a game can save and start
-   again on another device; document what a broken or hostile rule can do.
+4. **Rules from mods treated as code** (done). robustBufferAccess2 is on wherever the
+   device has it (no measurable cost at `medium`), so a rule that reads or writes past a
+   field's end reads 0 and writes nothing on every device; a lost device throws
+   `terni::DeviceLost`, so a game can start again from its last save; the guides say what
+   a broken or hostile rule can do.
 5. **Cheaper and richer spawning.** Spawn lines that run on a schedule like stages
    (`every`, `offset`), or cost nothing in ticks when no row asks, so a type that
    changes once a month does not pay every tick in proportion to its capacity. An

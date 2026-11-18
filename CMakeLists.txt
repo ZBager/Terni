@@ -228,6 +228,8 @@ if(TERNI_BUILD_TESTS)
   terni_test(test_device_health tests/test_device_health.cpp)
   target_include_directories(test_device_health PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   add_test(NAME device_health COMMAND test_device_health)
+  terni_test(test_broken_rules tests/test_broken_rules.cpp)
+  add_test(NAME broken_rules COMMAND test_broken_rules)
 
   # These two check the shader math against __int128 on the CPU (GCC and Clang, including
   # MinGW). The SPIR-V they test is the same whichever compiler built the host.

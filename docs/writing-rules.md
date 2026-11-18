@@ -234,6 +234,26 @@ confirms them at run time. A line that is safe by design (each thread writes a
 different row of another entity, say) can be marked `// terni: order ok`. See
 [Determinism](determinism.md).
 
+## When a rule goes wrong
+
+Rules from mods run in every player's game, so Terni keeps the damage a broken rule can
+do small and the same on every machine:
+
+- **Reading or writing past the end of a field** (`province_stock[p * GOODS + g]` with
+  a good too many, a ref that points nowhere) reads 0 and writes nothing, atomics
+  included. Every current desktop driver promises this (Vulkan's robustBufferAccess2,
+  which Terni turns on), so the rule gives the same wrong result on every GPU and in a
+  lockstep game nobody desyncs. Nothing outside the field is touched.
+- **A loop that never ends**, or a stage that runs for seconds, makes the GPU driver
+  reset the GPU. The game gets a `terni::DeviceLost` error and starts again from its
+  last save. Keep loops bounded by a count you know, such as a capacity or a define.
+- **A rule can change any field of the world.** It is part of the game: test a mod as
+  you would test the game.
+
+Before publishing a mod, load it with `terni_run <game folder> --ticks 100` (every
+device, compared bit for bit), and read its warnings: a warning about order means the
+mod can desync a multiplayer game.
+
 ## Debugging
 
 - `terni_run <folder> --prelude` prints the generated prelude.

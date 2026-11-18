@@ -139,6 +139,8 @@ Runs a `Game` on one device. The `Game` must outlive it. Not thread-safe.
 | `OrderIssue` | `stage`, `field`, `parallel` (false: forwards and backwards differ; true: the parallel run differs), `first_row`, `rows` |
 | `CompileStats` | `compiled`, `cached`, `ms` |
 | `SaveMatch` | `SameGame` (default: refuse a save of another game) or `ByName` (fit it by name) |
+| `DeviceLost` | Thrown (a `std::runtime_error`) by every call that ticks or reads the device once the device is lost, for example after a rule ran too long. Start a new `GameSim` and load the last save |
+| `BufferRobustness` | `DeviceInfo::robustness`: `None`, `Bounded` (an access past a field's end stays in its buffer, as the driver chooses) or `Defined` (reads give 0, writes are dropped, the same on every device) |
 | `StageTime` | `name`, `ran` (in the last tick), `last_ms` (0 if it did not run), `runs` (ticks it ran in since the start or `move_to_device()`), `total_ms` (over those runs; `total_ms / runs` is its average). Times are 0 where the device has no timestamps; `tick_checked()` is not measured |
 | `DeviceHealth` | `usual_ms` (lowest median of 32 ticks so far), `recent_ms` (latest median), `ticks` (measured since the start, `load()` or `move_to_device()`), `slow` (over 4 times the usual and at least 1 ms longer) |
 | `StageDef` (in `Game::stages`) | `name`, `for_each`, `dispatch`, `clear`, `source`, `every`, `offset`; `runs_in(tick)` says whether it runs in the tick after `tick` completed ticks |

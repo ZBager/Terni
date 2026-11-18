@@ -337,6 +337,43 @@ those symbols and crash. Either link the game with `Terni::runtime`, or set
 `options.cache_only = true` and fill the cache in a separate process (`compile_rules`
 in a small tool) before starting.
 
+## Rules you did not write
+
+When players can install mods, rules you never saw run inside your game. What they can
+and cannot do:
+
+- **They run on the GPU, inside Terni's buffers.** A rule sees every field of the world
+  and nothing else: no files, no network, no memory of your game or of other programs.
+  It can still change any of the simulation's state, which is the point of a mod.
+- **Accesses past the end of a field read 0 and write nothing**, on every device whose
+  `DeviceInfo::robustness` is `BufferRobustness::Defined`, which is every current
+  desktop driver. A broken mod then gives the same results on every machine. With
+  `Bounded` (older drivers) the access stays inside the field's buffer but the result is
+  up to the driver, and peers on different GPUs may desync.
+- **A rule that runs too long loses the device.** The driver resets the GPU after a few
+  seconds (two by default on Windows). Every call that ticks or reads the device then
+  throws `terni::DeviceLost`. On Windows a reset affects every program on that GPU, so
+  your renderer may lose its device as well.
+
+```cpp
+try {
+    sim->tick();
+} catch (const terni::DeviceLost&) {
+    sim = std::make_unique<terni::GameSim>(*game, options);   // this device again, or another
+    sim->load(last_autosave);
+    tell_player("The simulation was restarted from the autosave; a mod may be at fault.");
+}
+```
+
+- Save often enough that a restart loses little: an autosave every in-game month costs
+  a read of the state.
+- In a lockstep game, a peer that lost its device rejoins like a new player: a save
+  from the host, then the commands since.
+- Mods change the game checksum, so peers with different mods are refused before they
+  play. `Game::warnings` holds a mod's order warnings; show them to the modder, since a
+  rule with an order problem can desync a multiplayer game. `tick_checked()` confirms
+  them in testing.
+
 ## Saves
 
 ```cpp
