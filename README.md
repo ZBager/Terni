@@ -104,8 +104,11 @@ or the C++ API:
 | Unreal Engine, Unity | Planned |
 
 Both run the simulation on the GPU the engine renders with, start and tick it without
-holding up frames, and ship the rule compiler with the game so mods can change rules.
-They are tested on Linux and Windows.
+holding up frames, load mod folders on top of the game's and ship the rule compiler
+with the game so mods can change rules, load saves of an earlier version by name,
+compare state hashes computed on the device, start again from a save when the device is
+lost, and show the GPU time of each stage in the editor. They are tested on Linux and
+Windows; the mods, saves by name, lost devices, hashes and stage times so far on Linux.
 
 ## Documentation
 

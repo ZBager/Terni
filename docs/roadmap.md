@@ -64,13 +64,19 @@ next begins. Windows and Linux first.
 
 1. **Flax Engine** (done): a plugin for C++, C# and Visual
    Scripting, with background starts and ticks, cooked games that ship the rule
-   compiler (so mods can change rules), and the simulation on the GPU the engine renders
-   with. Tested on Linux and Windows. Still to come: shipping a software Vulkan driver.
+   compiler (so mods can change rules), mod folders on top of the game's, saves loaded
+   by name, a lost device as its own event, state hashes on the device, GPU time per
+   stage in the editor, and the simulation on the GPU the engine renders with. Tested
+   on Linux and Windows (the mods, saves by name, lost devices, hashes and stage times
+   so far on Linux). Still to come: shipping a software Vulkan driver.
 2. **Godot** (done): a GDExtension addon for GDScript and C#, with
    background starts and ticks, a Terni tab in the debugger, exported games that ship
-   the rule compiler, and the simulation on the GPU the engine renders with (Vulkan or
-   Direct3D 12). Tested on Linux and Windows. Still to come: shipping a software Vulkan
-   driver.
+   the rule compiler, mod folders on top of the game's, saves loaded by name, a lost
+   device as its own signal, state hashes on the device, GPU time per stage in the
+   debugger and the Monitors tab, and the simulation on the GPU the engine renders with
+   (Vulkan or Direct3D 12). Tested on Linux and Windows (the mods, saves by name, lost
+   devices, hashes and stage times so far on Linux). Still to come: shipping a software
+   Vulkan driver.
 3. **A C API and a shared library build**, in Terni itself, for engines that cannot
    link the C++ library or that load Terni from other languages, with a C# wrapper that
    does not depend on any engine (for dedicated servers and test tools). It covers what
