@@ -1,13 +1,15 @@
 # Roadmap
 
-Terni is pre-1.0. What larger games needed first is done; what remains is ongoing work,
-integrations for game engines, a reproducible benchmark, and the preparation of stable
-public releases. The order is a priority, not a promise.
+Terni is pre-1.0. What larger games needed first is done, and so is a reproducible
+benchmark (only results from Windows are missing). What remains is ongoing work,
+integrations for game engines, and the preparation of stable public releases. The
+order is a priority, not a promise.
 
 ## Ongoing
 
 - **Parity on more hardware**, Intel Arc and more NVIDIA and AMD generations, on Linux
-  and Windows. The suite is run on each new machine as it becomes available.
+  and Windows. The suite and `terni_bench` are run on each new machine as it becomes
+  available.
 - **A larger example game** that exercises markets, inheritance, workgroup stages and
   entities that come and go. It grows as the library does.
 
@@ -64,10 +66,11 @@ invalid, not as a time. See [Benchmark](benchmark.md).
    CPU engine would be. It gives the same state hash as Terni after every tick, on 1 to
    every logical core.
 3. **`terni_bench`** (done): runs the world on every usable Vulkan device and on the
-   CPU reference at a list of thread counts. It reports the time per tick (median and
-   spread), the GPU time per tick and per stage, the compile and start times, and
-   lavapipe's thread count, and writes JSON with the machine, the drivers and the Terni
-   version.
+   CPU reference at a list of thread counts. It reports the total time per tick
+   (compute, reading every pop back, submission) and the compute time alone, their
+   spread, the GPU time per stage, the compile and start times, and lavapipe's thread
+   count, and writes JSON with the machine, the drivers and the Terni version. Devices
+   too small for a world are skipped.
 4. **A smoke test** (done): the tiny world on every device and on the CPU reference,
    compared after every tick; timings are never checked in CI.
 5. **Documentation** (done, results from three laptops, a desktop and a Steam Deck so

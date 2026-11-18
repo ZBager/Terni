@@ -97,7 +97,10 @@ for (const terni::DeviceInfo& d : terni::VulkanContext::list_devices()) {
 Add lavapipe (Mesa's CPU Vulkan driver) to any machine to get a second device for
 free; it runs the same shaders and gives the same bits. Also save halfway, load the save
 on another device, and check that the continued run ends with the same hash.
-`terni_run <folder>` does the device comparison for a data folder.
+`terni_run <folder>` does the device comparison for a data folder. `terni_bench` does it
+for a world of up to 100 million pops, and also compares it with a C++ implementation
+of the same rules on 1 to all CPU threads; on five machines with NVIDIA, AMD and Intel
+GPUs, every run has ended in the same state ([Benchmark](benchmark.md)).
 
 ## What Terni guarantees
 

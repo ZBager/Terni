@@ -16,7 +16,7 @@ game loads, so mods can change the rules themselves, not only the numbers.
 ## Why Terni
 
 - **Exact everywhere.** 32-bit fixed point, integer atomics and stateless randomness:
-  the same world gives the same state hash on NVIDIA, AMD and the CPU (Mesa's
+  the same world gives the same state hash on NVIDIA, AMD, Intel and the CPU (Mesa's
   lavapipe), across saves and over the network.
 - **Fast at scale.** One pre-recorded command buffer per tick. In Terni's benchmark, a
   world of 1 million pops computes a tick in 0.53 ms on a laptop RTX 4050 and 0.16 ms on

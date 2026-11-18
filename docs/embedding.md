@@ -82,7 +82,8 @@ log("simulating on " + sim.device_name());
   adapter LUID that DXGI reports (`DXGI_ADAPTER_DESC::AdapterLuid`, 8 bytes, low part
   first). Matched after `device_uuid`.
 - `options.device`: an explicit index from `terni::VulkanContext::list_devices()`, for
-  a settings menu. Each `DeviceInfo` says whether it is usable and why not.
+  a settings menu. Each `DeviceInfo` says whether it is usable and why not, and names
+  its driver and driver version (`driver`), worth putting in bug reports.
 
 Every usable device gives the same results, so players can choose freely.
 
@@ -110,8 +111,8 @@ terni::GameSim sim(*game, options);                              // finds the ad
 - A CPU is slower than a GPU, by how much depends on the world. In the
   [benchmark](benchmark.md), lavapipe on 12 threads computes a world of 1 million pops
   72 times slower than a laptop RTX 4050 and 22 times slower than an integrated Radeon
-  760M, while a world of 50,000 pops still takes under 4 ms a tick. `DeviceInfo::cpu()` tells
-  you which kind you got, so you can tell the player.
+  760M, while a world of 50,000 pops still takes under 4 ms a tick. `DeviceInfo::cpu()`
+  tells you which kind you got, so you can tell the player.
 - A player with a working GPU can still choose the CPU device, and lockstep peers on
   GPUs and CPUs stay in step.
 

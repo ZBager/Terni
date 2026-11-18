@@ -79,6 +79,10 @@ and with `--dump` prints the final state. `--prelude` shows the GLSL that Terni
 generated from the folder's schema; `--device N` picks one device, and
 `--vk-validation` turns on the Vulkan validation layers.
 
+To see how fast your machine runs a larger world, `./build/terni_bench` runs one of a
+million pops on every device and on a C++ implementation of the same rules; see
+[Benchmark](benchmark.md).
+
 ## 4. A world in code
 
 [`examples/hello_towns/hello_towns.cpp`](../examples/hello_towns/hello_towns.cpp) is

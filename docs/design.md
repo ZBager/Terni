@@ -30,10 +30,11 @@ Ryzen 5 7640HS (6 cores, 12 threads), an RTX 4050 and a Radeon 760M:
 
 - **The GPU computes far faster.** With 1 million pops, the stages take 0.53 ms on the
   RTX 4050 against 31.7 ms on one CPU thread and 5.1 ms on twelve: 60 and 10 times
-  faster. A desktop RTX 4070 Ti takes 0.16 ms. The lead grows with the world: with 100
-  million pops the RTX 4050 computes a tick in 52 ms, against 3.2 s and 483 ms. In the
-  smallest world (1,024 pops) the CPU wins, 0.03 ms against 0.06 ms: a GPU tick costs a
-  submission and a wait, however little work it has.
+  faster. A desktop RTX 4070 Ti takes 0.16 ms. From a million pops up the lead stays about
+  the same: with 100 million pops the RTX 4050 computes a tick in 52 ms, against 3.2 s
+  and 483 ms. In smaller worlds it shrinks, and in the smallest (1,024 pops) the CPU
+  wins, 0.03 ms against 0.06 ms: a GPU tick costs a submission and a wait, however
+  little work it has.
 - **Keep the state on the GPU.** The benchmark copies every pop back to system memory
   each tick (31 MiB for 1 million pops). That takes the RTX 4050's tick from 0.53 ms to
   3.5 ms in all, still 1.4 times faster than twelve CPU threads; the RTX 4070 Ti, with

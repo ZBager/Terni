@@ -106,8 +106,9 @@ a careful CPU engine would be:
 - flat arrays in the same layout as Terni's, with no allocation per entity;
 - the same fixed-point and random functions (`terni::fx`, `terni::rng`);
 - a pool of threads created once, with each stage's rows split statically between them;
-- sums that many rows add to one value kept per thread and combined after the stage,
-  where Terni uses atomics.
+- the large sums (pops' goods to markets, provinces' taxes to empires) kept per thread
+  and combined after the stage, where Terni uses atomics; the small ones (armies,
+  administration costs) through atomics, as in Terni.
 
 After every tick its state is bit-identical to Terni's.
 
@@ -118,8 +119,8 @@ It is a fair baseline, not the fastest CPU code possible:
 - It is compiled for the baseline instruction set (no `-march=native`), as a game
   shipped to players would be.
 
-Loops too small to be worth waking threads for (a few hundred rows) run on fewer
-threads, or on the calling thread alone.
+Loops with too little work to be worth waking threads for run on fewer threads, or on
+the calling thread alone; so do the stages over empires, which are few.
 
 ## Reading the results
 
@@ -134,7 +135,7 @@ NVIDIA GeForce RTX 4050 Laptop GPU                  3.511       3.337 - 3.956   
 | p10 - p90 | The spread of total ms: 10 % of ticks were faster than the first number, 10 % slower than the second |
 | compute ms | Median time of the stages alone, from GPU timestamps. The CPU reference has nothing to read back, so for it compute and total are the same |
 | vs 1 CPU | How many times faster than the CPU reference on one thread, by total ms |
-| start ms | Creating the simulation, with the rules loaded from a SPIR-V cache (the compile time, done once, is printed above the table) |
+| start ms | Creating the simulation, with the rules loaded from a SPIR-V cache (the compile time, done once, is printed above the table); for the CPU reference, copying the starting state |
 
 Things to keep in mind:
 
@@ -162,7 +163,7 @@ Things to keep in mind:
 
 ## Reference results
 
-`terni_bench 1`, 20 warm-up and 100 measured ticks, on five machines with Linux, GCC 16,
+`terni_bench 1`, with each size's default ticks, on five machines with Linux, GCC 16,
 NVIDIA driver 620.70 and Mesa 26.2 (RADV, the Intel driver and lavapipe):
 
 - **RTX 4050 laptop**: Ryzen 5 7640HS (6 cores, 12 threads), Radeon 760M integrated GPU,
@@ -305,5 +306,6 @@ Results from other hardware are welcome, above all from GPUs not listed here. Ru
 `terni_bench --json results.json` (the `medium` world; other sizes too if you have the
 time), then open an issue with the
 [benchmark result template](https://github.com/ZBager/Terni/issues/new?template=benchmark-result.md)
-and attach the JSON file. The file holds the CPU and GPU names, core counts, operating
-system, compiler and Terni commit, and nothing else about the machine.
+and attach the JSON file. Besides the results, it holds the CPU and GPU names, the GPU
+drivers, core counts, the operating system and its kernel version, the compiler and the
+Terni commit, and nothing else about the machine.
