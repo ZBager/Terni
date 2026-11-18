@@ -507,6 +507,15 @@ void main() {
         CHECK(sim.entities_free(cart) == 37);
 
         sim.tick();  // the rules destroy row 2: it rests until the next tick has run
+        {  // the spawn stages are listed after the rules, so a host can see what spawning costs
+            std::vector<std::string> names;
+            for (const auto& t : sim.stage_times()) {
+                names.push_back(t.name);
+                CHECK(t.ran && t.runs == 1);
+            }
+            CHECK(names == std::vector<std::string>({"wear", "terni_spawn_wanted", "terni_spawn_blocks",
+                                                     "terni_spawn_scan", "terni_spawn_assign", "terni_tick"}));
+        }
         CHECK(!sim.entity_alive(cart, 2) && sim.entities_free(cart) == 37);
         CHECK(sim.destroy_entity(cart, 1));  // the host destroys row 1: it rests through the same tick
         bits = sim.alive_bits(cart);

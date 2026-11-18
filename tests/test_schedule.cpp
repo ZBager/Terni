@@ -2,8 +2,10 @@
 // Copyright (C) 2026 Rafał Zając
 // Stage schedules (`every`, `offset`): a scheduled stage runs only in its ticks, its
 // `clear` fields are zeroed only then (so a total lasts until the next run), saves
-// continue on the same schedule, tick_checked() follows it, and every device agrees.
+// continue on the same schedule, tick_checked() follows it, stage_times() says which
+// stages ran and what they cost, and every device agrees.
 // The data-folder syntax and its errors, and the checksum, are checked too.
+#include <cmath>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -185,14 +187,38 @@ int main() {
         GameSimOptions o;
         o.device = int(d.index);
         GameSim sim(*world, o);
-        bool each_tick = true;
+        bool each_tick = true, timed = true;
         std::vector<uint8_t> save;
+        uint64_t monthly_runs = 0;
         for (uint64_t k = 0; k < TICKS; ++k) {
             sim.tick();
             each_tick &= matches(sim, *world, k + 1);
             if (k + 1 == SAVE_AT) save = sim.save();
+
+            // stage_times(): the stages in order, the scheduled one only in its ticks
+            const auto times = sim.stage_times();
+            const bool month = k % EVERY == OFFSET;
+            monthly_runs += month;
+            timed &= times.size() == 4 && times[0].name == "daily" && times[1].name == "monthly" &&
+                     times[2].name == "reader" && times[3].name == "terni_tick";
+            if (times.size() != 4) break;
+            timed &= times[0].ran && times[1].ran == month && times[2].ran && times[3].ran;
+            timed &= times[0].runs == k + 1 && times[1].runs == monthly_runs && times[3].runs == k + 1;
+            double sum = 0;
+            for (const auto& t : times) {
+                timed &= t.last_ms >= 0 && t.total_ms >= t.last_ms && (t.ran || t.last_ms == 0);
+                sum += t.last_ms;
+            }
+            // the stages' times add up to the tick's GPU time (skipped stages count as nothing)
+            timed &= sum <= sim.last_tick_gpu_ms() * (1 + 1e-9) + 1e-9;
+            if (month) timed &= std::abs(sum - sim.last_tick_gpu_ms()) <= 1e-9 + sim.last_tick_gpu_ms() * 1e-9;
         }
         CHECK(each_tick);
+        CHECK(timed);
+        if (sim.last_tick_gpu_ms() > 0) {  // the device has timestamps
+            const auto times = sim.stage_times();
+            CHECK(times[0].total_ms > 0 && times[1].total_ms > 0);
+        }
         hashes.push_back(state_hash(sim));
 
         GameSim resumed(*world, o);  // a save continues on the same schedule
@@ -207,6 +233,9 @@ int main() {
             for (const auto& i : issues) std::printf("  order issue: %s %s\n", i.stage.c_str(), i.field.c_str());
             CHECK(issues.empty());
             same &= matches(checked, *world, k + 1);
+            const auto times = checked.stage_times();  // a checked tick is not measured
+            same &= times[1].ran == (k % EVERY == OFFSET) && times[0].ran;
+            for (const auto& t : times) same &= t.last_ms == 0 && t.runs == 0 && t.total_ms == 0;
         }
         CHECK(same);
     }

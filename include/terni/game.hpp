@@ -308,6 +308,9 @@ struct OrderIssue {
 // Ticks are judged 32 at a time, by their median, so a stage that runs once a month or a
 // single late tick does not count. Host measurements only: nothing here reaches the
 // simulation, and peers may well see different values.
+// Ticks are timed on the device's own clock, from submission until their results are
+// back, so a host that polls a background tick rarely is judged by the device, not by
+// how often it looked (ComputeRunner::last_tick_device_ms()).
 struct DeviceHealth {
     double usual_ms = 0;   // a tick when the device was at its best: the lowest median so far
     double recent_ms = 0;  // median of the last 32 ticks measured (0 until there are 32)
@@ -340,6 +343,16 @@ struct CompileStats {
     uint32_t compiled = 0;  // stages compiled with shaderc
     uint32_t cached = 0;    // stages loaded from the SPIR-V cache
     double ms = 0;          // time spent getting SPIR-V
+};
+
+// GPU time of one stage, from GameSim::stage_times(). Stages are named as in the game;
+// the built-in ones that Terni adds after them start with `terni_`.
+struct StageTime {
+    std::string name;
+    bool ran = false;    // in the last tick (a stage with a schedule skips some)
+    double last_ms = 0;  // GPU time in the last tick; 0 if it did not run
+    uint64_t runs = 0;   // ticks it ran in, since the start or the last move_to_device()
+    double total_ms = 0; // GPU time over those ticks: total_ms / runs is its average
 };
 
 // Whether this build can compile rules: true for Terni::core, false for Terni::runtime
@@ -484,6 +497,10 @@ public:
     double last_tick_ms() const;      // wall time of the last tick, uploads and per-tick readbacks included
                                       // (begun to seen done: by tick_ready() or end_tick())
     double last_tick_gpu_ms() const;  // GPU time of the last tick's stages alone (timestamps)
+    // Per stage, in the order they run: GPU time in the last tick and since the start.
+    // Times are 0 where the device has no timestamps. tick_checked() is not measured.
+    // Never blocks: a tick in flight counts once it is collected.
+    std::vector<StageTime> stage_times() const;
     uint64_t sync_reads() const;      // reads so far that waited for the GPU (read_field, snapshot, save, ...)
 
     // ---- device health ----

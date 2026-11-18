@@ -113,6 +113,21 @@ public:
     double last_tick_ms() const;      // wall time of the last tick incl. batched transfers, from submission
                                       // until it was seen done (tick_done() or the wait)
     double last_tick_gpu_ms() const;  // GPU time of the last tick's stages (timestamps; 0 if unsupported)
+    // The last tick from its submission until its results were back, on the device's own
+    // clock, so it does not depend on when the host looked. Where the device cannot tell
+    // its clock: last_tick_ms() if the host waited, last_tick_gpu_ms() if it polled.
+    double last_tick_device_ms() const;
+    // Per stage, in order: whether it ran in the last tick and its GPU time there, and the
+    // ticks it ran in and their GPU time in all, since this runner was made. Times are 0
+    // where the device has no timestamps. tick_checked() is not measured: it sets `ran`
+    // and `last_ms` = 0, and adds nothing to the totals.
+    struct StageTiming {
+        bool ran = false;
+        double last_ms = 0;
+        uint64_t runs = 0;
+        double total_ms = 0;
+    };
+    const std::vector<StageTiming>& stage_timings() const;
 
 private:
     struct Impl;

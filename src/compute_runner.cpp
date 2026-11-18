@@ -60,10 +60,14 @@ struct ComputeRunner::Impl {
     struct Flight {
         bool active = false, seen_done = false;
         VkCommandBuffer pre = VK_NULL_HANDLE, post = VK_NULL_HANDLE;
+        std::vector<bool> run;  // the stages it runs
+        bool ends_late = false;  // its last timestamp is at the end of its readbacks (query S + 1), not of its stages
+        uint64_t clock = 0;      // the device clock when it was submitted; 0 if unknown
         std::chrono::steady_clock::time_point submitted, done;
     } flight;
     double last_tick_ms = 0;
     double last_gpu_ms = 0;  // stages only, from GPU timestamps
+    double last_device_ms = 0;  // submission to the end of the tick, as the device saw it
     VkDescriptorSetLayout set_layout = VK_NULL_HANDLE;
     VkDescriptorPool pool = VK_NULL_HANDLE;
     VkDescriptorSet set = VK_NULL_HANDLE;
@@ -71,7 +75,8 @@ struct ComputeRunner::Impl {
     std::vector<VkPipeline> pipelines;
     VkQueryPool queries = VK_NULL_HANDLE;
     std::map<std::vector<bool>, VkCommandBuffer> tick_cmds;  // recorded ticks, by which stages run
-    std::vector<double> stage_ns;
+    std::vector<ComputeRunner::StageTiming> timings;  // per stage
+    std::vector<double> stage_ns;                      // the last tick's, from the timestamps
     uint64_t ticks = 0;
     double upload_ms = 0;
     uint64_t device_bytes = 0;
@@ -149,7 +154,7 @@ struct ComputeRunner::Impl {
         barrier(cmd, COMPUTE | TRANSFER, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT,
                 COMPUTE | TRANSFER, SHADER_RW | VK_ACCESS_2_TRANSFER_WRITE_BIT);
         if (queries) {
-            vkCmdResetQueryPool(cmd, queries, 0, static_cast<uint32_t>(S + 1));
+            vkCmdResetQueryPool(cmd, queries, 0, static_cast<uint32_t>(S + 2));
             vkCmdWriteTimestamp2(cmd, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, queries, 0);
         }
         for (uint32_t b : zeroed(run)) vkCmdFillBuffer(cmd, buffers[b].buffer, 0, VK_WHOLE_SIZE, 0);
@@ -218,15 +223,32 @@ struct ComputeRunner::Impl {
         if (flight.post) ctx.free_command_buffer(flight.post);
         last_tick_ms = std::chrono::duration<double, std::milli>(flight.done - flight.submitted).count();
         ++ticks;
+        // What the device did, whenever the host looked: from the device clock at submission
+        // to the tick's last timestamp. Without that clock, the wall time if the host waited
+        // for the tick (it is seen done at once), or the stages' GPU time if it polled.
+        last_device_ms = last_tick_ms;
         if (queries) {
-            const size_t S = stages.size();
-            std::vector<uint64_t> ts(S + 1);
-            VK_CHECK(vkGetQueryPoolResults(ctx.device(), queries, 0, static_cast<uint32_t>(S + 1),
+            const size_t S = stages.size(), n = flight.ends_late ? S + 2 : S + 1;
+            std::vector<uint64_t> ts(n);
+            VK_CHECK(vkGetQueryPoolResults(ctx.device(), queries, 0, static_cast<uint32_t>(n),
                                            ts.size() * sizeof(uint64_t), ts.data(), sizeof(uint64_t),
                                            VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT));
             const double period = ctx.properties().limits.timestampPeriod;
-            for (size_t s = 0; s < S; ++s) stage_ns[s] += double(ts[s + 1] - ts[s]) * period;
-            last_gpu_ms = double(ts[S] - ts[0]) * period / 1e6;
+            const uint32_t bits = ctx.timestamp_valid_bits();
+            const uint64_t mask = bits >= 64 ? ~uint64_t(0) : (uint64_t(1) << bits) - 1;
+            for (size_t s = 0; s < S; ++s) stage_ns[s] = double((ts[s + 1] - ts[s]) & mask) * period;
+            last_gpu_ms = double((ts[S] - ts[0]) & mask) * period / 1e6;
+            if (flight.clock != 0)
+                last_device_ms = std::max(last_gpu_ms, double((ts[n - 1] - flight.clock) & mask) * period / 1e6);
+            else if (flight.seen_done)
+                last_device_ms = last_gpu_ms;
+        }
+        for (size_t s = 0; s < timings.size(); ++s) {
+            auto& t = timings[s];
+            t.ran = flight.run[s];
+            t.last_ms = t.ran && queries ? stage_ns[s] / 1e6 : 0;  // a skipped stage's timestamps differ by noise
+            t.runs += t.ran;
+            t.total_ms += t.last_ms;
         }
         rb_done ^= 1;
         flight = {};
@@ -364,9 +386,10 @@ ComputeRunner::ComputeRunner(uint32_t device_index, bool validation, const std::
     if (ctx.timestamp_valid_bits()) {
         VkQueryPoolCreateInfo qci{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
         qci.queryType = VK_QUERY_TYPE_TIMESTAMP;
-        qci.queryCount = static_cast<uint32_t>(S + 1);
+        qci.queryCount = static_cast<uint32_t>(S + 2);  // after each stage, and at the end of the readbacks
         VK_CHECK(vkCreateQueryPool(d, &qci, nullptr, &m.queries));
     }
+    m.timings.assign(S, {});
     m.stage_ns.assign(S, 0.0);
 
     m.tick_cmd(std::vector<bool>(S, true));  // the usual tick, recorded up front
@@ -404,11 +427,12 @@ void ComputeRunner::tick(const std::vector<bool>& run) {
 void ComputeRunner::tick_submit(const std::vector<bool>& run) {
     Impl& m = *impl_;
     m.finish();
-    VkCommandBuffer tick_cmd = m.tick_cmd(m.run_mask(run));
+    Impl::Flight f;
+    f.run = m.run_mask(run);
+    VkCommandBuffer tick_cmd = m.tick_cmd(f.run);
     std::vector<VkCommandBuffer> cmds;
     VkCommandBufferBeginInfo once{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     once.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    Impl::Flight f;
     if (!m.staged_copies.empty()) {
         f.pre = m.ctx.allocate_command_buffer();
         VK_CHECK(vkBeginCommandBuffer(f.pre, &once));
@@ -424,9 +448,15 @@ void ComputeRunner::tick_submit(const std::vector<bool>& run) {
         f.post = m.ctx.allocate_command_buffer();
         VK_CHECK(vkBeginCommandBuffer(f.post, &once));
         m.record_readbacks(f.post);
+        if (m.queries) {  // the tick ends when its results are back
+            vkCmdWriteTimestamp2(f.post, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, m.queries,
+                                 static_cast<uint32_t>(m.stages.size() + 1));
+            f.ends_late = true;
+        }
         VK_CHECK(vkEndCommandBuffer(f.post));
         cmds.push_back(f.post);
     }
+    if (m.queries && !m.ctx.device_clock(f.clock)) f.clock = 0;
     f.submitted = std::chrono::steady_clock::now();
     m.ctx.submit(cmds);
     f.active = true;
@@ -693,6 +723,8 @@ std::vector<ComputeRunner::OrderDiff> ComputeRunner::tick_checked(const std::vec
     m.rb_done ^= 1;
     m.last_tick_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
     m.last_gpu_ms = 0;  // not measured
+    m.last_device_ms = m.last_tick_ms;
+    for (size_t s = 0; s < S; ++s) m.timings[s].ran = runs[s], m.timings[s].last_ms = 0;
     return diffs;
 }
 
@@ -700,6 +732,8 @@ uint64_t ComputeRunner::sync_reads() const { return impl_->sync_reads; }
 
 double ComputeRunner::last_tick_ms() const { return impl_->last_tick_ms; }
 double ComputeRunner::last_tick_gpu_ms() const { return impl_->last_gpu_ms; }
+double ComputeRunner::last_tick_device_ms() const { return impl_->last_device_ms; }
+const std::vector<ComputeRunner::StageTiming>& ComputeRunner::stage_timings() const { return impl_->timings; }
 
 std::string ComputeRunner::device_name() const { return impl_->ctx.device_name(); }
 
@@ -714,7 +748,7 @@ std::string ComputeRunner::report() const {
         double total = 0;
         os << "\n      GPU time per tick:";
         for (size_t s = 0; s < m.stages.size(); ++s) {
-            const double us = m.stage_ns[s] / double(m.ticks) / 1000.0;
+            const double us = m.timings[s].total_ms / double(m.ticks) * 1000.0;
             total += us;
             os << ' ' << m.stages[s].shader << ' ' << us << "us,";
         }

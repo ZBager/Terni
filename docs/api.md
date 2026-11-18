@@ -123,6 +123,7 @@ Runs a `Game` on one device. The `Game` must outlive it. Not thread-safe.
 | `std::string device_name()`, `std::string report()` | The device; upload time, memory, GPU time per stage |
 | `CompileStats compile_stats()` | Stages compiled vs loaded from the cache, time spent |
 | `double last_tick_ms()`, `double last_tick_gpu_ms()` | Wall time incl. transfers; GPU time of the stages |
+| `std::vector<StageTime> stage_times()` | Per stage, in the order they run (the rules', then Terni's own, named `terni_...`): GPU time in the last tick and since the start. Never blocks |
 | `uint64_t sync_reads()` | Reads so far that waited for the GPU |
 | `DeviceHealth device_health()` | Tick times lately against the usual, and whether the device has become slow |
 | `void move_to_device(device)` | Continues on another device with the same state, bit for bit; handles and `read_each_tick` ids stay valid. Throws, changing nothing, if the device cannot be used |
@@ -135,6 +136,7 @@ Runs a `Game` on one device. The `Game` must outlive it. Not thread-safe.
 | `ModifierContribution` | `handle`, `bundle`, `entity`, `row` (where the instance sits), `value` (raw, scaled) |
 | `OrderIssue` | `stage`, `field`, `parallel` (false: forwards and backwards differ; true: the parallel run differs), `first_row`, `rows` |
 | `CompileStats` | `compiled`, `cached`, `ms` |
+| `StageTime` | `name`, `ran` (in the last tick), `last_ms` (0 if it did not run), `runs` (ticks it ran in since the start or `move_to_device()`), `total_ms` (over those runs; `total_ms / runs` is its average). Times are 0 where the device has no timestamps; `tick_checked()` is not measured |
 | `DeviceHealth` | `usual_ms` (lowest median of 32 ticks so far), `recent_ms` (latest median), `ticks` (measured since the start, `load()` or `move_to_device()`), `slow` (over 4 times the usual and at least 1 ms longer) |
 | `StageDef` (in `Game::stages`) | `name`, `for_each`, `dispatch`, `clear`, `source`, `every`, `offset`; `runs_in(tick)` says whether it runs in the tick after `tick` completed ticks |
 | `EntityDef` (in `Game::entities`) | `name`, `capacity`, `fields`, `dynamic`, `spawns`; `field(name)`, `field_index(name)` |
@@ -195,5 +197,8 @@ built on it; use it directly only for models that do not fit the world descripti
 stages that run together is recorded once and reused. The constructor's `constants`
 are specialization constants (ids 2 and up) given to every shader. `tick_submit()`,
 `tick_done()` and `tick_wait()` split `tick()` for hosts that keep working meanwhile.
+`stage_timings()` gives each stage's GPU time, as `GameSim::stage_times()` does, and
+`last_tick_device_ms()` the tick from submission to its results on the device's clock,
+which is what `GameSim::device_health()` judges.
 The header documents every call, including the transfers (`queue_write`,
 `add_tick_readback`) and `VulkanContext`'s buffer and submission helpers.

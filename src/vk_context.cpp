@@ -275,12 +275,45 @@ VulkanContext::VulkanContext(uint32_t device_index, bool enable_validation) {
     qci.queueCount = 1;
     qci.pQueuePriorities = &priority;
 
+    // Optional: the device clock at any moment (calibrated timestamps), so that a tick can
+    // be timed from its submission on the device's own clock. KHR and EXT are the same call.
+    const char* calibrated = nullptr;
+    if (timestamp_valid_bits_ != 0) {
+        uint32_t n = 0;
+        vkEnumerateDeviceExtensionProperties(physical_, nullptr, &n, nullptr);
+        std::vector<VkExtensionProperties> exts(n);
+        vkEnumerateDeviceExtensionProperties(physical_, nullptr, &n, exts.data());
+        for (const char* name : {"VK_KHR_calibrated_timestamps", "VK_EXT_calibrated_timestamps"}) {
+            for (const auto& e : exts)
+                if (std::strcmp(e.extensionName, name) == 0) calibrated = name;
+            if (calibrated) break;
+        }
+    }
+    if (calibrated) {  // the device domain must be one it can read
+        const bool khr = std::strcmp(calibrated, "VK_KHR_calibrated_timestamps") == 0;
+        const auto domains = reinterpret_cast<PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT>(vkGetInstanceProcAddr(
+            instance_, khr ? "vkGetPhysicalDeviceCalibrateableTimeDomainsKHR" : "vkGetPhysicalDeviceCalibrateableTimeDomainsEXT"));
+        uint32_t n = 0;
+        std::vector<VkTimeDomainEXT> list;
+        if (domains && domains(physical_, &n, nullptr) == VK_SUCCESS) {
+            list.resize(n);
+            if (domains(physical_, &n, list.data()) < VK_SUCCESS) list.clear();
+        }
+        if (std::find(list.begin(), list.end(), VK_TIME_DOMAIN_DEVICE_EXT) == list.end()) calibrated = nullptr;
+    }
+
     VkDeviceCreateInfo dci{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
     dci.pNext = &f2;  // features go via pNext when using VkPhysicalDeviceFeatures2
     dci.queueCreateInfoCount = 1;
     dci.pQueueCreateInfos = &qci;
+    dci.enabledExtensionCount = calibrated ? 1 : 0;
+    dci.ppEnabledExtensionNames = calibrated ? &calibrated : nullptr;
     VK_CHECK(vkCreateDevice(physical_, &dci, nullptr, &device_));
     vkGetDeviceQueue(device_, queue_family_, 0, &queue_);
+    if (calibrated)
+        get_calibrated_ = reinterpret_cast<PFN_vkGetCalibratedTimestampsEXT>(vkGetDeviceProcAddr(
+            device_, std::strcmp(calibrated, "VK_KHR_calibrated_timestamps") == 0 ? "vkGetCalibratedTimestampsKHR"
+                                                                                : "vkGetCalibratedTimestampsEXT"));
 
     // ---- 4. command pool (RESET_COMMAND_BUFFER lets us re-record individual buffers)
     VkCommandPoolCreateInfo pci{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
@@ -292,6 +325,14 @@ VulkanContext::VulkanContext(uint32_t device_index, bool enable_validation) {
     VkFenceCreateInfo fci{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
     VK_CHECK(vkCreateFence(device_, &fci, nullptr, &fence_));
     VK_CHECK(vkCreateFence(device_, &fci, nullptr, &async_fence_));
+}
+
+bool VulkanContext::device_clock(uint64_t& ticks) const {
+    if (!get_calibrated_) return false;
+    VkCalibratedTimestampInfoEXT info{VK_STRUCTURE_TYPE_CALIBRATED_TIMESTAMP_INFO_EXT};
+    info.timeDomain = VK_TIME_DOMAIN_DEVICE_EXT;
+    uint64_t deviation = 0;
+    return get_calibrated_(device_, 1, &info, &ticks, &deviation) == VK_SUCCESS;
 }
 
 VulkanContext::~VulkanContext() {

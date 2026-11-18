@@ -49,8 +49,13 @@ The first public version.
   results; `DeviceInfo::cpu()`; `list_devices()` is empty, instead of throwing, where
   there is no Vulkan driver; `terni_run --driver`.
 - **Device health**: `GameSim::device_health()` compares recent tick times with the usual
-  and says when the device has become slow; `GameSim::move_to_device()` continues on
+  and says when the device has become slow. Ticks are timed on the device's own clock
+  (calibrated timestamps), from submission until the results are back, so a host that
+  polls a background tick once a frame is judged by the device, not by its frame rate; `GameSim::move_to_device()` continues on
   another device with the same state, bit for bit.
+- **GPU time per stage**: `GameSim::stage_times()` (and `ComputeRunner::stage_timings()`)
+  gives each stage's GPU time in the last tick, whether it ran, and its runs and total
+  time since the start, Terni's own stages included.
 - **Stage schedules**: `every = 30 offset = 29` in `stages.txt` (or
   `WorldBuilder::stage_schedule`) runs a stage only in some ticks; other ticks do not
   dispatch it, and its `clear` fields keep their values until it runs again.

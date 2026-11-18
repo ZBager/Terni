@@ -2,7 +2,8 @@
 // Copyright (C) 2026 Rafał Zając
 #pragma once
 // Tick times of one device, to notice when it has become slow (another program is using
-// the GPU). Times are host measurements and never reach the simulation.
+// the GPU). Times are measurements (ComputeRunner::last_tick_device_ms()) and never reach
+// the simulation.
 //
 // Ticks are judged in windows of WINDOW, by their median: a stage that runs every 30th
 // tick, or one tick that waited for the operating system, does not move it. The lowest

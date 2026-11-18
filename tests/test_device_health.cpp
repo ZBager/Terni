@@ -4,10 +4,13 @@
 // so far, and a simulation moves to another device without any change to its state:
 // a session with host writes, modifiers (timed, inherited), per-tick results and a tick in
 // flight gives the same observations and the same final state whether it stays on one
-// device or moves between any two in the middle.
+// device or moves between any two in the middle. A host that polls a background tick
+// rarely is judged by what the device did, not by how often it looked.
+#include <chrono>
 #include <cstdio>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "device_health.hpp"
@@ -222,6 +225,27 @@ int main() {
         CHECK(sim.ticks() == 43);
         sim.move_to_device(devices.back().index);
         CHECK(sim.device_name() == devices.back().name);
+    }
+
+    // A host that polls a background tick once a frame: the device is judged by what it
+    // did, not by how often the host looked. Here the host looks every 15 ms, far longer
+    // than this world's tick takes on any device (a fraction of a millisecond).
+    for (const auto& d : devices) {
+        GameSim sim(*w.game, d.index);
+        const uint32_t pops = sim.read_each_tick(w.planet, "pop");  // the tick ends with its readback
+        (void)pops;
+        for (int t = 0; t < int(detail::DeviceHealthMonitor::WINDOW); ++t) {
+            sim.begin_tick();
+            do std::this_thread::sleep_for(std::chrono::milliseconds(15));
+            while (!sim.tick_ready());
+            sim.end_tick();
+        }
+        const DeviceHealth h = sim.device_health();
+        const bool ok = sim.last_tick_ms() >= 14.0 && h.ticks == detail::DeviceHealthMonitor::WINDOW &&
+                        h.recent_ms > 0 && h.recent_ms < 10.0 && !h.slow;
+        CHECK(ok);
+        std::printf("polled every 15 ms on %-40.40s tick %.3f ms by the device, %.1f ms seen %s\n", d.name.c_str(),
+                    h.recent_ms, sim.last_tick_ms(), ok ? "ok" : "WRONG");
     }
 
     std::printf("test_device_health: %s\n", failures == 0 ? "PASS" : "FAIL");

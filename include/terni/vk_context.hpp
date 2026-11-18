@@ -113,6 +113,9 @@ public:
     VkPhysicalDevice physical_device() const { return physical_; }
     const VkPhysicalDeviceProperties& properties() const { return props_; }
     uint32_t timestamp_valid_bits() const { return timestamp_valid_bits_; }
+    // The device's timestamp clock now, in the units vkCmdWriteTimestamp2 writes (through
+    // VK_KHR/EXT_calibrated_timestamps). False where the device cannot tell it.
+    bool device_clock(uint64_t& ticks) const;
     std::string device_name() const { return props_.deviceName; }
 
 private:
@@ -131,6 +134,7 @@ private:
     VkPhysicalDeviceProperties props_{};
     VkPhysicalDeviceMemoryProperties mem_props_{};
     uint32_t timestamp_valid_bits_ = 0;
+    PFN_vkGetCalibratedTimestampsEXT get_calibrated_ = nullptr;  // null: no device clock
 };
 
 }  // namespace terni

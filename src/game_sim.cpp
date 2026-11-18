@@ -917,6 +917,7 @@ struct GameSim::Impl {
     bool in_flight = false;  // begin_tick() without end_tick()
     CompileStats stats;
     std::vector<std::vector<uint32_t>> spirv;  // per stage, then the built-in last one; kept for move_to_device()
+    std::vector<std::string> stage_names;      // the runner's stages: the rules', then the built-in ones
     bool validation = false;
     detail::DeviceHealthMonitor health;
     uint64_t earlier_sync_reads = 0;  // on runners this simulation has moved away from
@@ -1086,7 +1087,7 @@ struct GameSim::Impl {
 
     void after_tick(bool measured = true) {
         ++now;
-        if (measured) health.add(runner->last_tick_ms());
+        if (measured) health.add(runner->last_tick_device_ms());  // what the device did, not when the host looked
         for (auto& p : parents) {
             p.stale = p.active;
             if (!p.active || p.pending.empty()) continue;
@@ -1246,6 +1247,9 @@ GameSim::GameSim(const Game& game, const GameSimOptions& options) : impl_(std::m
     m.spirv = std::move(spirv);
     m.validation = options.validation;
     m.runner = m.make_runner(static_cast<uint32_t>(device), nullptr);
+    for (const auto& st : game.stages) m.stage_names.push_back(st.name);
+    for (const auto& st : spawn_stage_sources(game)) m.stage_names.push_back(st.name);
+    m.stage_names.push_back("terni_tick");
     // what creating rows needs to know comes back with every tick
     for (auto& d : m.dynamics) {
         d.alive_read = {0, d.entity, 0, 0, 1, d.alive_binding, d.alive.size() * 4, 0};
@@ -1681,6 +1685,18 @@ StateSnapshot GameSim::snapshot() {
 
 std::string GameSim::device_name() const { return impl_->runner->device_name(); }
 std::string GameSim::report() const { return impl_->runner->report(); }
+
+std::vector<StageTime> GameSim::stage_times() const {
+    const Impl& m = *impl_;
+    const auto& timings = m.runner->stage_timings();
+    std::vector<StageTime> out;
+    out.reserve(timings.size());
+    for (size_t s = 0; s < timings.size(); ++s) {
+        const auto& t = timings[s];
+        out.push_back({m.stage_names[s], t.ran, t.last_ms, t.runs, t.total_ms});
+    }
+    return out;
+}
 CompileStats GameSim::compile_stats() const { return impl_->stats; }
 
 }  // namespace terni

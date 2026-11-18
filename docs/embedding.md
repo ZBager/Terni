@@ -153,8 +153,20 @@ copy_into_your_view_model(owners, pops);
 - Writes made before the same tick apply in the order you made them, even where they
   overlap: the last write to a value wins.
 - `last_tick_ms()` is the wall time of the last tick including transfers;
-  `last_tick_gpu_ms()` is the GPU time of its stages. `report()` breaks the GPU time
-  down per stage.
+  `last_tick_gpu_ms()` is the GPU time of its stages. `stage_times()` breaks the GPU
+  time down per stage, for your profiler or an editor panel:
+
+  ```cpp
+  for (const terni::StageTime& t : sim.stage_times())
+      if (t.runs > 0)
+          log(t.name + ": " + std::to_string(t.total_ms / double(t.runs)) + " ms a run, " +
+              (t.ran ? std::to_string(t.last_ms) + " ms last tick" : "skipped last tick"));
+  ```
+
+  A stage with a schedule shows `ran = false` in the ticks it skips, and its average
+  counts only the ticks it ran in. Stages named `terni_...` are Terni's own: the four
+  `terni_spawn_...` stages give out rows of dynamic entity types. `report()` gives the
+  same times as text.
 
 ### When the device gets busy
 
@@ -174,8 +186,13 @@ if (health.slow) {
   does not count. `usual_ms` is the lowest median so far, `recent_ms` the latest one.
 - `slow` means the last 32 ticks took over 4 times the usual and at least 1 ms longer.
   For another threshold, compare `recent_ms` and `usual_ms` yourself.
-- The times are wall times as `last_tick_ms()` gives them. With `begin_tick()`, a tick
-  counts as done when you first see it done, so poll at a steady rate.
+- A tick is timed on the device's own clock, from its submission until its results are
+  back, waiting behind other programs' work included. So it does not matter how often
+  you poll a tick begun with `begin_tick()`: a host that looks once a frame is judged by
+  the device, not by its frame rate. (`last_tick_ms()` is different: it counts until
+  you first saw the tick done.) Where a device cannot read its clock that way (Vulkan's
+  calibrated timestamps), a waited-for tick counts its wall time and a polled one the
+  GPU time of its stages.
 - `move_to_device(index)` continues on another device. The state moves bit for bit:
   modifier handles, `read_each_tick` ids and their last results stay valid, queued
   writes still apply at the next tick, and lockstep peers notice nothing. It takes
