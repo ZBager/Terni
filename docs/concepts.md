@@ -162,6 +162,8 @@ and the modifier store. A save loads on any device and continues bit-identically
 
 `game_checksum()` hashes everything that defines how a world behaves: entity types with
 their capacities and fields, defines and their values, modifier keys and bundles, and
-the stages with their order, rule sources and settings. A save only loads into a game with the same checksum, and multiplayer peers
-compare it before they play together. The starting state is not part of it; that is
-what saves are for.
+the stages with their order, rule sources and settings. A save loads as it is only
+into a game with the same checksum, and multiplayer peers compare it before they play
+together. A patched game loads older saves with `SaveMatch::ByName`, which matches entity
+types, fields and bundles by name. The starting state is not part of the checksum; that
+is what saves are for.

@@ -346,10 +346,45 @@ sim.load(bytes);                           // any device; throws std::runtime_er
 
 A save holds the tick, the counts, every field and the modifier store (instances, free
 slots, pending expiries). It is binary and versioned, and carries the game checksum
-and a content hash. A save from a different game or mod, a truncated or damaged file,
-or a save with counts above the capacities is refused, and the simulation is left as
-it was. Loading continues bit-identically on any device. Store your own state (match
-settings, player names) next to it.
+and a content hash. A truncated or damaged file, or a save from a different game or
+mod, is refused, and the simulation is left as it was. Loading continues
+bit-identically on any device. Store your own state (match settings, player names) next
+to it.
+
+### Saves from an earlier version of your game
+
+When you patch your game, its checksum changes, and `load(bytes)` refuses your players'
+saves. Load them by name instead:
+
+```cpp
+if (terni::save_checksum(bytes) != sim.checksum()) {
+    for (const std::string& line : sim.load(bytes, terni::SaveMatch::ByName))
+        log("save: " + line);                // what was fitted, one line each
+} else {
+    sim.load(bytes);
+}
+```
+
+Entity types, fields and bundles are matched by name, so the save fits the patched game:
+
+- A new field starts as the game describes it: with its history values for an entity
+  type that is not dynamic, at its default for a dynamic one (its rows have been reused
+  since the start). A new entity type starts with its history.
+- A removed field or entity type is dropped, and so are the modifier instances on a
+  removed entity type or of a removed bundle; their handles become stale.
+- A sized field may get more or fewer values per row: the first ones are kept, new ones
+  start at their default. An entity type's capacity may grow, or shrink as long as the
+  rows in use still fit.
+- Changed rules, defines and bundle values simply apply from the next tick: modifier
+  totals are worked out again from the instances.
+- A field whose type or ref target changed, or an entity type that became dynamic or
+  stopped being so, is refused, with the simulation left as it was. Convert such a save
+  in your own code first: load it into the old version of the game, change the values,
+  and save it again.
+
+`load` returns one line per thing it fitted, so you can log them or tell the player.
+Peers in a lockstep game still compare the full checksum: a game loaded by name is then
+saved again, and that save is what the other players load.
 
 ## Lockstep multiplayer
 

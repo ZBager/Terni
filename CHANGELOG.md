@@ -21,7 +21,11 @@ The first public version.
   `"district.region.realm"` in code; `ModifierKeyDef::inherit_steps` replaces
   `inherit_entity`); exact totals; breakdowns for tooltips answered without waiting for the GPU.
 - **Saves and multiplayer**: complete, versioned saves that continue bit-identically on
-  any device; `game_checksum()` over everything that defines behaviour.
+  any device; `game_checksum()` over everything that defines behaviour. Save format 2
+  records entity types, fields and bundles by name, so a patched game loads its older
+  saves with `load(bytes, SaveMatch::ByName)`, which fits them by name and returns what
+  it changed; `save_checksum()` tells which game a save is from. Format 1 saves still
+  load into the game that made them.
 - **Shipping**: a SPIR-V cache keyed by source, not by compiler; `compile_rules()`;
   `Terni::runtime`, a build without the shader compiler; `cache_only`. Several worlds or
   programs may compile into one cache folder at once.

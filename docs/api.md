@@ -69,6 +69,7 @@ their world can fill the starting state before creating a `GameSim`.
 | Call | Does |
 | --- | --- |
 | `uint64_t game_checksum(const Game&)` | Hash of everything that defines behaviour (not the starting state) |
+| `uint64_t save_checksum(bytes)` | The checksum of the game a save was made with; throws if the data is not an intact save |
 | `std::string generate_prelude(const Game&)` | The GLSL Terni puts in front of every rule |
 | `bool parse_value(text, type, int64_t& raw)` | Exact decimal text to a raw value |
 
@@ -117,7 +118,8 @@ Runs a `Game` on one device. The `Game` must outlive it. Not thread-safe.
 | `int32_t modifier_own_total(key, entity, row)` | Without inheritance |
 | `int32_t modifier_total(key, entity, row)` | Own plus inherited, from host memory. `entity` is the key's entity type or one it inherits through; the total counts from there up |
 | `std::vector<ModifierContribution> modifier_breakdown(key, entity, row)` | Every contributing instance, for tooltips, nearest level first |
-| `std::vector<uint8_t> save()` / `void load(bytes)` | The complete state; `load` throws on a bad save and changes nothing |
+| `std::vector<uint8_t> save()` | The complete state |
+| `std::vector<std::string> load(bytes, match = SaveMatch::SameGame)` | Restores a save; throws on a bad save and changes nothing. `SaveMatch::ByName` fits a save of another version of the game by name and returns one line per thing fitted ([Embedding](embedding.md#saves-from-an-earlier-version-of-your-game)) |
 | `uint64_t checksum()` | `game_checksum` of its game |
 | `StateSnapshot snapshot()` | Every field and modifier total, read back now |
 | `std::string device_name()`, `std::string report()` | The device; upload time, memory, GPU time per stage |
@@ -136,6 +138,7 @@ Runs a `Game` on one device. The `Game` must outlive it. Not thread-safe.
 | `ModifierContribution` | `handle`, `bundle`, `entity`, `row` (where the instance sits), `value` (raw, scaled) |
 | `OrderIssue` | `stage`, `field`, `parallel` (false: forwards and backwards differ; true: the parallel run differs), `first_row`, `rows` |
 | `CompileStats` | `compiled`, `cached`, `ms` |
+| `SaveMatch` | `SameGame` (default: refuse a save of another game) or `ByName` (fit it by name) |
 | `StageTime` | `name`, `ran` (in the last tick), `last_ms` (0 if it did not run), `runs` (ticks it ran in since the start or `move_to_device()`), `total_ms` (over those runs; `total_ms / runs` is its average). Times are 0 where the device has no timestamps; `tick_checked()` is not measured |
 | `DeviceHealth` | `usual_ms` (lowest median of 32 ticks so far), `recent_ms` (latest median), `ticks` (measured since the start, `load()` or `move_to_device()`), `slow` (over 4 times the usual and at least 1 ms longer) |
 | `StageDef` (in `Game::stages`) | `name`, `for_each`, `dispatch`, `clear`, `source`, `every`, `offset`; `runs_in(tick)` says whether it runs in the tick after `tick` completed ticks |

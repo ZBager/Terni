@@ -268,10 +268,21 @@ std::string generate_prelude(const Game& game);
 
 // 64-bit hash of everything that defines how a world behaves: entity types and
 // fields, defines and their values, modifier keys and bundles, stage order and
-// rule sources. Saves only load into a game with the same checksum, and lockstep
-// multiplayer peers compare it before playing together. Starting state (history)
-// is not included -- that is what saves are for.
+// rule sources. Saves load as they are only into a game with the same checksum
+// (SaveMatch::ByName fits them to another), and lockstep multiplayer peers compare it
+// before playing together. Starting state (history) is not included -- that is what
+// saves are for.
 uint64_t game_checksum(const Game& game);
+
+// The checksum of the game a save was made with, to tell before loading whether it
+// matches. Throws std::runtime_error if the data is not an intact Terni save.
+uint64_t save_checksum(const std::vector<uint8_t>& data);
+
+// How GameSim::load() treats a save made with another version of the game.
+enum class SaveMatch {
+    SameGame,  // refuse it: the save must come from a game with the same checksum
+    ByName,    // fit it to this game by name (a patched game, or another set of mods)
+};
 
 // Exact decimal text -> fixed-point raw value of a type (integer math only).
 bool parse_value(const std::string& text, FieldType type, int64_t& out);
@@ -485,9 +496,16 @@ public:
     // Binary, little-endian, versioned, with the game checksum and a content hash.
     std::vector<uint8_t> save();
     // Restores a save into this simulation (any device). Throws std::runtime_error --
-    // leaving the simulation untouched -- if the save is corrupt, truncated, from
-    // another format version, or from a game with a different checksum.
-    void load(const std::vector<uint8_t>& data);
+    // leaving the simulation untouched -- if the save is corrupt, truncated or from an
+    // unknown format version, or, with SaveMatch::SameGame, from a game with a different
+    // checksum. With SaveMatch::ByName such a save is fitted to this game: entity types,
+    // fields and bundles are matched by name; new fields and entity types start as the
+    // game describes them (a dynamic type's new field at its default); removed ones and
+    // the modifier instances of removed bundles are dropped; a field may change its
+    // values per row and an entity type its capacity (down to the rows in use). A field
+    // that changed its type, or an entity type that became dynamic or stopped being so,
+    // is refused. Returns one line per thing fitted; empty for a save of this very game.
+    std::vector<std::string> load(const std::vector<uint8_t>& data, SaveMatch match = SaveMatch::SameGame);
     uint64_t checksum() const;
 
     StateSnapshot snapshot();  // all fields, modifier totals and counts, read back from the GPU

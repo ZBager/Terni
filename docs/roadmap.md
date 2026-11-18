@@ -30,10 +30,11 @@ on a library.
    frame measures the device, not its frame rate; and `terni_bench --frame-load`, which
    runs every device beside a stand-in for a renderer and reports how much the tick time
    spreads and what the ticks cost the renderer's frames.
-3. **Saves that survive a patch.** Today a save loads only into the exact game that
-   made it. A game that adds a field, changes a rule or raises a capacity should still
-   load its players' saves, with the fields matched by name and new ones given their
-   defaults; peers in a lockstep game keep comparing the full checksum.
+3. **Saves that survive a patch** (done). `load(bytes, SaveMatch::ByName)` fits a save
+   of another version of the game by name: added fields and entity types start as the
+   game describes them, removed ones are dropped, sized fields and capacities may change,
+   and what cannot be fitted is refused. Peers in a lockstep game keep comparing the full
+   checksum.
 4. **Rules from mods treated as code.** Measure robust buffer access and turn it on if
    it costs little; report a lost device as its own error, so a game can save and start
    again on another device; document what a broken or hostile rule can do.

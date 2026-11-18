@@ -129,7 +129,41 @@ uint64_t fnv64(const uint8_t* p, size_t n) {
 }
 
 constexpr char SAVE_MAGIC[8] = {'T', 'E', 'R', 'N', 'I', 'S', 'A', 'V'};
-constexpr uint32_t SAVE_VERSION = 1;
+// 2: entity types, field types and bundle names by name, so a save can load into a
+// patched game (SaveMatch::ByName). 1 is still read, into the game that made it.
+constexpr uint32_t SAVE_VERSION = 2;
+
+// The modifier store as a save holds it: instances by bundle and entity index, the free
+// slots in order, pending expiries and the sequence counter.
+struct SavedModifiers {
+    struct Instance {
+        uint32_t bundle = 0, entity = 0, row = 0;
+        int32_t scale = 0;
+        uint32_t version = 0;
+        bool alive = false;
+    };
+    struct Due {
+        uint64_t tick, seq;
+        uint32_t slot, version;
+    };
+    uint64_t seq = 0;
+    std::vector<Instance> instances;
+    std::vector<uint32_t> free;
+    std::vector<Due> due;
+
+    void read(Reader& r) {
+        seq = r.u64();
+        instances.resize(r.u32());
+        for (Instance& in : instances) {
+            in.bundle = r.u32(), in.entity = r.u32(), in.row = r.u32(), in.scale = r.i32(), in.version = r.u32();
+            in.alive = r.u8() != 0;
+        }
+        free.resize(r.u32());
+        for (uint32_t& f : free) f = r.u32();
+        due.resize(r.u32());
+        for (Due& d : due) d.tick = r.u64(), d.seq = r.u64(), d.slot = r.u32(), d.version = r.u32();
+    }
+};
 
 // Modifier total columns: for each key, the entity it applies to and (if it
 // inherits) the entities it inherits from, nearest first. Shared by the prelude and the store.
@@ -283,28 +317,26 @@ public:
         for (const Due& d : pending) w.u64(d.tick), w.u64(d.seq), w.u32(d.slot), w.u32(d.version);
     }
 
-    template <class R>
-    void restore(R& r) {
-        seq_ = r.u64();
-        const uint32_t n = r.u32();
-        if (n > g_.modifier_capacity) throw std::runtime_error("save: more modifier instances than capacity");
-        inst_.assign(n, {});
+    void restore(const SavedModifiers& saved) {
+        seq_ = saved.seq;
+        if (saved.instances.size() > g_.modifier_capacity) throw std::runtime_error("save: more modifier instances than capacity");
+        inst_.assign(saved.instances.size(), {});
         alive_ = 0;
-        for (Instance& in : inst_) {
-            in.bundle = r.u32(), in.entity = r.u32(), in.row = r.u32(), in.scale = r.i32(), in.version = r.u32();
-            in.alive = r.u8() != 0;
+        for (size_t i = 0; i < inst_.size(); ++i) {
+            const auto& from = saved.instances[i];
+            Instance& in = inst_[i];
+            in.bundle = from.bundle, in.entity = from.entity, in.row = from.row, in.scale = from.scale;
+            in.version = from.version, in.alive = from.alive;
             if (in.alive && (in.bundle >= g_.bundles.size() || in.entity >= g_.entities.size() ||
                              in.row >= g_.entities[in.entity].capacity))
                 throw std::runtime_error("save: modifier instance out of range");
             alive_ += in.alive;
         }
-        free_.resize(r.u32());
-        for (uint32_t& s : free_) {
-            s = r.u32();
+        free_ = saved.free;
+        for (uint32_t s : free_)
             if (s >= inst_.size() || inst_[s].alive) throw std::runtime_error("save: bad modifier free list");
-        }
-        due_.resize(r.u32());
-        for (Due& d : due_) d.tick = r.u64(), d.seq = r.u64(), d.slot = r.u32(), d.version = r.u32();
+        due_.clear();
+        for (const auto& d : saved.due) due_.push_back({d.tick, d.seq, d.slot, d.version});
         std::make_heap(due_.begin(), due_.end(), std::greater<Due>());
         for (Column& c : columns) {
             std::fill(c.totals.begin(), c.totals.end(), 0);
@@ -859,6 +891,14 @@ struct GameSim::Impl {
     std::vector<uint32_t> state;                     // tick, counts
     std::vector<std::vector<int32_t>> columns;       // per field, in binding order (initial upload / readback)
     std::vector<std::string> column_names;
+    // What each column is: a field of an entity type, or one of Terni's own columns of a
+    // dynamic type (`own`: alive_bits, generation, terni_prev, ...).
+    struct ColumnInfo {
+        uint32_t entity = 0;
+        int field = -1;
+        std::string own;
+    };
+    std::vector<ColumnInfo> column_info;
     std::vector<std::vector<uint32_t>> field_binding;  // [entity][field] -> binding
     uint32_t mod_binding0 = 0;
     ModifierStore mods;
@@ -1011,6 +1051,32 @@ struct GameSim::Impl {
         for (size_t s = 0; s < game.stages.size(); ++s) run[s] = game.stages[s].runs_in(now);
         return run;
     }
+    // Column `c` as the game starts it: a field as the game's tables hold it (history
+    // values, defaults elsewhere), the rows of a dynamic type alive up to the starting count.
+    std::vector<int32_t> starting_column(size_t c) const {
+        const ColumnInfo& info = column_info[c];
+        const EntityTable& t = game.tables[info.entity];
+        if (info.field >= 0) return t.columns[size_t(info.field)];
+        std::vector<int32_t> words(columns[c].size(), 0);
+        if (info.own == "alive_bits" || info.own == "terni_prev")
+            for (uint32_t row = 0; row < t.count; ++row) words[row / 32] |= int32_t(1u << (row % 32));
+        else if (info.own == "generation")
+            for (uint32_t row = 0; row < t.count; ++row) words[row] = 1;
+        return words;
+    }
+    // A field's default in every row: what a new field of a dynamic type starts with, whose
+    // rows have been reused since the start.
+    std::vector<int32_t> default_column(size_t c) const {
+        const ColumnInfo& info = column_info[c];
+        const FieldDef& f = game.entities[info.entity].fields[size_t(info.field)];
+        std::vector<int32_t> words(columns[c].size());
+        for (size_t v = 0; v < words.size() / f.words(); ++v) {
+            words[v * f.words()] = static_cast<int32_t>(static_cast<uint64_t>(f.default_raw));
+            if (f.words() == 2) words[v * 2 + 1] = static_cast<int32_t>(static_cast<uint64_t>(f.default_raw) >> 32);
+        }
+        return words;
+    }
+
     // ---- dynamic entity types ----
     Dynamic& dynamic(uint32_t entity, const char* call) {
         const int d = dynamic_of.at(entity);
@@ -1182,6 +1248,7 @@ GameSim::GameSim(const Game& game, const GameSimOptions& options) : impl_(std::m
             m.field_binding[e].push_back(static_cast<uint32_t>(2 + m.columns.size()));
             m.columns.push_back(t.columns[f]);
             m.column_names.push_back(t.def->name + "." + t.def->fields[f].name);
+            m.column_info.push_back({uint32_t(e), int(f), ""});
         }
     }
     m.dynamic_of.assign(game.entities.size(), -1);
@@ -1198,9 +1265,10 @@ GameSim::GameSim(const Game& game, const GameSimOptions& options) : impl_(std::m
         d.cool.assign(d.alive.size(), 0);
         d.alive_binding = static_cast<uint32_t>(2 + m.columns.size());
         const std::vector<int32_t> bits(d.alive.begin(), d.alive.end()), none(d.alive.size(), 0);
-        auto column = [&](const char* name, std::vector<int32_t> words) {
+        auto column = [&](const std::string& name, std::vector<int32_t> words) {
             m.columns.push_back(std::move(words));
             m.column_names.push_back(def.name + "." + name);
+            m.column_info.push_back({e, -1, name});
         };
         column("alive_bits", bits);
         column("generation", std::vector<int32_t>(d.generation.begin(), d.generation.end()));
@@ -1209,7 +1277,7 @@ GameSim::GameSim(const Game& game, const GameSimOptions& options) : impl_(std::m
         column("terni_eligible", none);
         column("terni_scratch", std::vector<int32_t>(spawn_scratch_words(game, def), 0));
         for (size_t i = 0; i < def.spawns.size(); ++i)
-            column(("terni_wanted_" + std::to_string(i)).c_str(),
+            column("terni_wanted_" + std::to_string(i),
                    std::vector<int32_t>(game.entities[size_t(def.spawns[i].from_entity)].capacity, 0));
         for (const auto& f : def.fields) {
             std::vector<int32_t> one;
@@ -1568,65 +1636,268 @@ uint64_t game_checksum(const Game& game) {
 
 uint64_t GameSim::checksum() const { return game_checksum(impl_->game); }
 
+namespace {
+
+const char* type_name(uint8_t t) {
+    static const char* const names[] = {"quantity", "rate", "agg", "int", "count", "ref", "money64"};
+    return t < 7 ? names[t] : "Terni's own";
+}
+
+// A save as it was read, before it is fitted to a game.
+struct SavedState {
+    uint32_t version = 0;
+    uint64_t checksum = 0, now = 0;
+    uint32_t device_tick = 0;
+    struct Entity {
+        std::string name;
+        uint32_t capacity = 0, count = 0;
+        bool dynamic = false;
+    };
+    std::vector<Entity> entities;
+    struct Column {
+        std::string name;
+        uint8_t type = 255;  // a FieldType, or 255 for Terni's own columns
+        uint32_t size = 0;   // values per row (fields)
+        std::string ref;     // the entity type a ref field points to
+        std::vector<int32_t> words;
+    };
+    std::vector<Column> columns;
+    std::vector<std::string> bundles;
+    SavedModifiers mods;
+};
+
+// Reads the header and checks the content hash: a damaged save is refused before anything else.
+Reader open_save(const std::vector<uint8_t>& data, uint32_t& version, uint64_t& checksum) {
+    if (data.size() < 8 + 4 + 8 + 8 || std::memcmp(data.data(), SAVE_MAGIC, 8) != 0)
+        throw std::runtime_error("save: not a Terni save");
+    const uint64_t stored_hash = Reader{data.data() + data.size() - 8, 8}.u64();
+    if (fnv64(data.data(), data.size() - 8) != stored_hash) throw std::runtime_error("save: corrupt (content hash mismatch)");
+    Reader r{data.data(), data.size() - 8, 8};
+    version = r.u32();
+    if (version != 1 && version != SAVE_VERSION)
+        throw std::runtime_error("save: format version " + std::to_string(version) + ", expected " + std::to_string(SAVE_VERSION));
+    checksum = r.u64();
+    return r;
+}
+
+}  // namespace
+
+uint64_t save_checksum(const std::vector<uint8_t>& data) {
+    uint32_t version = 0;
+    uint64_t checksum = 0;
+    open_save(data, version, checksum);
+    return checksum;
+}
+
 std::vector<uint8_t> GameSim::save() {
     Impl& m = *impl_;
     m.settle();
     // host writes queued for the next tick are part of the state being saved
     m.runner->flush_queued();
+    m.runner->read(1, m.state.data(), m.state.size() * 4);
 
     Writer w;
     w.buf.insert(w.buf.end(), SAVE_MAGIC, SAVE_MAGIC + 8);
     w.u32(SAVE_VERSION);
     w.u64(game_checksum(m.game));
     w.u64(m.now);
-    m.runner->read(1, m.state.data(), m.state.size() * 4);
-    w.u32(static_cast<uint32_t>(m.state.size()));
-    for (uint32_t v : m.state) w.u32(v);
+    w.u32(m.state[0]);  // the device's tick counter
+    w.u32(static_cast<uint32_t>(m.game.entities.size()));
+    for (size_t e = 0; e < m.game.entities.size(); ++e) {
+        const EntityDef& def = m.game.entities[e];
+        w.str(def.name), w.u32(def.capacity), w.u8(def.dynamic ? 1 : 0), w.u32(m.state[1 + e]);
+    }
     w.u32(static_cast<uint32_t>(m.columns.size()));
     for (size_t c = 0; c < m.columns.size(); ++c) {
         m.runner->read(static_cast<uint32_t>(c + 2), m.columns[c].data(), m.columns[c].size() * 4);
+        const Impl::ColumnInfo& info = m.column_info[c];
         w.str(m.column_names[c]);
+        if (info.field >= 0) {
+            const FieldDef& f = m.game.entities[info.entity].fields[size_t(info.field)];
+            w.u8(static_cast<uint8_t>(f.type)), w.u32(f.size), w.str(f.ref_entity);
+        } else {
+            w.u8(255), w.u32(0), w.str("");
+        }
         w.words(m.columns[c]);
     }
+    w.u32(static_cast<uint32_t>(m.game.bundles.size()));
+    for (const auto& bundle : m.game.bundles) w.str(bundle.name);
     m.mods.save(w);
     w.u64(fnv64(w.buf.data(), w.buf.size()));  // content hash: detects corruption
     return std::move(w.buf);
 }
 
-void GameSim::load(const std::vector<uint8_t>& data) {
+std::vector<std::string> GameSim::load(const std::vector<uint8_t>& data, SaveMatch match) {
     Impl& m = *impl_;
     m.settle();  // before the tick count and everything else are replaced
-    if (data.size() < 8 + 4 + 8 || std::memcmp(data.data(), SAVE_MAGIC, 8) != 0)
-        throw std::runtime_error("save: not a Terni save");
-    const uint64_t stored_hash = Reader{data.data() + data.size() - 8, 8}.u64();
-    if (fnv64(data.data(), data.size() - 8) != stored_hash) throw std::runtime_error("save: corrupt (content hash mismatch)");
-    Reader r{data.data(), data.size() - 8, 8};
-    if (const uint32_t v = r.u32(); v != SAVE_VERSION)
-        throw std::runtime_error("save: format version " + std::to_string(v) + ", expected " + std::to_string(SAVE_VERSION));
-    if (r.u64() != game_checksum(m.game))
-        throw std::runtime_error("save: made with a different game (definitions, defines, rules or mods differ)");
+    const Game& g = m.game;
+    const uint64_t checksum = game_checksum(g);
 
-    // parse everything into temporaries first: a bad save leaves the simulation untouched
-    const uint64_t now = r.u64();
-    std::vector<uint32_t> state(r.u32());
-    if (state.size() != m.state.size()) throw std::runtime_error("save: state size mismatch");
-    for (auto& v : state) v = r.u32();
-    for (size_t e = 0; e < m.game.entities.size(); ++e)
-        if (state[1 + e] > m.game.entities[e].capacity)
-            throw std::runtime_error("save: more '" + m.game.entities[e].name + "' entities than its capacity");
-    if (r.u32() != m.columns.size()) throw std::runtime_error("save: field count mismatch");
-    std::vector<std::vector<int32_t>> columns(m.columns.size());
-    for (size_t c = 0; c < columns.size(); ++c) {
-        if (r.str() != m.column_names[c]) throw std::runtime_error("save: field " + m.column_names[c] + " missing");
-        columns[c] = r.words();
-        if (columns[c].size() != m.columns[c].size()) throw std::runtime_error("save: field " + m.column_names[c] + " has the wrong size");
+    // ---- read everything into temporaries first: a bad save leaves the simulation untouched
+    SavedState saved;
+    Reader r = open_save(data, saved.version, saved.checksum);
+    const bool same_game = saved.checksum == checksum;
+    if (!same_game && match == SaveMatch::SameGame)
+        throw std::runtime_error("save: made with a different game (definitions, defines, rules or mods differ); "
+                                 "SaveMatch::ByName loads it into this one by name");
+    if (!same_game && saved.version == 1) throw std::runtime_error("save: format version 1 loads only into the game that made it");
+    saved.now = r.u64();
+    if (saved.version == 1) {  // the same game: its entity types, fields and bundles, in order
+        std::vector<uint32_t> state(r.u32());
+        if (state.size() != 1 + g.entities.size()) throw std::runtime_error("save: state size mismatch");
+        for (auto& v : state) v = r.u32();
+        saved.device_tick = state[0];
+        for (size_t e = 0; e < g.entities.size(); ++e)
+            saved.entities.push_back({g.entities[e].name, g.entities[e].capacity, state[1 + e], g.entities[e].dynamic});
+        if (r.u32() != m.columns.size()) throw std::runtime_error("save: field count mismatch");
+        for (size_t c = 0; c < m.columns.size(); ++c) {
+            SavedState::Column col;
+            col.name = r.str();
+            if (col.name != m.column_names[c]) throw std::runtime_error("save: field " + m.column_names[c] + " missing");
+            if (const auto& info = m.column_info[c]; info.field >= 0) {
+                const FieldDef& f = g.entities[info.entity].fields[size_t(info.field)];
+                col.type = static_cast<uint8_t>(f.type), col.size = f.size, col.ref = f.ref_entity;
+            }
+            col.words = r.words();
+            saved.columns.push_back(std::move(col));
+        }
+        for (const auto& bundle : g.bundles) saved.bundles.push_back(bundle.name);
+    } else {
+        saved.device_tick = r.u32();
+        saved.entities.resize(r.u32());
+        for (auto& e : saved.entities) e.name = r.str(), e.capacity = r.u32(), e.dynamic = r.u8() != 0, e.count = r.u32();
+        saved.columns.resize(r.u32());
+        for (auto& col : saved.columns) col.name = r.str(), col.type = r.u8(), col.size = r.u32(), col.ref = r.str(), col.words = r.words();
+        saved.bundles.resize(r.u32());
+        for (auto& name : saved.bundles) name = r.str();
     }
-    ModifierStore mods(m.game);
-    mods.restore(r);
+    saved.mods.read(r);
     if (r.pos != r.size) throw std::runtime_error("save: trailing data");
 
-    // commit
-    m.now = now;
+    // ---- fit it to this game, by name. With the same game nothing may need fitting.
+    std::vector<std::string> notes;
+    auto note = [&](std::string text) {
+        if (same_game) throw std::runtime_error("save: does not match its game: " + text);
+        notes.push_back(std::move(text));
+    };
+    if (!same_game) notes.push_back("the save was made with another version of the game: its rules, defines or "
+                                    "definitions differ");
+    auto find_entity = [&](const std::string& name) -> const SavedState::Entity* {
+        for (const auto& e : saved.entities)
+            if (e.name == name) return &e;
+        return nullptr;
+    };
+    std::vector<const SavedState::Entity*> from(g.entities.size());  // per entity type: its saved self, or none
+    std::vector<uint32_t> state(1 + g.entities.size());
+    state[0] = saved.device_tick;
+    for (size_t e = 0; e < g.entities.size(); ++e) {
+        const EntityDef& def = g.entities[e];
+        from[e] = find_entity(def.name);
+        if (!from[e]) {
+            note("entity type '" + def.name + "' is new: it starts as the game describes it");
+            state[1 + e] = g.tables[e].count;
+            continue;
+        }
+        if (from[e]->dynamic != def.dynamic)
+            throw std::runtime_error("save: entity type '" + def.name + "' is " + (def.dynamic ? "" : "not ") +
+                                     "dynamic now and was " + (from[e]->dynamic ? "" : "not ") + "in the save");
+        if (from[e]->count > def.capacity)
+            throw std::runtime_error("save: more '" + def.name + "' entities than its capacity (" +
+                                     std::to_string(from[e]->count) + " rows in use, capacity " + std::to_string(def.capacity) + ")");
+        if (from[e]->capacity != def.capacity)
+            note("entity type '" + def.name + "': capacity " + std::to_string(from[e]->capacity) + ", now " +
+                 std::to_string(def.capacity));
+        state[1 + e] = from[e]->count;
+    }
+    for (const auto& e : saved.entities) {
+        bool kept = false;
+        for (const auto& def : g.entities) kept |= def.name == e.name;
+        if (!kept) note("entity type '" + e.name + "' is gone: its rows and their modifiers are dropped");
+    }
+
+    std::vector<std::vector<int32_t>> columns(m.columns.size());
+    std::vector<bool> used(saved.columns.size(), false);
+    for (size_t c = 0; c < columns.size(); ++c) {
+        const Impl::ColumnInfo& info = m.column_info[c];
+        const EntityDef& def = g.entities[info.entity];
+        const SavedState::Entity* old = from[info.entity];
+        const SavedState::Column* col = nullptr;
+        if (old)
+            for (size_t k = 0; k < saved.columns.size() && !col; ++k)
+                if (saved.columns[k].name == m.column_names[c]) col = &saved.columns[k], used[k] = true;
+        if (!col) {
+            // a new entity type, or a new field: as the game starts it, except a dynamic type's
+            // field, whose rows have been reused since the start
+            columns[c] = old && info.field >= 0 && def.dynamic ? m.default_column(c) : m.starting_column(c);
+            if (old && info.field >= 0)
+                note("field '" + m.column_names[c] + "' is new: it starts " +
+                     (def.dynamic ? "at its default" : "as the game describes it"));
+            continue;
+        }
+        if (info.field < 0) {
+            // Terni's own: bits and generations per row, or what the spawn stages work out
+            // anew each tick. What fits is copied; the rest is zero (no row, nothing pending).
+            if (same_game && col->words.size() != m.columns[c].size())
+                throw std::runtime_error("save: '" + m.column_names[c] + "' has the wrong size");
+            columns[c].assign(m.columns[c].size(), 0);
+            std::copy_n(col->words.begin(), std::min(col->words.size(), columns[c].size()), columns[c].begin());
+            continue;
+        }
+        const FieldDef& f = def.fields[size_t(info.field)];
+        if (col->type != static_cast<uint8_t>(f.type) || col->ref != f.ref_entity)
+            throw std::runtime_error("save: field '" + m.column_names[c] + "' was " + type_name(col->type) +
+                                     (col->ref.empty() ? "" : ":" + col->ref) + " and is " +
+                                     type_name(static_cast<uint8_t>(f.type)) + (f.ref_entity.empty() ? "" : ":" + f.ref_entity) +
+                                     " now; the game must convert it");
+        const uint64_t old_row = uint64_t(col->size) * f.words(), new_row = uint64_t(f.size) * f.words();
+        if (col->size == 0 || col->words.size() != old_row * old->capacity)
+            throw std::runtime_error("save: field '" + m.column_names[c] + "' has the wrong size");
+        columns[c] = m.default_column(c);  // values the save has no room for keep their default
+        const uint64_t rows = std::min(old->capacity, def.capacity), keep = std::min(old_row, new_row);
+        for (uint64_t row = 0; row < rows; ++row)
+            std::copy_n(col->words.begin() + std::ptrdiff_t(row * old_row), keep, columns[c].begin() + std::ptrdiff_t(row * new_row));
+        if (col->size != f.size)
+            note("field '" + m.column_names[c] + "': " + std::to_string(col->size) + " values per row, now " +
+                 std::to_string(f.size) + (f.size > col->size ? "; the new ones start at their default" : "; the last are dropped"));
+    }
+    for (size_t k = 0; k < saved.columns.size(); ++k) {
+        const auto& col = saved.columns[k];
+        const std::string entity = col.name.substr(0, col.name.find('.'));
+        bool type_kept = false;
+        for (const auto& def : g.entities) type_kept |= def.name == entity;
+        if (!used[k] && col.type != 255 && type_kept) note("field '" + col.name + "' is gone: its values are dropped");
+    }
+
+    // modifier instances: their bundle and entity type by name; those that no longer fit are dropped
+    SavedModifiers mods = std::move(saved.mods);
+    std::vector<int> bundle_of(saved.bundles.size(), -1), entity_of(saved.entities.size(), -1);
+    for (size_t b = 0; b < saved.bundles.size(); ++b) bundle_of[b] = g.bundle_index(saved.bundles[b]);
+    for (size_t e = 0; e < saved.entities.size(); ++e) entity_of[e] = g.entity_index(saved.entities[e].name);
+    std::map<std::string, uint32_t> dropped;  // why -> instances
+    for (uint32_t slot = 0; slot < mods.instances.size(); ++slot) {
+        auto& in = mods.instances[slot];
+        if (!in.alive) continue;
+        if (in.bundle >= bundle_of.size() || in.entity >= entity_of.size()) throw std::runtime_error("save: modifier instance out of range");
+        std::string why;
+        if (bundle_of[in.bundle] < 0) why = "bundle '" + saved.bundles[in.bundle] + "' is gone";
+        else if (entity_of[in.entity] < 0) why = "entity type '" + saved.entities[in.entity].name + "' is gone";
+        else if (in.row >= g.entities[size_t(entity_of[in.entity])].capacity)
+            why = "rows past the capacity of '" + saved.entities[in.entity].name + "'";
+        if (why.empty()) {
+            in.bundle = uint32_t(bundle_of[in.bundle]), in.entity = uint32_t(entity_of[in.entity]);
+            continue;
+        }
+        in.alive = false;
+        ++in.version;  // handles to it are stale, and so is its pending expiry
+        mods.free.push_back(slot);
+        ++dropped[why];
+    }
+    for (const auto& [why, n] : dropped) note(std::to_string(n) + " modifier instance" + (n == 1 ? "" : "s") + " dropped: " + why);
+    ModifierStore store(g);
+    store.restore(mods);
+
+    // ---- commit
+    m.now = saved.now;
     m.state = std::move(state);
     m.runner->write(1, m.state.data(), m.state.size() * 4);
     m.counts.assign(m.state.begin() + 1, m.state.end());
@@ -1654,7 +1925,7 @@ void GameSim::load(const std::vector<uint8_t>& data) {
         d.free_word = 0;
     }
     m.health.reset();  // other counts, other tick times
-    m.mods.restore_from(std::move(mods));
+    m.mods.restore_from(std::move(store));
     for (size_t c = 0; c < m.mods.columns.size(); ++c) {  // upload recomputed totals now, so reads are consistent
         auto& col = m.mods.columns[c];
         m.runner->write(m.mod_binding0 + uint32_t(c), col.totals.data(), col.totals.size() * 4);
@@ -1662,6 +1933,7 @@ void GameSim::load(const std::vector<uint8_t>& data) {
         col.dirty_hi = 0;
     }
     m.runner->discard_queued();
+    return notes;
 }
 
 StateSnapshot GameSim::snapshot() {
