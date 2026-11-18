@@ -126,6 +126,7 @@ Runs a `Game` on one device. The `Game` must outlive it. Not thread-safe.
 | `std::string device_name()`, `std::string report()` | The device; upload time, memory, GPU time per stage |
 | `CompileStats compile_stats()` | Stages compiled vs loaded from the cache, time spent |
 | `double last_tick_ms()`, `double last_tick_gpu_ms()` | Wall time incl. transfers; GPU time of the stages |
+| `std::vector<FieldHash> field_hashes()` | One hash per field, computed on the device: the same as `field_hashes(snapshot())`, at a small part of its cost. Collects a tick in flight |
 | `std::vector<StageTime> stage_times()` | Per stage, in the order they run (the rules', then Terni's own, named `terni_...`): GPU time in the last tick and since the start. Never blocks |
 | `uint64_t sync_reads()` | Reads so far that waited for the GPU |
 | `DeviceHealth device_health()` | Tick times lately against the usual, and whether the device has become slow |
@@ -181,10 +182,21 @@ Runs a `Game` on one device. The `Game` must outlive it. Not thread-safe.
 
 ## State hashes
 
-`terni/state_hash.hpp`: `StateSnapshot` (named fields), `hash_fields(snapshot)` (one
-hash per field), `combine(hashes)` (one hash), and `first_difference(a, b)`, the name of
-the first field whose values differ between two snapshots ("" if none). Comparing
-per-field hashes on peers tells you which field diverged first.
+`terni/state_hash.hpp`:
+
+| Name | Meaning |
+| --- | --- |
+| `StateSnapshot` | Named fields of raw values, and each field's values per row (`values_per_row(i)`) |
+| `std::vector<FieldHash> field_hashes(snapshot)` | One hash per field (`name`, `hash`): the values `GameSim::field_hashes()` computes on the device |
+| `std::vector<FieldHash> entity_hashes(field_hashes)` | One hash per entity type ("terni" for the tick and counts; `mod.<entity>.<key>` counts for its entity) |
+| `uint64_t combine(hashes)` | One hash of many |
+| `std::vector<FieldDifference> differences(a, b)` | Every field whose values differ, matched by name: `field`, `first_row`, `rows` (how many rows differ), `per_row`, `only_in` (1 or 2 for a field in one snapshot only) |
+| `hash_fields(snapshot)`, `first_difference(a, b)` | An older, order-dependent hash per field, and the name of the first field whose values differ ("" if none) |
+
+`GameSim::field_hashes()` (table above) hashes the state on the device. `save_snapshot(bytes)`
+(in `game.hpp`) reads a save on the host, without a game or a device: the completed ticks,
+the state, every column by name and the modifier store, for `differences()` between two
+saves. The tool `terni_diff a.sav b.sav [--rows N]` prints those differences.
 
 ## Script parser
 
@@ -203,7 +215,8 @@ built on it; use it directly only for models that do not fit the world descripti
 stages that run together is recorded once and reused. The constructor's `constants`
 are specialization constants (ids 2 and up) given to every shader. `tick_submit()`,
 `tick_done()` and `tick_wait()` split `tick()` for hosts that keep working meanwhile.
-`stage_timings()` gives each stage's GPU time, as `GameSim::stage_times()` does, and
+`add_extra(spirv)` and `run_extra(id, elements)` run a pipeline outside the tick, on the
+same buffers. `stage_timings()` gives each stage's GPU time, as `GameSim::stage_times()` does, and
 `last_tick_device_ms()` the tick from submission to its results on the device's clock,
 which is what `GameSim::device_health()` judges.
 The header documents every call, including the transfers (`queue_write`,

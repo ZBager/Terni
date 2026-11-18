@@ -70,6 +70,8 @@ ctest --test-dir build --output-on-failure
 - `./build/terni_run <game folder> [--ticks N] [--dump] [--prelude] [--device I] [--driver LIBRARY]` runs a
   data folder on every device and compares state hashes; `--prelude` prints the generated
   GLSL. `./build/hello_towns` is the getting-started example.
+- `./build/terni_diff a.sav b.sav [--rows N]` names the entity types, fields and rows where
+  two saves differ (no GPU needed).
 - `./build/terni_bench [--size tiny|small|medium|large|huge|giant|colossal] [--threads 1,2,8|powers|sweep|all] [--readback pops|ui] [--json FILE]`
   runs the benchmark world on every device and on the CPU reference, and fails if any
   run ends in a different state (`docs/benchmark.md`).

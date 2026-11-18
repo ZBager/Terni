@@ -297,6 +297,14 @@ uint64_t game_checksum(const Game& game);
 // matches. Throws std::runtime_error if the data is not an intact Terni save.
 uint64_t save_checksum(const std::vector<uint8_t>& data);
 
+// What a save holds, as a snapshot, read on the host without a game or a device: the
+// completed ticks ("terni.ticks"), "terni.state", every column by name (with its values per
+// row), and the modifier store ("terni.modifiers": bundle, entity, row, scale, version,
+// alive per slot; "terni.modifier_free"; "terni.modifier_expiries"). differences() between
+// two of them names the fields and rows where two peers' saves of the same tick differ.
+// Throws std::runtime_error if the data is not an intact Terni save.
+StateSnapshot save_snapshot(const std::vector<uint8_t>& data);
+
 // How GameSim::load() treats a save made with another version of the game.
 enum class SaveMatch {
     SameGame,  // refuse it: the save must come from a game with the same checksum
@@ -534,6 +542,11 @@ public:
     double last_tick_ms() const;      // wall time of the last tick, uploads and per-tick readbacks included
                                       // (begun to seen done: by tick_ready() or end_tick())
     double last_tick_gpu_ms() const;  // GPU time of the last tick's stages alone (timestamps)
+    // One hash per field, as hash_fields() of snapshot() would name them, but computed on the
+    // device: only two words per field come back, so it costs little enough to compare
+    // every few ticks in a lockstep game. The same values as field_hashes(snapshot()) on
+    // the host (state_hash.hpp). entity_hashes() groups them per entity type.
+    std::vector<FieldHash> field_hashes();
     // Per stage, in the order they run: GPU time in the last tick and since the start.
     // Times are 0 where the device has no timestamps. tick_checked() is not measured.
     // Never blocks: a tick in flight counts once it is collected.

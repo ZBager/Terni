@@ -44,9 +44,11 @@ on a library.
    (`every`, `offset`); in other ticks only a pass over the alive bits runs, about a
    tenth of the cost or less. An `ordinal` field numbers the rows one asker gets in a
    tick (0, 1, ...), so a new row can tell which of its parent's requests it answers.
-6. **Finding a desync.** State hashes per entity type in the public API, a tool that
-   names the first field and rows where two runs or two saves differ, and a long test
-   (thousands of ticks, saves, entities that come and go) compared across devices.
+6. **Finding a desync** (done). `field_hashes()` hashes the state on the device, cheaply
+   enough for every tick, and `entity_hashes()` groups it per entity type; `terni_diff`
+   names the fields and rows where two saves differ (`differences()` in code); a long
+   test runs 3,000 ticks with saves and entities that come and go across every device
+   and against the CPU reference.
 7. **A page on when Terni fits**: worlds small enough for the CPU, aggregating rows
    into groups first, what readbacks cost, and which work (pathfinding, planning) stays
    on the CPU and reaches the simulation as commands.

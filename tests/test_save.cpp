@@ -190,6 +190,31 @@ int main() {
         CHECK(b.modifier_alive(h) && a.modifier_alive(h));  // due at tick 25: alive at 20 in both runs
     }
 
+    // ---- state hashes on the device: the host's hashes of a snapshot, the same on every device;
+    // and two saves that differ in one value are told apart down to the row
+    {
+        std::vector<std::vector<FieldHash>> per_device;
+        for (size_t i = 0; i < devices.size(); ++i) {
+            GameSim b(*game, devices[i]);
+            b.load(save);
+            for (int t = 0; t < 3; ++t) b.tick();
+            per_device.push_back(b.field_hashes());
+            CHECK(per_device.back() == field_hashes(b.snapshot()));
+            CHECK(per_device.back() == per_device.front());
+        }
+        const auto groups = entity_hashes(per_device.front());
+        CHECK(groups.size() == 3 && groups[0].name == "terni" && groups[1].name == "empire" && groups[2].name == "planet");
+
+        GameSim b(*game, devices[0]);
+        b.load(save);
+        b.write_field(planet, "pop", 7, {fx::qty(1)});
+        const std::vector<uint8_t> other = b.save();
+        const auto diffs = differences(save_snapshot(save), save_snapshot(other));
+        CHECK(diffs.size() == 1 && diffs[0].field == "planet.pop" && diffs[0].first_row == 7 && diffs[0].rows == 1);
+        CHECK(differences(save_snapshot(save), save_snapshot(save)).empty());
+        CHECK(field_hashes(save_snapshot(save)) != field_hashes(save_snapshot(other)));
+    }
+
     // ---- the handle from before the save behaves the same as in the original run
     {
         GameSim b(*game, devices.back());

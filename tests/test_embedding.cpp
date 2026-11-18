@@ -61,7 +61,7 @@ static uint64_t run(const Game& game, const GameSimOptions& o, CompileStats* sta
 int main() {
     auto game = load_game(TERNI_SOURCE_DIR "/examples/mini_galaxy");
     if (!game->ok()) return 1;
-    const uint32_t stages = static_cast<uint32_t>(game->stages.size()) + 1;  // + built-in tick stage
+    const uint32_t stages = static_cast<uint32_t>(game->stages.size()) + 2;  // + terni_tick and terni_hash
 
     // ---- device selection
     const auto devices = VulkanContext::list_devices();

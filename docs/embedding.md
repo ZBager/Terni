@@ -436,15 +436,24 @@ travel:
    discovered as a desync later.
 2. **Every tick**, the host sends one turn holding every command for that tick. Each
    peer applies the commands with the same host-side logic, then calls `tick()`.
-3. **Every N ticks**, peers compare a state hash and stop on a mismatch:
+3. **Every few ticks**, peers compare a state hash and stop on a mismatch:
 
    ```cpp
-   uint64_t hash = terni::combine(terni::hash_fields(sim.snapshot()));
+   const std::vector<terni::FieldHash> fields = sim.field_hashes();   // computed on the device
+   uint64_t hash = terni::combine(fields);
    ```
 
-   `snapshot()` reads the whole state back, so do it every few ticks, not every tick.
-   `hash_fields` gives one hash per field, which tells you which field diverged first.
+   `field_hashes()` hashes every field on the device and brings back two words per
+   field, a fraction of a millisecond on a discrete GPU even for a million pops (reading
+   the whole state back with `snapshot()` takes about 30 ms there). On a mismatch,
+   `terni::entity_hashes(fields)` says which entity type differs, and the per-field
+   hashes which field.
 4. **A joining player** receives a save and the commands since.
+5. **To find what diverged**, have both peers save at the same tick and compare the two
+   saves with `terni_diff a.sav b.sav`. It needs no GPU and no game folder, and names the
+   entity types, fields and rows that differ, with the values. In code,
+   `terni::differences(terni::save_snapshot(a), terni::save_snapshot(b))` gives the same
+   list.
 
 Terni does not include networking; it gives you a state that is the same everywhere.
 

@@ -121,6 +121,12 @@ public:
     // ticks it ran in and their GPU time in all, since this runner was made. Times are 0
     // where the device has no timestamps. tick_checked() is not measured: it sets `ran`
     // and `last_ms` = 0, and adds nothing to the totals.
+    // ---- pipelines outside the tick, run when the host asks (state hashes, say) ----
+    // Made like the stages: the same buffers and constants. run_extra() finishes a tick in
+    // flight, runs the pipeline over `elements` threads and waits for it.
+    uint32_t add_extra(const std::vector<uint32_t>& spirv);
+    void run_extra(uint32_t id, uint32_t elements);
+
     struct StageTiming {
         bool ran = false;
         double last_ms = 0;

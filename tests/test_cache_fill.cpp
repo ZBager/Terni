@@ -38,7 +38,7 @@ static bool throws_with(const std::function<void()>& f, const std::string& text)
 int main() {
     auto game = load_game(TERNI_SOURCE_DIR "/examples/mini_galaxy");
     if (!game->ok()) return 1;
-    const uint32_t shaders = static_cast<uint32_t>(game->stages.size()) + 1;  // + built-in tick stage
+    const uint32_t shaders = static_cast<uint32_t>(game->stages.size()) + 2;  // + terni_tick and terni_hash
     const fs::path dir = fs::path(TERNI_TEST_BINARY_DIR) / "runtime_cache";
     fs::remove_all(dir);
 

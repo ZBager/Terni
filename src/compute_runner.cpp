@@ -73,6 +73,7 @@ struct ComputeRunner::Impl {
     VkDescriptorSet set = VK_NULL_HANDLE;
     VkPipelineLayout layout = VK_NULL_HANDLE;
     std::vector<VkPipeline> pipelines;
+    std::vector<VkPipeline> extras;  // add_extra()
     VkQueryPool queries = VK_NULL_HANDLE;
     std::map<std::vector<bool>, VkCommandBuffer> tick_cmds;  // recorded ticks, by which stages run
     std::vector<ComputeRunner::StageTiming> timings;  // per stage
@@ -99,7 +100,8 @@ struct ComputeRunner::Impl {
 
     // One pipeline per stage. Specialization constants: 0 = USE_SHARED_REDUCTION,
     // 1 = TERNI_ORDER_CHECK (shaders/terni/compute.glsl), then the caller's `constants`.
-    std::vector<VkPipeline> make_pipelines(uint32_t order_check) {
+    // Pipelines for `stages` (or the given SPIR-V instead), all with the same constants.
+    std::vector<VkPipeline> make_pipelines(uint32_t order_check, const std::vector<std::vector<uint32_t>>* spirv = nullptr) {
         VkDevice d = ctx.device();
         std::vector<uint32_t> data{shared_reduction, order_check};  // VkBool32 is a 32-bit word too
         std::vector<VkSpecializationMapEntry> entries{{0, 0, 4}, {1, 4, 4}};
@@ -109,12 +111,13 @@ struct ComputeRunner::Impl {
         }
         const VkSpecializationInfo spec{static_cast<uint32_t>(entries.size()), entries.data(), data.size() * 4,
                                         data.data()};
-        const size_t S = stages.size();
+        const size_t S = spirv ? spirv->size() : stages.size();
         std::vector<VkShaderModule> modules(S);
         std::vector<VkComputePipelineCreateInfo> cis(S);
         for (size_t s = 0; s < S; ++s) {
-            modules[s] = stages[s].spirv.empty() ? ctx.load_shader(shader_dir + "/" + stages[s].shader + ".spv")
-                                                 : ctx.create_shader(stages[s].spirv);
+            modules[s] = spirv                    ? ctx.create_shader((*spirv)[s])
+                         : stages[s].spirv.empty() ? ctx.load_shader(shader_dir + "/" + stages[s].shader + ".spv")
+                                                   : ctx.create_shader(stages[s].spirv);
             cis[s] = {VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
             cis[s].stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO};
             cis[s].stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
@@ -403,6 +406,7 @@ ComputeRunner::~ComputeRunner() {
     if (m.flight.post) m.ctx.free_command_buffer(m.flight.post);
     for (VkPipeline p : m.pipelines) vkDestroyPipeline(d, p, nullptr);
     for (VkPipeline p : m.check_pipelines) vkDestroyPipeline(d, p, nullptr);
+    for (VkPipeline p : m.extras) vkDestroyPipeline(d, p, nullptr);
     for (auto& b : m.backup) m.ctx.destroy_buffer(b);
     if (m.check_rb.buffer) m.ctx.destroy_buffer(m.check_rb);
     vkDestroyPipelineLayout(d, m.layout, nullptr);
@@ -732,6 +736,30 @@ uint64_t ComputeRunner::sync_reads() const { return impl_->sync_reads; }
 
 double ComputeRunner::last_tick_ms() const { return impl_->last_tick_ms; }
 double ComputeRunner::last_tick_gpu_ms() const { return impl_->last_gpu_ms; }
+
+uint32_t ComputeRunner::add_extra(const std::vector<uint32_t>& spirv) {
+    Impl& m = *impl_;
+    const std::vector<std::vector<uint32_t>> one{spirv};
+    m.extras.push_back(m.make_pipelines(0, &one).front());
+    return static_cast<uint32_t>(m.extras.size() - 1);
+}
+
+void ComputeRunner::run_extra(uint32_t id, uint32_t elements) {
+    Impl& m = *impl_;
+    if (id >= m.extras.size()) throw std::out_of_range("run_extra: no such pipeline");
+    m.finish();
+    m.run_once([&](VkCommandBuffer cmd) {
+        barrier(cmd, COMPUTE | TRANSFER, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT, COMPUTE,
+                SHADER_RW);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m.layout, 0, 1, &m.set, 0, nullptr);
+        const uint32_t forwards = 0;
+        vkCmdPushConstants(cmd, m.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(forwards), &forwards);
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m.extras[id]);
+        vkCmdDispatch(cmd, m.groups(elements), 1, 1);
+        barrier(cmd, COMPUTE, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, COMPUTE | TRANSFER,
+                SHADER_RW | VK_ACCESS_2_TRANSFER_READ_BIT);
+    });
+}
 double ComputeRunner::last_tick_device_ms() const { return impl_->last_device_ms; }
 const std::vector<ComputeRunner::StageTiming>& ComputeRunner::stage_timings() const { return impl_->timings; }
 

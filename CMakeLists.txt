@@ -20,7 +20,7 @@ set(_terni_develop OFF)
 if(PROJECT_IS_TOP_LEVEL AND TERNI_RULE_COMPILER)
   set(_terni_develop ON)
 endif()
-option(TERNI_BUILD_TOOLS "Build terni_run and terni_script_check" ${_terni_develop})
+option(TERNI_BUILD_TOOLS "Build terni_run, terni_diff and terni_script_check" ${_terni_develop})
 option(TERNI_BUILD_TESTS "Build the test suite (needs glslc)" ${_terni_develop})
 option(TERNI_BUILD_BENCHMARK "Build terni_bench, the benchmark against a CPU reference" ${_terni_develop})
 if((TERNI_BUILD_TOOLS OR TERNI_BUILD_TESTS OR TERNI_BUILD_BENCHMARK) AND NOT TERNI_RULE_COMPILER)
@@ -140,6 +140,9 @@ if(TERNI_BUILD_TOOLS)
   add_executable(terni_run tools/terni_run.cpp)
   target_link_libraries(terni_run PRIVATE terni_core)
   target_compile_options(terni_run PRIVATE ${TERNI_COMPILE_OPTIONS})
+  add_executable(terni_diff tools/terni_diff.cpp)  # compares saves on the host: no compiler, no GPU work
+  target_link_libraries(terni_diff PRIVATE terni_runtime)
+  target_compile_options(terni_diff PRIVATE ${TERNI_COMPILE_OPTIONS})
 
   # docs/getting-started.md walks through this one
   add_executable(hello_towns examples/hello_towns/hello_towns.cpp)
@@ -291,6 +294,8 @@ if(TERNI_BUILD_TESTS)
     # the CPU reference of the benchmark stays in step with its rules
     terni_test(test_bench tests/test_bench.cpp terni_bench_world)
     add_test(NAME benchmark_world COMMAND test_bench)
+    terni_test(test_soak tests/test_soak.cpp terni_bench_world)
+    add_test(NAME long_run COMMAND test_soak)
   endif()
 
   if(TERNI_BUILD_TOOLS)

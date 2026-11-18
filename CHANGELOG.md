@@ -50,6 +50,14 @@ The first public version.
   the rows each asker gets (`ordinal = field`) and run on a schedule (`every`, `offset`,
   `SpawnOptions`); in ticks without a line only a pass over the alive bits runs. Games
   without dynamic entity types keep their checksums and compiled rules.
+- **Finding a desync**: `GameSim::field_hashes()` hashes every field on the device and
+  reads back two words per field (0.3 ms instead of about 30 ms for a snapshot of a
+  million pops on a laptop RTX 4050); `field_hashes(snapshot)` gives the same values on
+  the host, and `entity_hashes()` one per entity type. `differences(a, b)` names the
+  fields and rows where two snapshots differ, `save_snapshot(bytes)` reads a save on the
+  host, and the tool `terni_diff a.sav b.sav` prints where two saves differ. A long test
+  runs the benchmark world for 3,000 ticks across every device, through saves, against
+  the CPU reference.
 - **Rules from mods**: Terni turns on Vulkan's robustBufferAccess2 where the device has
   it (every current desktop driver, at no measurable cost), so a rule that reads or
   writes past the end of a field reads 0 and writes nothing, the same on every device;
