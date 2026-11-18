@@ -352,13 +352,13 @@ struct OrderIssue {
     uint64_t first_row = 0, rows = 0;  // the first differing row, and how many rows differ
 };
 
-// How the simulation's device is doing, from the wall time of its ticks (last_tick_ms()).
-// Ticks are judged 32 at a time, by their median, so a stage that runs once a month or a
-// single late tick does not count. Host measurements only: nothing here reaches the
-// simulation, and peers may well see different values.
-// Ticks are timed on the device's own clock, from submission until their results are
-// back, so a host that polls a background tick rarely is judged by the device, not by
-// how often it looked (ComputeRunner::last_tick_device_ms()).
+// How the simulation's device is doing, from how long its ticks take. Ticks are timed on
+// the device's own clock, from submission until their results are back
+// (ComputeRunner::last_tick_device_ms()), so a host that polls a background tick rarely is
+// judged by the device, not by how often it looked. Ticks are judged 32 at a time, by
+// their median, so a stage that runs once a month or a single late tick does not count.
+// Host measurements only: nothing here reaches the simulation, and peers may well see
+// different values.
 struct DeviceHealth {
     double usual_ms = 0;   // a tick when the device was at its best: the lowest median so far
     double recent_ms = 0;  // median of the last 32 ticks measured (0 until there are 32)

@@ -119,3 +119,6 @@ GPUs, every run has ended in the same state ([Benchmark](benchmark.md)).
   checksums and SPIR-V cache keys match across platforms.
 - Modifier totals are exact integer sums, and expiries happen in a fixed order.
 - Saves round-trip byte for byte and continue bit-identically on any device.
+- A rule that reads or writes past the end of a field (a bug in a mod, say) reads 0 and
+  writes nothing, the same on every device whose `DeviceInfo::robustness` is
+  `BufferRobustness::Defined`, which is every current desktop driver.

@@ -92,5 +92,9 @@ several features:
 | Another program on the GPU made ticks twenty times slower, unnoticed | `device_health()` and `move_to_device()` |
 | A host that renders with DirectX could not ask for the GPU it renders with | `GameSimOptions::device_luid` |
 | Two worlds compiling into one cache folder at once could fail on Windows | Each writer has its own temporary file; a shader already in the cache is left alone |
+| A row the host destroyed rested two ticks instead of one, and the host could ask whether rows were alive only one at a time | Every destroyed row rests one tick; `alive_bits()`, `entities_free()` |
+| With a tick polled once a frame, device health measured the frame rate, not the GPU | Ticks are timed on the device's own clock; `stage_times()` gives the GPU time per stage |
+| Rows asked for once a month cost the spawn stages every day, and a new row could not tell which of its parent's requests it answered | Spawn lines with a schedule (`every`, `offset`) and an `ordinal` |
+| Comparing state hashes meant reading the whole state back | `field_hashes()` on the device; `terni_diff` names the rows where two saves differ |
 
 The ones still open are on the [roadmap](roadmap.md).

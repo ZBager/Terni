@@ -100,9 +100,10 @@ ctest --test-dir build --output-on-failure
 | `src/vk_context.cpp` | The Vulkan instance and device, device choice, drivers added by the game |
 | `src/device_health.hpp` | Tick-time statistics behind `GameSim::device_health()` |
 | `shaders/terni/` | The GLSL library, embedded into the binary at build time |
-| `tests/` | Test programs; `tests/data/` holds small games for loader tests, most of them broken on purpose |
+| `tools/` | `terni_run`, `terni_check` (mods before publishing), `terni_diff` (two saves), `terni_script_check` (Paradox script corpora) |
+| `tests/` | Test programs; `tests/data/` holds small games for loader tests, most of them broken on purpose, and `galaxy_mods/` for `terni_check` |
 | `examples/` | `mini_galaxy` (a data folder) and `hello_towns` (a world in code) |
-| `bench/` | `terni_bench`: the benchmark world and its rules, the CPU reference, machine details; `bench/charts/` holds the results behind the charts in `docs/benchmark.md` and the Python scripts that draw them (documentation only, not part of the build) |
+| `bench/` | `terni_bench`: the benchmark world and its rules, the CPU reference, machine details, the frame load behind `--frame-load`; `bench/charts/` holds the results behind the charts in `docs/benchmark.md` and the Python scripts that draw them (documentation only, not part of the build) |
 | `docs/` | User documentation, written for outside game developers |
 
 ## Changes that require other changes

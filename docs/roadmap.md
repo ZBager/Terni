@@ -1,8 +1,8 @@
 # Roadmap
 
-Terni is pre-1.0. What larger games needed first is done, and so is a reproducible
-benchmark (only results from Windows are missing). What remains is ongoing work, what
-games need before they ship, integrations for game engines, and the preparation of
+Terni is pre-1.0. What larger games needed first is done, and so are a reproducible
+benchmark (only results from Windows are missing) and what games need before they ship.
+What remains is ongoing work, integrations for game engines, and the preparation of
 stable public releases. The order is a priority, not a promise.
 
 ## Ongoing
@@ -16,7 +16,7 @@ stable public releases. The order is a priority, not a promise.
 ## Before games ship
 
 What games that embed Terni have run into, and what a studio checks before it depends
-on a library.
+on a library. All done.
 
 1. **Dynamic entity types, fixed and documented** (done). A row the host destroys rests
    one tick, as documented, not two. The host gets the alive bits of a type in one call
@@ -49,9 +49,10 @@ on a library.
    names the fields and rows where two saves differ (`differences()` in code); a long
    test runs 3,000 ticks with saves and entities that come and go across every device
    and against the CPU reference.
-7. **A page on when Terni fits**: worlds small enough for the CPU, aggregating rows
-   into groups first, what readbacks cost, and which work (pathfinding, planning) stays
-   on the CPU and reaches the simulation as commands.
+7. **A page on when Terni fits** (done): [Is Terni right for your game?](when-terni-fits.md),
+   on worlds small enough for the CPU, grouping rows first, what readbacks cost, and
+   which work (pathfinding, planning) stays on the CPU and reaches the simulation as
+   commands.
 
 ## Engine integrations
 

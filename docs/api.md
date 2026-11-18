@@ -165,7 +165,7 @@ Runs a `Game` on one device. The `Game` must outlive it. Not thread-safe.
 
 | Call | Does |
 | --- | --- |
-| `static std::vector<DeviceInfo> VulkanContext::list_devices()` | Every Vulkan device: `index`, `name`, `type`, `usable`, `why_not`, `uuid`, `vendor_id`, `luid` and `luid_valid` (Windows), `driver` (name and version); `cpu()` is true for a software driver. Empty on a machine with no Vulkan driver |
+| `static std::vector<DeviceInfo> VulkanContext::list_devices()` | Every Vulkan device: `index`, `name`, `type`, `usable`, `why_not`, `uuid`, `vendor_id`, `luid` and `luid_valid` (Windows), `driver` (name and version), `robustness` (what a rule reading or writing past a field's end does there); `cpu()` is true for a software driver. Empty on a machine with no Vulkan driver |
 | `void add_vulkan_driver(library_path)` | Adds a driver shipped with the game (a software driver such as lavapipe) to the system's, for the rest of the process. Call before listing or picking devices. Throws if the file is not a Vulkan driver or the Vulkan loader is older than 1.3.234 |
 | `int pick_device(preference, const std::array<uint8_t,16>* uuid = nullptr, const std::array<uint8_t,8>* luid = nullptr)` | The device `GameSim` would choose: a UUID match, then a LUID match, then by preference; -1 if none is usable |
 

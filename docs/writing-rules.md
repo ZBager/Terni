@@ -299,4 +299,7 @@ folders replace and add files.
 - `terni_run <folder> --prelude` prints the generated prelude.
 - A compile error names the rule file and line: `rules/planet_growth.glsl:7: error: ...`.
 - `terni_run <folder> --ticks N --dump` prints every field after N ticks, on every device.
+- `terni_check <game folder> [mod folder]` loads, compiles and runs the rules on every
+  device, and checks the first ticks for order problems.
+- `terni_diff a.sav b.sav` names the fields and rows where two saves differ.
 - `GameSimOptions::validation = true` turns on the Vulkan validation layers.

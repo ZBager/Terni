@@ -27,7 +27,8 @@ game loads, so mods can change the rules themselves, not only the numbers.
 - **Data-driven and moddable.** Entities, fields, constants, modifiers, starting
   state and stage order come from text files; rules are GLSL. Errors are reported as
   `file:line`, and a checksum over everything that defines behaviour keeps saves and
-  multiplayer peers honest.
+  multiplayer peers honest. Mods are folders on top of the game's, and `terni_check`
+  checks one before it is published; a patched game still loads older saves.
 - **Engine-agnostic.** A C++20 library with no engine dependency. Your engine draws,
   plays sound and runs the UI; Terni owns the simulation state.
 - **Paradox-style modifiers.** Additive, scalable, timed modifier bundles with
@@ -35,7 +36,9 @@ game loads, so mods can change the rules themselves, not only the numbers.
   realm), totals kept exact and tooltips
   answered without waiting for the GPU.
 - **Determinism checks built in.** A warning at load time for rules whose result can
-  depend on GPU thread order, and a checked tick that proves it at run time.
+  depend on GPU thread order, and a checked tick that proves it at run time. State
+  hashes computed on the GPU are cheap enough to compare every tick, and `terni_diff`
+  names the rows where two machines' saves differ.
 - **Entities that come and go.** Armies, pops or fleets are created and destroyed during
   play, by rules or by your engine, with the same rows on every machine.
 - **Runs without a GPU too.** Ship a software Vulkan driver and the same rules run on
@@ -108,6 +111,7 @@ They are tested on Linux and Windows.
 
 | Guide | What it covers |
 | --- | --- |
+| [Is Terni right for your game?](docs/when-terni-fits.md) | When it pays off, when plain CPU code is the better choice, and what stays on the CPU |
 | [Getting started](docs/getting-started.md) | Build, run the examples, write your first world |
 | [Concepts](docs/concepts.md) | Entities, fields, stages, the tick, modifiers, who owns what |
 | [Data format](docs/data-format.md) | `schema/`, `common/`, `history/` and `rules/` in detail |

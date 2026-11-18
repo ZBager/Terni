@@ -231,8 +231,9 @@ state), and ends with `ready` or `NOT READY` and the game checksum with the mod.
 `game_checksum()` covers the schema (with capacities, including those changed with
 `Game::set_capacity`), the define values, modifier keys and bundles, the modifier
 capacity, and the stages with their sources, `clear` lists, dispatch mode and schedule
-(`every`, `offset`). It does not cover `history/`. Two peers with different rule files,
-or a save made with different rules, are refused.
+(`every`, `offset`). It does not cover `history/`. Two peers with different rule files
+are refused, and so is a save made with different rules, unless the game loads it by
+name (`SaveMatch::ByName`, see [Embedding](embedding.md#saves-from-an-earlier-version-of-your-game)).
 
 Line endings do not count: a rule file with Windows line endings (CRLF) is read as if it
 had Unix ones (LF), so a game folder checked out on Windows has the same checksum as on

@@ -387,7 +387,8 @@ sim.load(bytes);                           // any device; throws std::runtime_er
 A save holds the tick, the counts, every field and the modifier store (instances, free
 slots, pending expiries). It is binary and versioned, and carries the game checksum
 and a content hash. A truncated or damaged file, or a save from a different game or
-mod, is refused, and the simulation is left as it was. Loading continues
+mod, is refused, and the simulation is left as it was; a save from an earlier version
+of your game can still be loaded by name (below). Loading continues
 bit-identically on any device. Store your own state (match settings, player names) next
 to it.
 
