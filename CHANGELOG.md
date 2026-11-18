@@ -64,7 +64,9 @@ The first public version.
   markets, modifiers, armies that come and go) on every Vulkan device and on a
   multithreaded CPU implementation of the same rules, from 1 to all cores. Every run must
   end with the same state hash. It reports the total time per tick (compute,
-  readback, submission) and the compute time alone, per stage too, and writes JSON
+  readback, submission) and the compute time alone, per stage too, its spread up to
+  p99, and with `--frame-load` the same beside a stand-in for a renderer on the same
+  GPU, with what the ticks cost the renderer's frames; it writes JSON
   results (`docs/benchmark.md`). By default every pop is copied back to system memory
   every tick; `--readback ui` reads back only two fields, as a game's interface would.
   `DeviceInfo::driver` gives a device's driver name and version.

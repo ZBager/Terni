@@ -36,6 +36,7 @@ power mode.
 | `--threads LIST` | CPU reference thread counts: `1,2,8`; `powers` (default: 1, 2, 4, ... and all); `sweep` (every count from 1 to all); `all` |
 | `--no-cpu` | No CPU reference |
 | `--readback WHAT` | What comes back to system memory every tick: `pops` (default; every field of every pop, as a host that keeps a copy of the whole world would, and what `ui` reads) or `ui` (only province unrest and empire treasuries, as a game's map and interface would read) |
+| `--frame-load PERCENT` | Also run every device beside a stand-in for a game's renderer, whose frames keep the GPU busy for PERCENT (1 to 95) of each 16.7 ms; see [Beside a renderer](#beside-a-renderer) |
 | `--stages` | Also print the GPU time of every stage |
 | `--json FILE` | Also write the results, the machine and the versions as JSON |
 
@@ -125,14 +126,15 @@ the calling thread alone; so do the stages over empires, which are few.
 ## Reading the results
 
 ```
-                                                 total ms           p10 - p90  compute ms  vs 1 CPU  start ms
-NVIDIA GeForce RTX 4050 Laptop GPU                  3.408       3.281 - 3.870       0.580      9.2x       ...
+                                                 total ms           p10 - p90       p99  compute ms  vs 1 CPU  start ms
+NVIDIA GeForce RTX 4050 Laptop GPU                  3.493       3.212 - 3.945     4.659       0.498       ...       158
 ```
 
 | Column | Meaning |
 | --- | --- |
 | total ms | Median time of a tick as the host sees it: compute, readback to system memory, and submitting and waiting (with the host's events) |
 | p10 - p90 | The spread of total ms: 10 % of ticks were faster than the first number, 10 % slower than the second |
+| p99 | 1 % of ticks were slower than this |
 | compute ms | Median time of the stages alone, from GPU timestamps. The CPU reference has nothing to read back, so for it compute and total are the same |
 | vs 1 CPU | How many times faster than the CPU reference on one thread, by total ms |
 | start ms | Creating the simulation, with the rules loaded from a SPIR-V cache (the compile time, done once, is printed above the table); for the CPU reference, copying the starting state |
@@ -160,6 +162,53 @@ Things to keep in mind:
   `end_tick()`) hide most of what is left.
 - **Thread counts past the physical cores** use SMT (Hyper-Threading), which adds less
   than a core. The header shows physical cores and threads.
+
+## Beside a renderer
+
+A game's renderer uses the same GPU as Terni. `--frame-load PERCENT` measures what the
+two do to each other: every device runs twice, alone and then beside a stand-in for a
+renderer. The stand-in has its own Vulkan device on the same GPU and a queue that can
+draw, as a game's renderer has. From a thread of its own it submits 60 frames a second,
+each with GPU work sized at the start to PERCENT of a 16.7 ms frame: compute passes
+over a 32 MiB buffer, which keep the GPU's cores and memory busy as drawing would.
+Terni uses its own queue, a compute-only one where the device has one.
+
+The table gets a second row for each device (`+ frames 60 %`), and below it, for each
+device, the GPU time of a frame alone and beside Terni, and how many frames missed their
+16.7 ms. Both runs must end in the same state. Ticks run back to back, as in every run,
+so this is the heaviest case: a game that ticks a few times a second leaves its renderer
+more room. On lavapipe the stand-in runs on the CPU as well, and competes with the ticks
+for cores. A device added with `--driver` is not visible to the stand-in and is skipped.
+
+On two of the machines below (see [Reference results](#reference-results)), `medium`,
+`--frame-load 60`, alone and then beside the frames. On the desktop a chat program and a
+remote-desktop program were open; its times alone match its reference results.
+
+| Machine, device, read back | Total ms | p90 | p99 | Compute ms | Frame's GPU time | Frames late |
+| --- | --- | --- | --- | --- | --- | --- |
+| Laptop, Radeon 760M, every pop | 2.70 → 2.99 | 3.11 → 13.11 | 3.60 → 13.93 | 1.72 → 1.87 | 10.1 → 10.5 ms | 0 of 67 |
+| Laptop, RTX 4050, every pop | 3.49 → 8.02 | 3.95 → 8.60 | 4.66 → 9.03 | 0.50 → 0.57 | 9.7 → 15.4 ms | 53 of 69 |
+| Laptop, Radeon 760M, `ui` | 1.87 → 1.97 | 2.26 → 11.99 | 2.56 → 12.73 | 1.76 → 1.70 | 10.5 → 10.8 ms | 0 of 52 |
+| Laptop, RTX 4050, `ui` | 0.66 → 1.77 | 0.67 → 1.79 | 0.71 → 1.83 | 0.58 → 0.57 | 10.1 → 12.7 ms | 5 of 28 |
+| Desktop, 7800X3D integrated Radeon, every pop | 4.85 → 14.61 | 4.93 → 14.72 | 5.02 → 15.04 | 3.84 → 13.63 | 10.6 → 10.5 ms | 0 of 100 |
+| Desktop, RTX 4070 Ti, every pop | 1.55 → 3.98 | 1.75 → 4.37 | 1.78 → 4.81 | 0.16 → 0.19 | 11.0 → 15.9 ms | 23 of 39 |
+| Desktop, 7800X3D integrated Radeon, `ui` | 3.91 → 13.59 | 3.93 → 13.81 | 3.95 → 14.12 | 3.83 → 13.49 | 10.7 → 10.4 ms | 0 of 84 |
+| Desktop, RTX 4070 Ti, `ui` | 0.18 → 0.26 | 0.19 → 1.43 | 0.29 → 1.59 | 0.14 → 0.13 | 10.0 → 11.8 ms | 0 of 21 |
+
+- **On an integrated GPU, a tick that meets a frame waits for it, and the frames hardly
+  change.** The Radeon 760M's ticks are short, so most of them miss the frames and only
+  p90 and p99 rise, to about a frame and a tick. The 7800X3D's 2-compute-unit GPU takes
+  3.8 ms a tick, so nearly every tick meets a frame and takes about 14 ms; even its
+  compute time rises, because the frame runs between its stages.
+- **On a discrete GPU, the stages take about as long as alone, but every tick takes
+  longer, and so do the frames.** With every pop read back (31 MiB a tick), ticks back to
+  back push half or more of the frames past 16.7 ms on both machines. With only what the
+  interface shows read back, the RTX 4070 Ti still ticks in 0.26 ms (ticks that meet a
+  frame take about 1.5 ms) and no frame is late.
+- So read back only what your interface needs, and tick as often as the game needs, not
+  as fast as the GPU allows. On a slow integrated GPU, expect a tick to take as long as
+  a frame and a tick together. `GameSim::stage_times()` and `device_health()` measure the
+  same things inside a game.
 
 ## Charts
 

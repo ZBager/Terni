@@ -24,11 +24,12 @@ on a library.
    (`entities_free(entity)`), so a lockstep game can refuse a command up front. The
    guides say that a starting count makes every row below it alive, and that per-tick
    readbacks grow with the rows in use.
-2. **Measurements that work next to a renderer.** Done: GPU time per stage as data
-   (`stage_times()`), and `device_health()` judged by what the device did (its own
-   clock, from submission to results), so that a host that polls a background tick once
-   a frame measures the device, not its frame rate. Still to come: a `terni_bench` mode
-   that runs beside a graphics load and reports how much the tick time spreads.
+2. **Measurements that work next to a renderer** (done). GPU time per stage as data
+   (`stage_times()`); `device_health()` judged by what the device did (its own clock,
+   from submission to results), so that a host that polls a background tick once a
+   frame measures the device, not its frame rate; and `terni_bench --frame-load`, which
+   runs every device beside a stand-in for a renderer and reports how much the tick time
+   spreads and what the ticks cost the renderer's frames.
 3. **Saves that survive a patch.** Today a save loads only into the exact game that
    made it. A game that adds a field, changes a rule or raises a capacity should still
    load its players' saves, with the fields matched by name and new ones given their

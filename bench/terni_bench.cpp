@@ -6,6 +6,7 @@
 // docs/benchmark.md.
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -19,6 +20,7 @@
 
 #include "bench_world.hpp"
 #include "cpu_reference.hpp"
+#include "frame_load.hpp"
 #include "machine.hpp"
 #include "terni/game.hpp"
 #include "terni/vk_context.hpp"
@@ -32,7 +34,7 @@ using Clock = std::chrono::steady_clock;
 double ms_since(Clock::time_point t0) { return std::chrono::duration<double, std::milli>(Clock::now() - t0).count(); }
 
 struct Stats {
-    double median = 0, p10 = 0, p90 = 0, mean = 0, min = 0;
+    double median = 0, p10 = 0, p90 = 0, p99 = 0, mean = 0, min = 0;
 };
 
 Stats stats_of(std::vector<double> v) {
@@ -43,6 +45,7 @@ Stats stats_of(std::vector<double> v) {
     s.median = at(0.5);
     s.p10 = at(0.1);
     s.p90 = at(0.9);
+    s.p99 = at(0.99);
     s.min = v.front();
     for (double x : v) s.mean += x;
     s.mean /= double(v.size());
@@ -65,6 +68,10 @@ struct Run {
     std::string differs;      // first field that differs from the first run, "" if none
     std::string error;        // the run failed
     std::string skipped;      // the device could not start the world (too large for it, say)
+    // beside a synthetic renderer (--frame-load): the share of a frame asked for, a frame's
+    // GPU work alone and beside Terni, frames drawn and frames that missed their 16.7 ms
+    double frame_load = 0, load_alone_ms = 0, load_beside_ms = 0;
+    uint64_t load_frames = 0, load_late = 0;
 };
 
 void usage() {
@@ -88,6 +95,8 @@ void usage() {
         "  --no-cpu                no CPU reference\n"
         "  --readback WHAT         read back every tick: pops (default: every field of every pop, and\n"
         "                          ui) or ui (only province unrest and empire treasuries)\n"
+        "  --frame-load PERCENT    also run each device beside a synthetic renderer: 60 frames a\n"
+        "                          second of GPU work taking PERCENT (1 to 95) of each frame\n"
         "  --stages                print the GPU time of every stage\n"
         "  --json FILE             also write the results as JSON\n"
         "  --list                  list the sizes and the Vulkan devices, and stop");
@@ -179,6 +188,7 @@ int main(int argc, char** argv) {
     std::string thread_spec = "powers", json_path, lavapipe_threads;
     bool gpu = true, cpu = true, show_stages = false, list = false, resized = false;
     std::string readback = "pops";
+    uint32_t frame_load = 0;
 
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -222,7 +232,13 @@ int main(int argc, char** argv) {
                 return 2;
             }
         }
-        else if (a == "--list") list = true;
+        else if (a == "--frame-load") {
+            count_arg(frame_load);
+            if (frame_load < 1 || frame_load > 95) {
+                std::puts("error: --frame-load takes a percentage from 1 to 95");
+                return 2;
+            }
+        } else if (a == "--list") list = true;
         else {
             usage();
             return a == "--help" || a == "-h" ? 0 : 2;
@@ -326,16 +342,37 @@ int main(int argc, char** argv) {
                                                       : "province unrest and empire treasuries") +
                                       " (" + amount + " per tick)";
     std::printf("%u warm-up ticks, then %u measured; read back: %s\n", warmup, ticks, readback_text.c_str());
+    if (frame_load)
+        std::printf("each device also beside a synthetic renderer: 60 frames a second, GPU work %u %% of each\n", frame_load);
 
     std::vector<Run> runs;
     std::vector<HostEvent> events;
+    std::vector<std::pair<uint32_t, bool>> device_runs;  // (device, beside the frame load)
     for (uint32_t d : devices) {
+        device_runs.emplace_back(d, false);
+        if (frame_load) device_runs.emplace_back(d, true);
+    }
+    for (const auto& [d, loaded] : device_runs) {
         Run r;
+        std::array<uint8_t, 16> uuid{};
         for (const auto& info : device_list)
-            if (info.index == d) r.name = info.name, r.device_type = info.type, r.driver = info.driver;
-        std::printf("  %s%s ...", r.name.empty() ? ("device " + std::to_string(d)).c_str() : r.name.c_str(),
-                    r.driver.empty() ? "" : (", driver " + r.driver).c_str());
+            if (info.index == d) r.name = info.name, r.device_type = info.type, r.driver = info.driver, uuid = info.uuid;
+        std::printf("  %s%s%s ...", r.name.empty() ? ("device " + std::to_string(d)).c_str() : r.name.c_str(),
+                    r.driver.empty() ? "" : (", driver " + r.driver).c_str(), loaded ? ", beside the frame load" : "");
         std::fflush(stdout);
+        std::unique_ptr<FrameLoad> load;
+        if (loaded) {
+            r.frame_load = frame_load;
+            try {
+                load = std::make_unique<FrameLoad>(uuid, double(frame_load));  // sized while the device is free
+                r.load_alone_ms = load->calibrated_ms();
+            } catch (const std::exception& e) {
+                r.skipped = e.what();
+                std::printf(" skipped: %s\n", r.skipped.c_str());
+                runs.push_back(std::move(r));
+                continue;
+            }
+        }
         try {
             GameSimOptions options;
             options.device = int(d);
@@ -365,6 +402,10 @@ int main(int argc, char** argv) {
             GameSim& sim = *started;
             r.name = sim.device_name();
             std::vector<double> wall, gpu_ms;
+            if (load) {
+                load->start();
+                std::this_thread::sleep_for(std::chrono::milliseconds(250));  // the renderer settles first
+            }
             for (uint32_t t = 0; t < warmup + ticks; ++t) {
                 const auto t1 = Clock::now();
                 host_events(*game, config, sim.ticks(), events);
@@ -374,6 +415,12 @@ int main(int argc, char** argv) {
                     wall.push_back(ms_since(t1));
                     gpu_ms.push_back(sim.last_tick_gpu_ms());
                 }
+            }
+            if (load) {
+                load->stop();
+                r.load_beside_ms = load->mean_frame_ms();
+                r.load_frames = load->frames();
+                r.load_late = load->late_frames();
             }
             r.total = stats_of(wall);
             r.compute = stats_of(gpu_ms);
@@ -434,11 +481,13 @@ int main(int argc, char** argv) {
 
     // the first column fits the longest name (device names run to 60 characters and more)
     auto label_of = [](const Run& r) {
-        return r.cpu ? "CPU reference, " + std::to_string(r.threads) + (r.threads == 1 ? " thread" : " threads") : r.name;
+        if (r.cpu) return "CPU reference, " + std::to_string(r.threads) + (r.threads == 1 ? " thread" : " threads");
+        return r.frame_load > 0 ? r.name + " + frames " + std::to_string(int(r.frame_load)) + " %" : r.name;
     };
     int width = 30;
     for (const auto& r : runs) width = std::max(width, static_cast<int>(std::min<size_t>(label_of(r).size(), 80)));
-    std::printf("\n%-*s %10s %19s %11s %9s %9s\n", width, "", "total ms", "p10 - p90", "compute ms", "vs 1 CPU", "start ms");
+    std::printf("\n%-*s %10s %19s %9s %11s %9s %9s\n", width, "", "total ms", "p10 - p90", "p99", "compute ms", "vs 1 CPU",
+                "start ms");
     for (const auto& r : runs) {
         std::string label = label_of(r);
         if (label.size() > size_t(width)) label = label.substr(0, size_t(width));
@@ -455,8 +504,8 @@ int main(int argc, char** argv) {
         std::snprintf(range, sizeof range, "%.3f - %.3f", r.total.p10, r.total.p90);
         if (one_thread && r.total.median > 0)
             std::snprintf(speed, sizeof speed, "%.1fx", one_thread->total.median / r.total.median);
-        std::printf("%-*s %10.3f %19s %11.3f %9s %9.0f\n", width, label.c_str(), r.total.median, range, r.compute.median,
-                    speed, r.start_ms);
+        std::printf("%-*s %10.3f %19s %9.3f %11.3f %9s %9.0f\n", width, label.c_str(), r.total.median, range, r.total.p99,
+                    r.compute.median, speed, r.start_ms);
     }
     if (first)
         std::printf("\nstate after %u ticks: %s (hash %s)\n", warmup + ticks,
@@ -465,9 +514,17 @@ int main(int argc, char** argv) {
     std::printf("total ms: median time of a tick as the host sees it: compute, readback to system memory, and\n"
                 "submitting and waiting. Read back every tick:\n  %s.\n"
                 "compute ms: the stages alone (GPU timestamps; the CPU reference reads nothing back, so for it\n"
-                "the two are the same). p10 - p90: the spread of total ms. start ms: creating the simulation,\n"
+                "the two are the same). p10 - p90, p99: the spread of total ms. start ms: creating the simulation,\n"
                 "rules from the SPIR-V cache. lavapipe threads: %s.\n",
                 readback_text.c_str(), lavapipe_threads.empty() ? "one per logical core (LP_NUM_THREADS not set)" : lavapipe_threads.c_str());
+    if (frame_load) {
+        std::puts("\nframe load: a frame's GPU work alone, then beside Terni; frames that missed their 16.7 ms:");
+        for (const auto& r : runs)
+            if (r.frame_load > 0 && r.error.empty() && r.skipped.empty())
+                std::printf("  %-*s %7.3f ms -> %7.3f ms, %llu of %llu frames late\n", width, r.name.c_str(), r.load_alone_ms,
+                            r.load_beside_ms, static_cast<unsigned long long>(r.load_late),
+                            static_cast<unsigned long long>(r.load_frames));
+    }
     if (show_stages)
         for (const auto& r : runs)
             if (!r.cpu && r.error.empty() && r.skipped.empty()) std::printf("\n%s\n  %s\n", r.name.c_str(), r.gpu_report.c_str());
@@ -478,7 +535,8 @@ int main(int argc, char** argv) {
         o.setf(std::ios::fixed);
         o.precision(4);
         auto stats = [&](const Stats& s) {
-            o << "{\"median\": " << s.median << ", \"p10\": " << s.p10 << ", \"p90\": " << s.p90 << ", \"mean\": " << s.mean
+            o << "{\"median\": " << s.median << ", \"p10\": " << s.p10 << ", \"p90\": " << s.p90 << ", \"p99\": " << s.p99
+              << ", \"mean\": " << s.mean
               << ", \"min\": " << s.min << "}";
         };
         o << "{\n  \"benchmark\": \"terni_bench\",\n  \"benchmark_version\": " << BENCH_VERSION
@@ -501,7 +559,7 @@ int main(int argc, char** argv) {
             if (r.cpu) o << ", \"threads\": " << r.threads;
             else
                 o << ", \"device\": " << json_string(r.name) << ", \"device_type\": " << json_string(r.device_type)
-                  << ", \"driver\": " << json_string(r.driver);
+                  << ", \"driver\": " << json_string(r.driver) << ", \"frame_load_percent\": " << r.frame_load;
             if (!r.error.empty() || !r.skipped.empty()) {
                 o << ", \"" << (r.error.empty() ? "skipped" : "error")
                   << "\": " << json_string(r.error.empty() ? r.skipped : r.error) << "}";
@@ -512,6 +570,9 @@ int main(int argc, char** argv) {
             o << ", \"compute_ms\": ";
             stats(r.compute);
             if (!r.cpu) o << ", \"stage_report\": " << json_string(r.gpu_report);
+            if (r.frame_load > 0)
+                o << ", \"frame_load\": {\"alone_ms\": " << r.load_alone_ms << ", \"beside_ms\": " << r.load_beside_ms
+                  << ", \"frames\": " << r.load_frames << ", \"late_frames\": " << r.load_late << "}";
             o << ", \"state_hash\": \"" << hex(r.state.combined()) << "\", \"valid\": "
               << (r.differs.empty() ? "true" : "false") << "}";
         }

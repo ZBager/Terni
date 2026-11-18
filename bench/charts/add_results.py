@@ -6,7 +6,8 @@
 
 Rows of that machine with the same size, kind and read-back mode are replaced. Each
 run becomes one row: kind discrete, integrated or lavapipe for Vulkan devices, cpu_1
-and cpu_all for the CPU reference on one thread and on the most threads measured.
+and cpu_all for the CPU reference on one thread and on the most threads measured. Runs
+beside the synthetic renderer (--frame-load) are left out.
 """
 
 import csv
@@ -28,6 +29,8 @@ def rows_of(machine, path):
     for r in d["runs"]:
         if "total_ms" not in r:
             continue  # skipped or failed: no result, shown as N/A
+        if r.get("frame_load_percent", 0) > 0:
+            continue  # beside a synthetic renderer (--frame-load): not comparable with the charts
         if r["kind"] == "cpu reference":
             if r["threads"] not in (1, most):
                 continue

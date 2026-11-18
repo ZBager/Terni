@@ -169,8 +169,9 @@ if(TERNI_BUILD_BENCHMARK)
       set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/.git/logs/HEAD)
     endif()
   endif()
-  add_executable(terni_bench bench/terni_bench.cpp bench/machine.cpp)
+  add_executable(terni_bench bench/terni_bench.cpp bench/machine.cpp bench/frame_load.cpp)
   target_link_libraries(terni_bench PRIVATE terni_bench_world)
+  target_include_directories(terni_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)  # the frame load compiles a shader
   target_compile_options(terni_bench PRIVATE ${TERNI_COMPILE_OPTIONS})
   target_compile_definitions(terni_bench PRIVATE TERNI_BENCH_TERNI_VERSION="${PROJECT_VERSION}"
                                                  TERNI_BENCH_COMMIT="${_terni_commit}"
