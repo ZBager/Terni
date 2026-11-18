@@ -504,9 +504,9 @@ std::string glsl_default(const FieldDef& f) {
 }
 
 std::vector<BuiltInStage> spawn_stage_sources(const Game& game) {
-    std::ostringstream wanted, blocks, scan, assign, helpers;
-    for (auto* o : {&wanted, &blocks, &scan, &assign, &helpers}) o->imbue(std::locale::classic());
-    uint32_t wanted_elements = 1, block_elements = 1, assign_elements = 1;
+    std::ostringstream bits, wanted, blocks, scan, assign, helpers;
+    for (auto* o : {&bits, &wanted, &blocks, &scan, &assign, &helpers}) o->imbue(std::locale::classic());
+    uint32_t bit_elements = 1, wanted_elements = 1, block_elements = 1, assign_elements = 1;
     bool any = false;
     for (const auto& e : game.entities) {
         if (!e.dynamic) continue;
@@ -517,23 +517,28 @@ std::vector<BuiltInStage> spawn_stage_sources(const Game& game) {
         const std::string layout = "    uint words = (" + cap + " + 31u) / 32u, blocks = (words + 255u) / 256u;\n"
                                    "    uint word_base = blocks + 1u, base = word_base + words;\n";
         const uint32_t bit_words = (e.capacity + 31) / 32;
-        wanted_elements = std::max(wanted_elements, bit_words);
+        bit_elements = std::max(bit_elements, bit_words);
         block_elements = std::max(block_elements, (bit_words + SPAWN_BLOCK - 1) / SPAWN_BLOCK);
 
-        wanted << "  {  // " << n << "\n" << layout
-               << "    FOR_EACH(w, words) {\n"
-                  "        uint rows = w + 1u == words && (" << cap << " & 31u) != 0u ? (1u << (" << cap << " & 31u)) - 1u : 0xFFFFFFFFu;\n"
-                  "        uint alive = " << n << "_alive_bits[w], before = " << prev << "[w];\n"
-                  "        " << eligible << "[w] = ~alive & ~before & rows;\n"
-                  "        terni_cool_" << n << "[w] = before & ~alive;\n"
-                  "    }\n";
+        // every tick, spawn lines or not: which rows are free and which died, and who is
+        // alive as the tick ends, so that a destroyed row rests exactly one tick whenever the
+        // lines run. Counting the free rows is for the lines' ticks only.
+        bits << "  {  // " << n << "\n" << layout
+             << "    FOR_EACH(w, words) {\n"
+                "        uint rows = w + 1u == words && (" << cap << " & 31u) != 0u ? (1u << (" << cap << " & 31u)) - 1u : 0xFFFFFFFFu;\n"
+                "        uint alive = " << n << "_alive_bits[w], before = " << prev << "[w];\n"
+                "        " << eligible << "[w] = ~alive & ~before & rows;\n"
+                "        terni_cool_" << n << "[w] = before & ~alive;\n"
+                "        " << prev << "[w] = alive;  // rows made later in the tick add their bits\n"
+                "    }\n"
+                "  }\n";
+        wanted << "  {  // " << n << "\n" << layout;
         blocks << "  {  // " << n << "\n" << layout
                << "    FOR_EACH(b, blocks) {\n"
                   "        uint free = 0u, end = min(words, b * 256u + 256u);\n"
                   "        for (uint w = b * 256u; w < end; ++w) {\n"
                   "            " << S << "[word_base + w] = free;\n"
                   "            free += uint(bitCount(" << eligible << "[w]));\n"
-                  "            " << prev << "[w] = " << n << "_alive_bits[w];\n"
                   "        }\n"
                   "        " << S << "[b] = free;\n"
                   "    }\n";
@@ -577,20 +582,24 @@ std::vector<BuiltInStage> spawn_stage_sources(const Game& game) {
             const std::string lines = "        uint r0 = (" + upper(from.name) + "_CAPACITY + 255u) / 256u, r1 = (r0 + 255u) / 256u;\n"
                                       "        uint l1 = base + 1u, l0 = l1 + r1;\n";
             const std::string title = "    {  // from " + from.name + "." + s.count_field + "\n" + lines;
+            // a line with a schedule works only in its ticks; the layout moves on regardless
+            const std::string open = s.every == 1 ? "" : "        if (terni.tick % " + std::to_string(s.every) + "u == " +
+                                                             std::to_string(s.offset) + "u) {\n";
+            const std::string close = s.every == 1 ? "" : "        }\n";
             const uint32_t from_blocks = (from.capacity + SPAWN_BLOCK - 1) / SPAWN_BLOCK;
             wanted_elements = std::max(wanted_elements, from.capacity);
             block_elements = std::max(block_elements, (from_blocks + SPAWN_BLOCK - 1) / SPAWN_BLOCK);
             assign_elements = std::max(assign_elements, from.capacity);
-            wanted << title
+            wanted << title << open
                    << "        FOR_EACH(p, terni." << from.name << "_count) {\n"
                       "            uint want = " << (from.dynamic ? from.name + "_alive(p)" : "true") << " ? min(" << count << "[p], "
                    << cap << ") : 0u;\n"
                       "            " << copy << "[p] = want;\n"
                       "            if (want != 0u) atomicAdd(" << S << "[l0 + (p >> 8)], want);\n"
                       "        }\n"
-                      "        base = l0 + r0;\n"
+                   << close << "        base = l0 + r0;\n"
                       "    }\n";
-            blocks << title
+            blocks << title << open
                    << "        uint used = (terni." << from.name << "_count + 255u) / 256u;\n"
                       "        FOR_EACH(g, (used + 255u) / 256u) {\n"
                       "            uint sum = 0u, end = min(used, g * 256u + 256u);\n"
@@ -601,9 +610,9 @@ std::vector<BuiltInStage> spawn_stage_sources(const Game& game) {
                       "            }\n"
                       "            " << S << "[l1 + g] = min(sum, " << cap << ");\n"
                       "        }\n"
-                      "        base = l0 + r0;\n"
+                   << close << "        base = l0 + r0;\n"
                       "    }\n";
-            scan << title
+            scan << title << open
                  << "        uint asking = terni." << from.name << "_count;\n"
                     "        " << S << "[base] = asking;\n"
                     "        for (uint g = 0u; g < (asking + 65535u) / 65536u; ++g) {\n"
@@ -611,9 +620,9 @@ std::vector<BuiltInStage> spawn_stage_sources(const Game& game) {
                     "            " << S << "[l1 + g] = wanted;\n"
                     "            wanted = min(wanted + v, " << cap << ");\n"
                     "        }\n"
-                    "        base = l0 + r0;\n"
+                 << close << "        base = l0 + r0;\n"
                     "    }\n";
-            assign << title
+            assign << title << open
                    << "        FOR_EACH(p, " << S << "[base]) {\n"
                       "            if (" << copy << "[p] == 0u) continue;  // most rows ask for nothing\n"
                       "            uint at = min(" << S << "[l1 + (p >> 16)] + " << S << "[l0 + (p >> 8)], " << cap << ");\n"
@@ -625,17 +634,25 @@ std::vector<BuiltInStage> spawn_stage_sources(const Game& game) {
                       "                    uint row = terni_free_" << n << "(at + j);\n"
                       "                    terni_new_" << n << "(row);\n";
             if (!s.parent_field.empty()) assign << "                    " << n << "_" << s.parent_field << "[row] = p;\n";
+            if (!s.ordinal_field.empty()) {
+                const bool is_int = e.fields[size_t(e.field_index(s.ordinal_field))].type == FieldType::Int;
+                assign << "                    " << n << "_" << s.ordinal_field << "[row] = " << (is_int ? "int(j)" : "j") << ";\n";
+            }
             assign << "                }\n"
                       "                if (made != 0u) " << count << "[p] = want - made;\n"
                       "            }\n"
                       "        }\n"
-                      "        base = l0 + r0;\n"
+                   << close << "        base = l0 + r0;\n"
                       "    }\n";
         }
         for (auto* o : {&wanted, &blocks, &scan, &assign}) *o << "  }\n";
     }
     if (!any) return {};
-    return {{"terni_spawn_wanted", "void main() {\n" + wanted.str() + "}\n", wanted_elements},
+    // terni_spawn_bits comes first: the tick's scratch is zeroed before it (make_runner).
+    // It is the only one a tick needs when no spawn line runs in it; the others are left
+    // out of such ticks (stages_now).
+    return {{"terni_spawn_bits", "void main() {\n" + bits.str() + "}\n", bit_elements},
+            {"terni_spawn_wanted", "void main() {\n" + wanted.str() + "}\n", wanted_elements},
             {"terni_spawn_blocks", "void main() {\n" + blocks.str() + "}\n", block_elements},
             {"terni_spawn_scan", "void main() {\n  if (gl_GlobalInvocationID.x != 0u) return;\n" + scan.str() + "}\n", 1},
             {"terni_spawn_assign", helpers.str() + "void main() {\n" + assign.str() + "}\n", assign_elements}};
@@ -1049,6 +1066,12 @@ struct GameSim::Impl {
     std::vector<bool> stages_now() const {
         std::vector<bool> run(spirv.size(), true);
         for (size_t s = 0; s < game.stages.size(); ++s) run[s] = game.stages[s].runs_in(now);
+        // the spawn stages only in ticks some line runs in; terni_spawn_bits always
+        bool lines = false;
+        for (const auto& e : game.entities)
+            for (const auto& line : e.spawns) lines |= line.runs_in(now);
+        for (size_t s = game.stages.size(); s < stage_names.size(); ++s)
+            if (stage_names[s].starts_with("terni_spawn_") && stage_names[s] != "terni_spawn_bits") run[s] = lines;
         return run;
     }
     // Column `c` as the game starts it: a field as the game's tables hold it (history
@@ -1622,7 +1645,11 @@ uint64_t game_checksum(const Game& game) {
     for (const auto& e : game.entities) {  // nothing for a game without them: its checksum stays what it was
         if (!e.dynamic) continue;
         w.str("dynamic"), w.str(e.name), w.u32(static_cast<uint32_t>(e.spawns.size()));
-        for (const auto& s : e.spawns) w.str(s.from), w.str(s.count_field), w.str(s.parent_field);
+        for (const auto& s : e.spawns) {
+            w.str(s.from), w.str(s.count_field), w.str(s.parent_field);
+            if (!s.ordinal_field.empty()) w.str("ordinal"), w.str(s.ordinal_field);  // absent when unused
+            if (s.every != 1) w.str("schedule"), w.u32(s.every), w.u32(s.offset);    // absent for every tick
+        }
     }
     w.u32(static_cast<uint32_t>(game.stages.size()));
     for (const auto& s : game.stages) {
@@ -1837,7 +1864,11 @@ std::vector<std::string> GameSim::load(const std::vector<uint8_t>& data, SaveMat
         if (info.field < 0) {
             // Terni's own: bits and generations per row, or what the spawn stages work out
             // anew each tick. What fits is copied; the rest is zero (no row, nothing pending).
-            if (same_game && col->words.size() != m.columns[c].size())
+            // The scratch columns are the spawn stages' working memory, laid out differently by
+            // other Terni versions; only the four that carry state must fit exactly.
+            const bool state = info.own == "alive_bits" || info.own == "generation" || info.own == "terni_prev" ||
+                               info.own == "terni_cool";
+            if (same_game && state && col->words.size() != m.columns[c].size())
                 throw std::runtime_error("save: '" + m.column_names[c] + "' has the wrong size");
             columns[c].assign(m.columns[c].size(), 0);
             std::copy_n(col->words.begin(), std::min(col->words.size(), columns[c].size()), columns[c].begin());

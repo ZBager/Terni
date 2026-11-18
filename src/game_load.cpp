@@ -204,8 +204,26 @@ private:
                     const auto* from = f.block->find("from");
                     const auto* count = f.block->find("count");
                     const auto* parent = f.block->find("parent");
+                    const auto* ordinal = f.block->find("ordinal");
+                    const auto* ev = f.block->find("every");
+                    const auto* of = f.block->find("offset");
+                    SpawnOptions options;
+                    options.parent_field = parent ? str(parent->scalar) : "";
+                    options.ordinal_field = ordinal ? str(ordinal->scalar) : "";
+                    int64_t every = 1, offset = 0;
+                    bool ok = true;
+                    if (ev && (!parse_value(str(ev->scalar), FieldType::Count, every) || every < 1)) {
+                        error(at(d, *ev), "every must be a whole number of ticks, at least 1, not '" + str(ev->scalar) + "'");
+                        ok = false;
+                    }
+                    if (of && (!parse_value(str(of->scalar), FieldType::Count, offset) || offset < 0)) {
+                        error(at(d, *of), "offset must be a whole number of ticks, not '" + str(of->scalar) + "'");
+                        ok = false;
+                    }
+                    options.every = static_cast<uint32_t>(every);
+                    options.offset = static_cast<uint32_t>(offset);
                     if (!from || !count) error(at(d, f), "expected `spawn = { from = entity count = field }`");
-                    else b_.spawn(e, str(from->scalar), str(count->scalar), parent ? str(parent->scalar) : "", at(d, f));
+                    else if (ok) b_.spawn(e, str(from->scalar), str(count->scalar), options, at(d, f));
                     continue;
                 }
                 std::string type_text = str(f.scalar), default_text;

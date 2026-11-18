@@ -89,8 +89,23 @@ struct SpawnDef {
     std::string from;          // entity type whose rows ask
     std::string count_field;   // its `count` field: how many new rows that row wants
     std::string parent_field;  // ref:<from> field of the new rows, set to the row that asked ("" = none)
-    int from_entity = -1, count_index = -1, parent_index = -1;  // resolved by finish()
+    // int or count field of the new rows, set to 0, 1, 2, ... for the rows one asking row
+    // gets in a tick, in the order they are created ("" = none)
+    std::string ordinal_field;
+    // The line gives out rows only at the end of ticks it runs in, like a stage's schedule;
+    // asking rows keep their count until then.
+    uint32_t every = 1, offset = 0;
+    int from_entity = -1, count_index = -1, parent_index = -1, ordinal_index = -1;  // resolved by finish()
     Location where;
+
+    bool runs_in(uint64_t tick) const { return tick % every == offset; }  // tick = completed ticks before it
+};
+
+// What a spawn line may add to `from` and `count` (WorldBuilder::spawn).
+struct SpawnOptions {
+    std::string parent_field;   // see SpawnDef
+    std::string ordinal_field;  // see SpawnDef
+    uint32_t every = 1, offset = 0;
 };
 
 struct EntityDef {
@@ -222,6 +237,10 @@ public:
     // of `entity`, optional) set to the row that asked.
     void spawn(uint32_t entity, const std::string& from_entity, const std::string& count_field,
                const std::string& parent_field = "", Location where = {});
+    // The same with an ordinal field and a schedule: `every = 30, offset = 29` gives rows
+    // out only at the end of the ticks a stage with that schedule runs in.
+    void spawn(uint32_t entity, const std::string& from_entity, const std::string& count_field,
+               const SpawnOptions& options, Location where = {});
     void define(const std::string& name, FieldType type, Location where = {});
     void set_define(const std::string& name, int64_t raw, Location where = {});
     // `inherit_field`: a ref field of `entity` to inherit through, or several joined by

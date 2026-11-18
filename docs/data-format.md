@@ -69,6 +69,20 @@ army = {
   of its `count` fields (how many rows a row wants), and `parent`, if given, a
   `ref:<from>` field of the new rows that is set to the row that asked. Several
   `spawn` blocks are served in the order written.
+- `ordinal`, if given, names an `int` or `count` field of the new rows: the rows one
+  asking row gets in a tick are numbered 0, 1, 2, ... in the order they are created.
+- `every` and `offset` give the line a schedule, as for a stage: with
+  `every = 30  offset = 29` rows are given out only at the end of every 30th tick, and
+  asking rows keep their count until then.
+
+```
+pop = {
+    capacity = 200000
+    dynamic  = yes
+    spawn    = { from = province  count = new_pops  parent = home  ordinal = nth  every = 30  offset = 29 }
+    ...
+}
+```
 - History creates the starting rows as for any entity type; a new row gets each
   field's `default`.
 

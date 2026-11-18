@@ -46,8 +46,10 @@ The first public version.
   can be refused before it is applied). New rows are given out on the device, in
   built-in stages at the end of each tick, the same way on every device: the lowest
   free row first, and a destroyed row rests for one tick, whoever destroyed it (a row
-  the host destroyed used to rest two). Saves hold who is alive. Games without dynamic entity types
-  keep their checksums and compiled rules.
+  the host destroyed used to rest two). Saves hold who is alive. A spawn line may number
+  the rows each asker gets (`ordinal = field`) and run on a schedule (`every`, `offset`,
+  `SpawnOptions`); in ticks without a line only a pass over the alive bits runs. Games
+  without dynamic entity types keep their checksums and compiled rules.
 - **Rules from mods**: Terni turns on Vulkan's robustBufferAccess2 where the device has
   it (every current desktop driver, at no measurable cost), so a rule that reads or
   writes past the end of a field reads 0 and writes nothing, the same on every device;

@@ -6,8 +6,11 @@
 // (the lowest free one; a destroyed row rests for a tick), generations, fields, counts and
 // the modifiers of destroyed rows.
 // The session also saves and loads, moves device, runs a checked tick and creates a row
-// while a tick is in flight.
+// while a tick is in flight. A spawn line with a schedule gives rows out only in its ticks,
+// and its ordinal numbers the rows each asker gets.
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -423,6 +426,199 @@ static void test_crowd(const std::vector<DeviceInfo>& devices) {
     }
 }
 
+// ---- a spawn line with a schedule and an ordinal --------------------------------
+// Provinces ask for 1 to 3 colonists now and then, listing the kind each should be. The
+// line runs every 5th tick (offset 3), so requests wait for it; each colonist reads its
+// kind from its province's list at its ordinal, ages and leaves. The type is small, so it
+// fills and rows are reused.
+constexpr uint32_t COLONY_PROVINCES = 10, COLONISTS = 24, EVERY = 5, OFFSET = 3;
+
+const char* ASK = R"(
+void main() {
+    FOR_EACH_PROVINCE(p) {
+        if (province_want[p] == 0u && (terni.tick + p) % 7u == 0u) {
+            uint n = 1u + p % 3u;
+            for (uint k = 0u; k < n; ++k) province_kinds[p * 3u + k] = int(p * 100u + terni.tick * 3u + k);
+            province_want[p] = n;
+        }
+    }
+}
+)";
+const char* COLONIZE = R"(
+void main() {
+    FOR_EACH_COLONIST(c) {
+        if (colonist_kind[c] < 0) colonist_kind[c] = province_kinds[colonist_home[c] * 3u + uint(colonist_slot[c])];
+        colonist_age[c] += 1;
+        if (colonist_age[c] > 9) colonist_destroy(c);
+    }
+}
+)";
+
+struct Colony {
+    std::unique_ptr<Game> game;
+    uint32_t province = 0, colonist = 0;
+};
+static Colony build_colony() {
+    Colony w;
+    WorldBuilder b;
+    w.province = b.entity("province", 16);
+    b.field(w.province, "want", FieldType::Count);
+    b.field(w.province, "kinds", FieldType::Int, "", 3);
+    w.colonist = b.entity("colonist", COLONISTS);
+    b.entity_dynamic(w.colonist);
+    b.field(w.colonist, "home", FieldType::Ref, "province");
+    b.field(w.colonist, "slot", FieldType::Int, "", 1, -1);
+    b.field(w.colonist, "kind", FieldType::Int, "", 1, -1);
+    b.field(w.colonist, "age", FieldType::Int);
+    SpawnOptions line;
+    line.parent_field = "home";
+    line.ordinal_field = "slot";
+    line.every = EVERY;
+    line.offset = OFFSET;
+    b.spawn(w.colonist, "province", "want", line);
+    b.stage("ask", "province", ASK);
+    b.stage("settle", "colonist", COLONIZE);
+    for (uint32_t p = 0; p < COLONY_PROVINCES; ++p) b.create(w.province);
+    w.game = b.finish();
+    for (const auto& e : w.game->errors) std::printf("  %s\n", e.text().c_str());
+    for (const auto& x : w.game->warnings) std::printf("  warning: %s\n", x.text().c_str());
+    return w;
+}
+
+struct ColonyModel {
+    uint32_t tick = 0, count = 0;
+    std::vector<uint32_t> want = std::vector<uint32_t>(16, 0);
+    std::vector<int32_t> kinds = std::vector<int32_t>(16 * 3, 0);
+    std::vector<bool> alive = std::vector<bool>(COLONISTS, false), prev = alive;
+    std::vector<uint32_t> generation = std::vector<uint32_t>(COLONISTS, 0);
+    std::vector<int32_t> home = std::vector<int32_t>(COLONISTS, 0), slot = std::vector<int32_t>(COLONISTS, -1),
+                         kind = slot, age = home;
+    uint32_t born = 0, partial = 0;  // rows made; ticks in which an asker got fewer than it wanted
+    bool line_ran = false;           // in the last tick
+    void step() {
+        for (uint32_t p = 0; p < COLONY_PROVINCES; ++p)
+            if (want[p] == 0 && (tick + p) % 7 == 0) {
+                const uint32_t n = 1 + p % 3;
+                for (uint32_t k = 0; k < n; ++k) kinds[p * 3 + k] = int32_t(p * 100 + tick * 3 + k);
+                want[p] = n;
+            }
+        for (uint32_t c = 0; c < count; ++c) {
+            if (!alive[c]) continue;
+            if (kind[c] < 0) kind[c] = kinds[size_t(home[c]) * 3 + size_t(slot[c])];
+            if (++age[c] > 9) alive[c] = false;
+        }
+        // every tick: the rows free at the end of it; the line only in its ticks
+        std::vector<uint32_t> eligible;
+        for (uint32_t c = 0; c < COLONISTS; ++c) {
+            if (!alive[c] && !prev[c]) eligible.push_back(c);
+            prev[c] = alive[c];
+        }
+        line_ran = tick % EVERY == OFFSET;
+        size_t next = 0;
+        if (line_ran)
+            for (uint32_t p = 0; p < COLONY_PROVINCES; ++p) {
+                const uint32_t asked = want[p];
+                for (uint32_t j = 0; want[p] > 0 && next < eligible.size(); ++j, --want[p]) {
+                    const uint32_t c = eligible[next++];
+                    alive[c] = prev[c] = true;
+                    ++generation[c];
+                    home[c] = int32_t(p), slot[c] = int32_t(j), kind[c] = -1, age[c] = 0;
+                    count = std::max(count, c + 1);
+                    ++born;
+                }
+                partial += want[p] > 0 && want[p] < asked;
+            }
+        ++tick;
+    }
+};
+
+static void test_colony(const std::vector<DeviceInfo>& devices) {
+    const Colony w = build_colony();
+    CHECK(w.game->ok() && w.game->warnings.empty());
+    if (!w.game->ok()) return;
+    std::vector<StateSnapshot> ends;
+    for (const auto& d : devices) {
+        GameSim sim(*w.game, d.index);
+        ColonyModel m;
+        bool ok = true, timed = true;
+        for (int t = 0; t < 60; ++t) {
+            if (t == 30) {  // a save between two runs of the line continues the same way
+                const std::vector<uint8_t> save = sim.save();
+                GameSim other(*w.game, d.index);
+                other.load(save);
+                CHECK(other.save() == save);
+            }
+            sim.tick();
+            m.step();
+            ok &= sim.read_field(w.province, "want") == std::vector<int32_t>(m.want.begin(), m.want.end());
+            ok &= sim.read_field(w.colonist, "slot") == m.slot && sim.read_field(w.colonist, "kind") == m.kind;
+            ok &= sim.read_field(w.colonist, "home") == m.home && sim.read_field(w.colonist, "age") == m.age;
+            for (uint32_t c = 0; c < COLONISTS; ++c)
+                ok &= sim.entity_alive(w.colonist, c) == m.alive[c] && sim.entity_generation(w.colonist, c) == m.generation[c];
+            ok &= sim.entity_count(w.colonist) == m.count;
+            for (const auto& st : sim.stage_times())  // the line's own stages run only in its ticks
+                if (st.name.rfind("terni_spawn_", 0) == 0 && st.name != "terni_spawn_bits") timed &= st.ran == m.line_ran;
+                else timed &= st.ran;
+            if (!ok) {
+                std::printf("  tick %d: colonists differ from the model\n", t);
+                break;
+            }
+        }
+        CHECK(ok && timed);
+        CHECK(m.born > 30 && m.partial > 0);  // it filled up, and some askers waited for room
+        ends.push_back(sim.snapshot());
+        const bool agree = first_difference(ends[0], ends.back()).empty();
+        CHECK(agree);
+        std::printf("colonists every %u ticks on %-40.40s %s (%u born)\n", EVERY, d.name.c_str(),
+                    ok && timed && agree ? "ok" : "DIFFERS", m.born);
+    }
+
+    // the same line from a data folder; the checksum covers both options, and a game
+    // without them keeps its checksum
+    namespace fs = std::filesystem;
+    const fs::path root = fs::path(TERNI_TEST_BINARY_DIR) / "colony_game";
+    fs::remove_all(root);
+    fs::create_directories(root / "schema");
+    fs::create_directories(root / "rules");
+    std::ofstream(root / "schema" / "entities.txt")
+        << "province = { capacity = 16  want = count  kinds = { type = int  size = 3 } }\n"
+           "colonist = {\n  capacity = 24\n  dynamic = yes\n"
+           "  spawn = { from = province  count = want  parent = home  ordinal = slot  every = 5  offset = 3 }\n"
+           "  home = ref:province\n  slot = { type = int  default = -1 }\n  kind = { type = int  default = -1 }\n"
+           "  age = int\n}\n";
+    std::ofstream(root / "rules" / "stages.txt") << "ask = { for_each = province }\nsettle = { for_each = colonist }\n";
+    std::ofstream(root / "rules" / "ask.glsl") << ASK;
+    std::ofstream(root / "rules" / "settle.glsl") << COLONIZE;
+    const auto loaded = load_game(root.string());
+    for (const auto& e : loaded->errors) std::printf("  %s\n", e.text().c_str());
+    CHECK(loaded->ok());
+    if (loaded->ok()) {
+        const SpawnDef& line = loaded->entity("colonist")->spawns.at(0);
+        CHECK(line.ordinal_field == "slot" && line.every == 5 && line.offset == 3 && line.parent_field == "home");
+    }
+    WorldBuilder plain;  // the same line without its options is another game
+    const uint32_t province = plain.entity("province", 16);
+    plain.field(province, "want", FieldType::Count);
+    const uint32_t colonist = plain.entity("colonist", COLONISTS);
+    plain.entity_dynamic(colonist);
+    plain.field(colonist, "home", FieldType::Ref, "province");
+    plain.field(colonist, "slot", FieldType::Int);
+    plain.spawn(colonist, "province", "want", "home");
+    const uint64_t before = game_checksum(*plain.finish());
+    WorldBuilder with;
+    const uint32_t province2 = with.entity("province", 16);
+    with.field(province2, "want", FieldType::Count);
+    const uint32_t colonist2 = with.entity("colonist", COLONISTS);
+    with.entity_dynamic(colonist2);
+    with.field(colonist2, "home", FieldType::Ref, "province");
+    with.field(colonist2, "slot", FieldType::Int);
+    SpawnOptions o;
+    o.parent_field = "home";
+    o.ordinal_field = "slot";
+    with.spawn(colonist2, "province", "want", o);
+    CHECK(game_checksum(*with.finish()) != before);
+}
+
 static bool has(const Game& g, const std::string& text) {
     for (const auto& e : g.errors)
         if (e.message.find(text) != std::string::npos) return true;
@@ -452,6 +648,7 @@ int main() {
     }
 
     test_crowd(devices);
+    test_colony(devices);
 
     // entity types that are not dynamic: the rows in use are alive, and there is nothing to create
     {
@@ -513,7 +710,7 @@ void main() {
                 names.push_back(t.name);
                 CHECK(t.ran && t.runs == 1);
             }
-            CHECK(names == std::vector<std::string>({"wear", "terni_spawn_wanted", "terni_spawn_blocks",
+            CHECK(names == std::vector<std::string>({"wear", "terni_spawn_bits", "terni_spawn_wanted", "terni_spawn_blocks",
                                                      "terni_spawn_scan", "terni_spawn_assign", "terni_tick"}));
         }
         CHECK(!sim.entity_alive(cart, 2) && sim.entities_free(cart) == 37);
@@ -571,6 +768,14 @@ void main() {
         b.spawn(cart, "town", "want", "owner");   // owner refers to mill, not town
         b.spawn(mill, "town", "want");            // mill is not dynamic
         b.entity_dynamic(b.entity("crowd", 1u << 24));  // more rows than the spawn stages count
+        b.field(cart, "slot", FieldType::Quantity);
+        SpawnOptions bad_ordinal;
+        bad_ordinal.ordinal_field = "slot";               // not an int or count field
+        b.spawn(cart, "mill", "need", bad_ordinal);
+        SpawnOptions bad_schedule;
+        bad_schedule.every = 4;
+        bad_schedule.offset = 4;                          // must be less than every
+        b.spawn(cart, "mill", "need", bad_schedule);
         const auto bad = b.finish();
         CHECK(has(*bad, "field 'alive' of dynamic entity 'cart'"));
         CHECK(has(*bad, "'want' is not a single count field of 'town'"));
@@ -580,6 +785,8 @@ void main() {
         CHECK(has(*bad, "'owner' is not a single ref:town field of 'cart'"));
         CHECK(has(*bad, "'mill' is not a dynamic entity type"));
         CHECK(has(*bad, "dynamic entity 'crowd': capacity must be under 16,777,216"));
+        CHECK(has(*bad, "ordinal 'slot' is not a single int or count field of 'cart'"));
+        CHECK(has(*bad, "offset 4 must be less than every (4)"));
     }
 
     // a data folder: `dynamic = yes` and `spawn = { ... }`; every device agrees

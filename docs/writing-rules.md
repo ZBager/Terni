@@ -183,15 +183,52 @@ If the entity type is full, the armies that do not fit are not created and `rais
 keeps the number still wanted; they are created when rows come free, unless a rule
 sets `raise` back to 0.
 
+**Telling new rows apart.** All the rows a province gets in one tick have the same
+parent. When each should be something different (a pop of a given culture, an army of
+a given kind), name an `ordinal` field in the `spawn` line: the rows a province gets in
+a tick are numbered 0, 1, 2, ... The province keeps a list of what it asked for, and each
+new row reads its entry:
+
+```
+pop = {
+    dynamic = yes
+    spawn   = { from = province  count = new_pops  parent = home  ordinal = nth }
+    home    = ref:province
+    nth     = int
+    culture = { type = int  default = -1 }
+}
+province = {
+    new_pops = count
+    wanted   = { type = int  size = 4 }   # the culture of each pop asked for
+}
+```
+
+```glsl
+FOR_EACH_POP(i) {
+    if (pop_culture[i] < 0) pop_culture[i] = province_wanted[pop_home[i] * 4u + uint(pop_nth[i])];
+}
+```
+
+If the type is full and a province gets only some of the rows it asked for, the next
+rows it gets start again at 0, and `new_pops` holds how many are still missing; drop
+the entries already served before the next tick.
+
+**Rows asked for once a month.** `every = 30  offset = 29` in the `spawn` line gives rows
+out only at the end of every 30th tick, like a stage with that schedule; the count
+fields keep what was asked until then. On the other ticks only a short pass over the
+alive bits runs, so a type that changes monthly costs almost nothing in between.
+
 **Refs to entities that may be gone.** A destroyed row is not used again in the tick it
 was destroyed or the one after, so a rule that checks `army_alive(r)` every tick always
 sees an army go before another takes its row. A ref that is checked less often can
 miss that: compare `army_generation[r]` with a generation you stored next to the ref to
 know it is still the same army.
 
-**Cost.** The built-in stages pass over every row of a dynamic entity type and of the
-types that ask, every tick, whether anything is asked or not: about as much work as
-three to five simple stages of your own over those rows.
+**Cost.** In ticks a `spawn` line runs in, the built-in stages pass over every row of
+the dynamic entity type and of the types that ask, whether anything is asked or not:
+about as much work as three to five simple stages of your own over those rows. In
+other ticks one pass over the alive bits (one word per 32 rows) is all, so give lines
+that need not run every tick a schedule.
 
 ## Workgroup stages
 

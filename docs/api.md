@@ -27,6 +27,7 @@ Describes a world in code. Every call validates; problems are collected in
 | `void field(entity, name, type, ref_entity = "", size = 1, default_raw = 0)` | Adds a field |
 | `void entity_dynamic(entity)` | Rows of the entity type are created and destroyed during play |
 | `void spawn(entity, from_entity, count_field, parent_field = "")` | Rules ask for new rows of the dynamic `entity` through a `Count` field of `from_entity`; `parent_field` of the new row is set to the row that asked |
+| `void spawn(entity, from_entity, count_field, const SpawnOptions&)` | The same with `SpawnOptions{parent_field, ordinal_field, every, offset}`: the rows one asking row gets in a tick are numbered in `ordinal_field` (0, 1, ...), and the line gives rows out only in ticks where `tick % every == offset` |
 | `void define(name, type)` / `set_define(name, raw)` | Declares a constant / sets its value |
 | `uint32_t modifier_key(name, entity, type, inherit_field = "")` | Adds a modifier key (`Rate`, `Quantity` or `Int`). `inherit_field` is a ref field of `entity`, or several joined by `.`, nearest first: `"district.region.realm"` |
 | `uint32_t bundle(name, {{key, raw}, ...})` | Adds a modifier bundle |
@@ -145,7 +146,7 @@ Runs a `Game` on one device. The `Game` must outlive it. Not thread-safe.
 | `DeviceHealth` | `usual_ms` (lowest median of 32 ticks so far), `recent_ms` (latest median), `ticks` (measured since the start, `load()` or `move_to_device()`), `slow` (over 4 times the usual and at least 1 ms longer) |
 | `StageDef` (in `Game::stages`) | `name`, `for_each`, `dispatch`, `clear`, `source`, `every`, `offset`; `runs_in(tick)` says whether it runs in the tick after `tick` completed ticks |
 | `EntityDef` (in `Game::entities`) | `name`, `capacity`, `fields`, `dynamic`, `spawns`; `field(name)`, `field_index(name)` |
-| `SpawnDef` (in `EntityDef::spawns`) | `from`, `count_field`, `parent_field`, and their indices once the world is finished |
+| `SpawnDef` (in `EntityDef::spawns`) | `from`, `count_field`, `parent_field`, `ordinal_field`, `every`, `offset`, and the fields' indices once the world is finished; `runs_in(tick)` |
 
 ## Rules and the SPIR-V cache
 

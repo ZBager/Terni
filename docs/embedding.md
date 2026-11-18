@@ -164,8 +164,9 @@ copy_into_your_view_model(owners, pops);
   ```
 
   A stage with a schedule shows `ran = false` in the ticks it skips, and its average
-  counts only the ticks it ran in. Stages named `terni_...` are Terni's own: the four
-  `terni_spawn_...` stages give out rows of dynamic entity types. `report()` gives the
+  counts only the ticks it ran in. Stages named `terni_...` are Terni's own: the
+  `terni_spawn_...` stages give out rows of dynamic entity types (`terni_spawn_bits`
+  every tick, the others in ticks a spawn line runs in). `report()` gives the
   same times as text.
 - To see what ticks cost beside a renderer, and what they cost its frames, run
   `terni_bench --frame-load 60` ([Benchmark](benchmark.md#beside-a-renderer)).

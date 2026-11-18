@@ -159,12 +159,26 @@ void WorldBuilder::entity_dynamic(uint32_t entity, Location where) {
 
 void WorldBuilder::spawn(uint32_t entity, const std::string& from_entity, const std::string& count_field,
                          const std::string& parent_field, Location where) {
+    SpawnOptions options;
+    options.parent_field = parent_field;
+    spawn(entity, from_entity, count_field, options, std::move(where));
+}
+
+void WorldBuilder::spawn(uint32_t entity, const std::string& from_entity, const std::string& count_field,
+                         const SpawnOptions& options, Location where) {
     Game& g = *game_;
     if (entity >= g.entities.size()) return error(where, "spawn: unknown entity type");
+    if (options.every == 0) return error(where, "spawn: every must be at least 1");
+    if (options.offset >= options.every)
+        return error(where, "spawn: offset " + std::to_string(options.offset) + " must be less than every (" +
+                                std::to_string(options.every) + ")");
     SpawnDef s;
     s.from = from_entity;
     s.count_field = count_field;
-    s.parent_field = parent_field;
+    s.parent_field = options.parent_field;
+    s.ordinal_field = options.ordinal_field;
+    s.every = options.every;
+    s.offset = options.offset;
     s.where = std::move(where);
     g.entities[entity].spawns.push_back(std::move(s));  // checked in finish(): it may name later entities
 }
@@ -327,7 +341,7 @@ std::unique_ptr<Game> WorldBuilder::finish() {
         for (auto& s : e.spawns) {
             const std::string what = "spawn of '" + e.name + "': ";
             s.from_entity = g.entity_index(s.from);
-            s.count_index = s.parent_index = -1;
+            s.count_index = s.parent_index = s.ordinal_index = -1;
             if (s.from_entity < 0) {
                 error(s.where, what + "unknown entity '" + s.from + "'");
                 continue;
@@ -338,6 +352,16 @@ std::unique_ptr<Game> WorldBuilder::finish() {
                 from.fields[size_t(s.count_index)].size != 1) {
                 error(s.where, what + "'" + s.count_field + "' is not a single count field of '" + from.name + "'");
                 s.count_index = -1;
+            }
+            if (!s.ordinal_field.empty()) {
+                s.ordinal_index = e.field_index(s.ordinal_field);
+                const FieldDef* o = s.ordinal_index >= 0 ? &e.fields[size_t(s.ordinal_index)] : nullptr;
+                if (!o || (o->type != FieldType::Int && o->type != FieldType::Count) || o->size != 1 ||
+                    s.ordinal_field == s.parent_field) {
+                    error(s.where, what + "ordinal '" + s.ordinal_field + "' is not a single int or count field of '" +
+                                       e.name + "' (other than its parent field)");
+                    s.ordinal_index = -1;
+                }
             }
             if (s.parent_field.empty()) continue;
             s.parent_index = e.field_index(s.parent_field);
