@@ -58,6 +58,12 @@ The first public version.
   host, and the tool `terni_diff a.sav b.sav` prints where two saves differ. A long test
   runs the benchmark world for 3,000 ticks across every device, through saves, against
   the CPU reference.
+- **Mods**: `load_game({game, mod, ...})` loads mod folders on top of the game's, a file
+  with the same path replacing the game's; messages name the folder a file came from
+  (`StageDef::source_file`). `terni_check <game folder> [mod folder ...]` is what a
+  modder runs before publishing: the files a mod replaces and adds and those never
+  read, every error and warning, compile errors, order problems at run time, the same
+  state on every device, and a `ready` or `NOT READY` verdict.
 - **Rules from mods**: Terni turns on Vulkan's robustBufferAccess2 where the device has
   it (every current desktop driver, at no measurable cost), so a rule that reads or
   writes past the end of a field reads 0 and writes nothing, the same on every device;

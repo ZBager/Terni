@@ -208,9 +208,11 @@ void lint_stage_order(Game& game) {
     for (const auto& e : game.entities)
         for (const auto& f : e.fields) buffers[e.name + "_" + f.name] = e.name + "." + f.name;
     for (const auto& stage : game.stages) {
-        // rules/<stage>.glsl next to stages.txt; for worlds built in code, <stage>.glsl
+        // the file it was read from (a mod's, say); else rules/<stage>.glsl next to stages.txt;
+        // for worlds built in code, <stage>.glsl
         std::string file = stage.name + ".glsl";
-        if (const size_t slash = stage.where.file.find_last_of('/'); slash != std::string::npos)
+        if (!stage.source_file.empty()) file = stage.source_file;
+        else if (const size_t slash = stage.where.file.find_last_of('/'); slash != std::string::npos)
             file = stage.where.file.substr(0, slash + 1) + file;
         const StageScan scan(stage.source, buffers);
         for (const auto& [field, list] : scan.accesses) {

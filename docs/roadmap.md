@@ -128,8 +128,10 @@ invalid, not as a time. See [Benchmark](benchmark.md).
    cache format), a table of supported platforms, and built libraries and tools for
    Linux, MSVC and MinGW with each release. The licence notices a game needs ship with
    Terni itself, with an install rule. TerniIntegrations gets CI of its own.
-2. **Mod tooling**: `terni_script_check` and the order warnings as one command a
-   modder runs before publishing.
+2. **Mod tooling** (done): mod folders load on top of the game's
+   (`load_game({game, mod, ...})`), and `terni_check` is the one command a modder runs
+   before publishing: files, errors and warnings with `file:line`, compile errors, order
+   problems at run time and the same state on every device.
 
 Not planned: DirectX or Metal back ends, and consoles.
 

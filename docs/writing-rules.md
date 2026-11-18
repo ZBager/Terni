@@ -287,9 +287,12 @@ do small and the same on every machine:
 - **A rule can change any field of the world.** It is part of the game: test a mod as
   you would test the game.
 
-Before publishing a mod, load it with `terni_run <game folder> --ticks 100` (every
-device, compared bit for bit), and read its warnings: a warning about order means the
-mod can desync a multiplayer game.
+Before publishing a mod, run `terni_check <game folder> <mod folder>`. It loads the game
+with the mod as players will, compiles the rules, runs them on every device and checks
+the first ticks for order problems, and says `ready` or `NOT READY` with every error and
+warning at its `file:line`. Treat a warning about order as an error: it means the mod
+can desync a multiplayer game. See [Data format](data-format.md#mods) for how mod
+folders replace and add files.
 
 ## Debugging
 

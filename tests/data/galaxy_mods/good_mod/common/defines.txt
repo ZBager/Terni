@@ -1,0 +1,5 @@
+# A mod for the galaxy example: faster growth, more unrest. Replaces the game's file.
+growth_rate   = 0.03
+tax_rate      = 0.1
+unrest_chance = 0.08
+unrest_loss   = 0.03

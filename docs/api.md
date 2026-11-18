@@ -44,10 +44,13 @@ Describes a world in code. Every call validates; problems are collected in
 
 ```cpp
 std::unique_ptr<Game> load_game(const std::string& root);
+std::unique_ptr<Game> load_game(const std::vector<std::string>& roots);   // or load_game({"game", "mod", ...})
 ```
 
 Loads a game folder (see [Data format](data-format.md)) through `WorldBuilder`. Never
-throws on bad data.
+throws on bad data. With several folders, the first is the game and the others are mods
+on top of it: a file with the same path in a later folder replaces the earlier one
+([Mods](data-format.md#mods)).
 
 ### `Game`
 
@@ -145,7 +148,7 @@ Runs a `Game` on one device. The `Game` must outlive it. Not thread-safe.
 | `BufferRobustness` | `DeviceInfo::robustness`: `None`, `Bounded` (an access past a field's end stays in its buffer, as the driver chooses) or `Defined` (reads give 0, writes are dropped, the same on every device) |
 | `StageTime` | `name`, `ran` (in the last tick), `last_ms` (0 if it did not run), `runs` (ticks it ran in since the start or `move_to_device()`), `total_ms` (over those runs; `total_ms / runs` is its average). Times are 0 where the device has no timestamps; `tick_checked()` is not measured |
 | `DeviceHealth` | `usual_ms` (lowest median of 32 ticks so far), `recent_ms` (latest median), `ticks` (measured since the start, `load()` or `move_to_device()`), `slow` (over 4 times the usual and at least 1 ms longer) |
-| `StageDef` (in `Game::stages`) | `name`, `for_each`, `dispatch`, `clear`, `source`, `every`, `offset`; `runs_in(tick)` says whether it runs in the tick after `tick` completed ticks |
+| `StageDef` (in `Game::stages`) | `name`, `for_each`, `dispatch`, `clear`, `source`, `source_file` (where the source was read from, for messages), `every`, `offset`; `runs_in(tick)` says whether it runs in the tick after `tick` completed ticks |
 | `EntityDef` (in `Game::entities`) | `name`, `capacity`, `fields`, `dynamic`, `spawns`; `field(name)`, `field_index(name)` |
 | `SpawnDef` (in `EntityDef::spawns`) | `from`, `count_field`, `parent_field`, `ordinal_field`, `every`, `offset`, and the fields' indices once the world is finished; `runs_in(tick)` |
 

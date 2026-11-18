@@ -237,6 +237,37 @@ int main() {
         }
         CHECK(threw);
     }
+    // ---- a mod on top of a game: its files replace the game's of the same path, new ones add
+    {
+        const std::string base = TERNI_SOURCE_DIR "/examples/mini_galaxy", mod = TERNI_TEST_DATA "/galaxy_mods/good_mod";
+        const auto alone = load_game(base);
+        const auto modded = load_game(std::vector<std::string>{base, mod});
+        for (const auto& e : modded->errors) std::printf("  %s\n", e.text().c_str());
+        CHECK(modded->ok() && modded->warnings.empty());
+        int64_t growth = 0;
+        CHECK(parse_value("0.03", FieldType::Rate, growth) && modded->define("growth_rate") == growth);  // defines replaced
+        CHECK(modded->bundle_index("festival") >= 0 && modded->bundle_index("good_harvest") >= 0);  // a file added
+        CHECK(modded->stages.size() == 3 && modded->stages[0].source.find("stability") != std::string::npos);
+        CHECK(modded->stages[0].source_file == "good_mod/rules/planet_growth.glsl");
+        CHECK(modded->stages[1].source_file == "mini_galaxy/rules/empire_income.glsl");
+        CHECK(alone->stages[0].source_file == "rules/planet_growth.glsl");
+        CHECK(game_checksum(*modded) != game_checksum(*alone));
+        // two string literals in braces pick the list, not std::string's iterator-pair constructor
+        const auto braced = load_game({TERNI_SOURCE_DIR "/examples/mini_galaxy", TERNI_TEST_DATA "/galaxy_mods/good_mod"});
+        CHECK(game_checksum(*braced) == game_checksum(*modded));
+        // the same file of a broken mod is named with the mod's folder
+        const auto broken = load_game(std::vector<std::string>{base, TERNI_TEST_DATA "/galaxy_mods/broken_mod"});
+        CHECK(!broken->warnings.empty() &&
+              broken->warnings[0].where.file == "broken_mod/rules/planet_growth.glsl" && broken->warnings[0].where.line == 5);
+        bool thrown = false;
+        try {
+            load_game(std::vector<std::string>{});
+        } catch (const std::invalid_argument&) {
+            thrown = true;
+        }
+        CHECK(thrown);
+    }
+
     std::printf("test_game: %s\n", failures == 0 ? "PASS" : "FAIL");
     return failures == 0 ? 0 : 1;
 }

@@ -340,8 +340,10 @@ in a small tool) before starting.
 
 ## Rules you did not write
 
-When players can install mods, rules you never saw run inside your game. What they can
-and cannot do:
+When players can install mods, rules you never saw run inside your game. Load them on top
+of your game's folder, `terni::load_game({game_folder, mod_folder, ...})`, as described in
+[Data format](data-format.md#mods); point modders to `terni_check`, which checks a mod
+the way your game will load it. What their rules can and cannot do:
 
 - **They run on the GPU, inside Terni's buffers.** A rule sees every field of the world
   and nothing else: no files, no network, no memory of your game or of other programs.

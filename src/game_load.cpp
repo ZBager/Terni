@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <sstream>
 
 #include "terni/fixed.hpp"
@@ -109,7 +110,8 @@ using Docs = std::vector<std::unique_ptr<script::Document>>;
 
 class Loader {
 public:
-    Loader(WorldBuilder& b, const std::string& root) : b_(b), root_(root) {}
+    // The game's folder, then mods: a file with the same path in a later folder replaces it.
+    Loader(WorldBuilder& b, std::vector<std::string> roots) : b_(b), roots_(std::move(roots)) {}
 
     void run() {
         Docs schema = read_folder("schema");
@@ -131,7 +133,18 @@ public:
 
 private:
     Game& g() { return b_.game(); }
-    std::string rel(const std::string& path) const { return fs::relative(path, root_).generic_string(); }
+    // A file's path in messages: relative to its folder, which is named too when there are mods.
+    std::string rel(const std::string& path) const {
+        const std::string generic = fs::path(path).generic_string();
+        for (auto r = roots_.rbegin(); r != roots_.rend(); ++r) {
+            const std::string root = fs::path(*r).generic_string();
+            if (generic.size() > root.size() && generic.compare(0, root.size(), root) == 0 && generic[root.size()] == '/') {
+                const std::string inside = generic.substr(root.size() + 1);
+                return roots_.size() > 1 ? fs::path(*r).filename().generic_string() + "/" + inside : inside;
+            }
+        }
+        return generic;
+    }
     Location at(const script::Document& d, const script::Item& it) const { return {rel(d.path), it.line}; }
     void error(Location l, std::string m) { g().errors.push_back({std::move(l), std::move(m)}); }
     void warn(Location l, std::string m) { g().warnings.push_back({std::move(l), std::move(m)}); }
@@ -139,13 +152,14 @@ private:
 
     Docs read_folder(const std::string& name) {
         Docs docs;
-        const fs::path dir = fs::path(root_) / name;
-        if (!fs::is_directory(dir)) return docs;
-        std::vector<fs::path> files;
-        for (const auto& e : fs::directory_iterator(dir))
-            if (e.is_regular_file() && e.path().extension() == ".txt") files.push_back(e.path());
-        std::sort(files.begin(), files.end());  // deterministic load order
-        for (const auto& f : files) {
+        std::map<std::string, fs::path> by_name;  // file name -> the last folder's copy; sorted: a fixed load order
+        for (const auto& root : roots_) {
+            const fs::path dir = fs::path(root) / name;
+            if (!fs::is_directory(dir)) continue;
+            for (const auto& e : fs::directory_iterator(dir))
+                if (e.is_regular_file() && e.path().extension() == ".txt") by_name[e.path().filename().string()] = e.path();
+        }
+        for (const auto& [file_name, f] : by_name) {
             auto doc = script::parse_file(f.string());
             if (!doc) {
                 error({rel(f.string()), 0}, "cannot read file");
@@ -417,7 +431,9 @@ private:
             if (const auto* cl = it.block->find("clear"); cl && cl->is_block())
                 for (const auto& c : cl->block->items) clear.push_back(str(c.scalar));
             std::string source;
-            const fs::path src = fs::path(root_) / "rules" / (name + ".glsl");
+            fs::path src = fs::path(roots_.front()) / "rules" / (name + ".glsl");
+            for (const auto& root : roots_)  // the last folder that has it
+                if (fs::is_regular_file(fs::path(root) / "rules" / (name + ".glsl"))) src = fs::path(root) / "rules" / (name + ".glsl");
             std::ifstream f(src, std::ios::binary);
             if (!f) {
                 error(at(d, it), "missing rule source rules/" + name + ".glsl");
@@ -427,6 +443,8 @@ private:
                 source = ss.str();
             }
             b_.stage(name, fe ? str(fe->scalar) : "", source, clear, at(d, it));
+            for (auto& st : g().stages)
+                if (st.name == name && st.source_file.empty()) st.source_file = rel(src.string());
             if (const auto* dp = it.block->find("dispatch")) {
                 const std::string v = str(dp->scalar);
                 if (v == "workgroup") b_.stage_dispatch(name, Dispatch::Workgroup, at(d, *dp));
@@ -453,16 +471,28 @@ private:
     }
 
     WorldBuilder& b_;
-    std::string root_;
+    std::vector<std::string> roots_;
     std::vector<std::pair<int, uint32_t>> rows_;  // history items -> (entity, row)
     size_t next_row_ = 0;
 };
 
 }  // namespace
 
-std::unique_ptr<Game> load_game(const std::string& root) {
-    const std::string abs = fs::absolute(root).lexically_normal().string();
-    WorldBuilder b(abs);
+std::unique_ptr<Game> load_game(const std::string& root) { return load_game(std::vector<std::string>{root}); }
+
+std::unique_ptr<Game> load_game(std::initializer_list<std::string> roots) {
+    return load_game(std::vector<std::string>(roots));
+}
+
+std::unique_ptr<Game> load_game(const std::vector<std::string>& roots) {
+    if (roots.empty()) throw std::invalid_argument("load_game: no folder");
+    std::vector<std::string> abs;
+    for (const auto& r : roots) {
+        fs::path p = fs::absolute(r).lexically_normal();
+        if (p.filename().empty()) p = p.parent_path();  // "game/" -> "game"
+        abs.push_back(p.string());
+    }
+    WorldBuilder b(abs.front());
     Loader(b, abs).run();
     return b.finish();
 }

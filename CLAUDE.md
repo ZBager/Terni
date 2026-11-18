@@ -70,6 +70,9 @@ ctest --test-dir build --output-on-failure
 - `./build/terni_run <game folder> [--ticks N] [--dump] [--prelude] [--device I] [--driver LIBRARY]` runs a
   data folder on every device and compares state hashes; `--prelude` prints the generated
   GLSL. `./build/hello_towns` is the getting-started example.
+- `./build/terni_check <game folder> [mod folder ...] [--ticks N] [--no-run] [--strict]` checks a
+  game with mods on top as a modder would before publishing (files, errors, compile, order
+  problems at run time, parity); exit 0 when ready.
 - `./build/terni_diff a.sav b.sav [--rows N]` names the entity types, fields and rows where
   two saves differ (no GPU needed).
 - `./build/terni_bench [--size tiny|small|medium|large|huge|giant|colossal] [--threads 1,2,8|powers|sweep|all] [--readback pops|ui] [--json FILE]`

@@ -204,6 +204,28 @@ void main() {
 }
 ```
 
+## Mods
+
+A mod is a folder laid out like the game's, holding only what it changes. Load the game's
+folder with the mods on top, in order:
+
+```cpp
+auto game = terni::load_game({"data/galaxy", "mods/faster_growth", "mods/more_planets"});
+```
+
+In each subfolder, a file with the same name in a later folder replaces the earlier one,
+and a file with a new name adds to the game. `rules/stages.txt` decides the tick order,
+so a mod that adds a stage ships its own `stages.txt`; a stage's source is the last
+`rules/<stage>.glsl` found. A mod that replaces `common/defines.txt` or a file in
+`history/` replaces all of it, so it copies the values it does not change. Messages name
+the folder a file came from (`faster_growth/rules/planet_growth.glsl:7: ...`).
+
+Before publishing, a modder runs `terni_check <game folder> <mod folder>`. It lists the
+files the mod replaces and adds and those the game never reads, loads the game with the
+mod and reports every error and warning, compiles the rules, runs them on every device
+(checking the first ticks for order problems and that every device ends in the same
+state), and ends with `ready` or `NOT READY` and the game checksum with the mod.
+
 ## What the checksum covers
 
 `game_checksum()` covers the schema (with capacities, including those changed with

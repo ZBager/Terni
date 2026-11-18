@@ -63,6 +63,7 @@ cmake -S . -B build -G Ninja && cmake --build build
 ctest --test-dir build                        # unit tests and GPU parity on every Vulkan device
 ./build/hello_towns                           # a world described in code
 ./build/terni_run examples/mini_galaxy --ticks 100 --dump   # a world from a data folder
+./build/terni_check examples/mini_galaxy tests/data/galaxy_mods/good_mod   # check a mod before publishing
 ./build/terni_bench                           # how fast your GPUs and CPU run a grand-strategy tick
 ```
 

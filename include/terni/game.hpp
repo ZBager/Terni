@@ -45,6 +45,7 @@
 // of ticks. Host calls take effect for the simulation at the next tick.
 
 #include <cstdint>
+#include <initializer_list>
 #include <map>
 #include <memory>
 #include <string>
@@ -161,6 +162,7 @@ struct StageDef {
     std::string for_each;            // entity type the stage iterates
     std::vector<std::string> clear;  // "entity.field" buffers zeroed at the start of each tick the stage runs
     std::string source;              // GLSL body
+    std::string source_file;         // where it was read from, for messages ("my_mod/rules/x.glsl"); "" in code
     uint32_t every = 1, offset = 0;  // runs in the ticks where terni.tick % every == offset
     Location where;
 
@@ -280,6 +282,14 @@ private:
 
 // Load a Paradox-syntax game folder (uses WorldBuilder). Never throws on bad data.
 std::unique_ptr<Game> load_game(const std::string& root);
+// The game's folder with mods on top, in order: in each subfolder, a file with the same
+// name in a later folder replaces the earlier one, and new files add to the game (rule
+// sources too, by stage name). Diagnostics name the folder a file came from
+// ("my_mod/rules/growth.glsl:7: ...").
+std::unique_ptr<Game> load_game(const std::vector<std::string>& roots);
+// load_game({"game", "mod"}): without it, two string literals would also fit std::string's
+// iterator-pair constructor, and the call would be ambiguous.
+std::unique_ptr<Game> load_game(std::initializer_list<std::string> roots);
 
 // GLSL generated from the schema (buffers, defines, counts, loops, modifier accessors).
 // Locale-independent: the same text whatever global locale the host process has set.
