@@ -23,6 +23,8 @@ endif()
 option(TERNI_BUILD_TOOLS "Build terni_run, terni_check, terni_diff and terni_script_check" ${_terni_develop})
 option(TERNI_BUILD_TESTS "Build the test suite (needs glslc)" ${_terni_develop})
 option(TERNI_BUILD_BENCHMARK "Build terni_bench, the benchmark against a CPU reference" ${_terni_develop})
+option(TERNI_C_API "Build the C API (include/terni/terni.h) as shared libraries: terni and terni_runtime"
+       ${PROJECT_IS_TOP_LEVEL})
 if((TERNI_BUILD_TOOLS OR TERNI_BUILD_TESTS OR TERNI_BUILD_BENCHMARK) AND NOT TERNI_RULE_COMPILER)
   message(FATAL_ERROR "TERNI_BUILD_TOOLS, TERNI_BUILD_TESTS and TERNI_BUILD_BENCHMARK need TERNI_RULE_COMPILER")
 endif()
@@ -87,6 +89,7 @@ function(terni_library target export_name compiler_source)
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   target_link_libraries(${target} PUBLIC Vulkan::Vulkan PRIVATE Threads::Threads ${CMAKE_DL_LIBS})
   target_compile_options(${target} PRIVATE ${TERNI_COMPILE_OPTIONS})
+  set_target_properties(${target} PROPERTIES POSITION_INDEPENDENT_CODE ON)  # also goes into shared libraries
 endfunction()
 
 terni_library(terni_runtime runtime src/rule_compiler_none.cpp)
@@ -96,6 +99,40 @@ if(TERNI_RULE_COMPILER)
   target_include_directories(terni_core PRIVATE ${SHADERC_INCLUDE})
   target_link_libraries(terni_core PRIVATE ${SHADERC_LIB})
   list(APPEND TERNI_LIBRARIES terni_core)
+endif()
+
+# ---------------------------------------------------------------------------
+# The C API: shared libraries that export only the terni_* functions of terni.h.
+#   terni           over Terni::core (compiles rules; needs shaderc beside it)
+#   terni_runtime   over Terni::runtime (rules from a SPIR-V cache only)
+# ---------------------------------------------------------------------------
+function(terni_c_library target export_name output_name static_library)
+  add_library(${target} SHARED src/c_api.cpp)
+  add_library(Terni::${export_name} ALIAS ${target})
+  target_link_libraries(${target} PRIVATE ${static_library})
+  target_include_directories(${target} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+                                              $<INSTALL_INTERFACE:include>)
+  target_compile_definitions(${target} PRIVATE TERNI_C_BUILD TERNI_VERSION_STRING="${PROJECT_VERSION}")
+  target_compile_options(${target} PRIVATE ${TERNI_COMPILE_OPTIONS})
+  set_target_properties(${target} PROPERTIES OUTPUT_NAME ${output_name} EXPORT_NAME ${export_name}
+                        C_VISIBILITY_PRESET hidden CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
+  if(WIN32)
+    # terni.dll, not libterni.dll (MinGW), so that every language finds it by its plain name;
+    # the import library must not overwrite the static library of the same name (MSVC)
+    set_target_properties(${target} PROPERTIES PREFIX "" ARCHIVE_OUTPUT_NAME ${output_name}_dll)
+  elseif(NOT APPLE)
+    target_link_options(${target} PRIVATE -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/cmake/terni_c.map
+                                          -Wl,--no-undefined)
+    set_property(TARGET ${target} APPEND PROPERTY LINK_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/cmake/terni_c.map)
+  endif()
+endfunction()
+if(TERNI_C_API)
+  terni_c_library(terni_c_runtime c_runtime terni_runtime terni_runtime)
+  list(APPEND TERNI_LIBRARIES terni_c_runtime)
+  if(TERNI_RULE_COMPILER)
+    terni_c_library(terni_c c terni terni_core)
+    list(APPEND TERNI_LIBRARIES terni_c)
+  endif()
 endif()
 
 # ---------------------------------------------------------------------------
@@ -286,6 +323,34 @@ if(TERNI_BUILD_TESTS)
                      sh $<TARGET_FILE:test_runtime>)
   endif()
 
+  if(TERNI_C_API)
+    # the C API, from a program written in C, through the shared library
+    enable_language(C)
+    add_executable(test_c_api tests/test_c_api.c)
+    target_link_libraries(test_c_api PRIVATE terni_c)
+    set_target_properties(test_c_api PROPERTIES C_STANDARD 99 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    if(NOT MSVC)
+      target_compile_options(test_c_api PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    target_compile_definitions(test_c_api PRIVATE TERNI_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/tests/data"
+                                                  TERNI_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+                                                  TERNI_TEST_BINARY_DIR="${CMAKE_CURRENT_BINARY_DIR}")
+    add_test(NAME c_api COMMAND test_c_api)
+    add_executable(test_c_api_runtime tests/test_c_api_runtime.c)
+    target_link_libraries(test_c_api_runtime PRIVATE terni_c_runtime)
+    target_compile_definitions(test_c_api_runtime PRIVATE TERNI_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+                                                          TERNI_TEST_BINARY_DIR="${CMAKE_CURRENT_BINARY_DIR}")
+    add_test(NAME c_api_runtime COMMAND test_c_api_runtime)
+    set_tests_properties(c_api_runtime PROPERTIES FIXTURES_REQUIRED runtime_cache)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_NM)
+      # ... whose libraries export the functions of terni.h and nothing else, and the
+      # runtime one needs no shaderc
+      add_test(NAME c_api_exports
+               COMMAND sh -c "for l in \"$1\" \"$2\"; do n=$('${CMAKE_NM}' -D --defined-only \"$l\" | awk '{print $3}') || exit 1; [ \"$(printf '%s\\n' \"$n\" | grep -c '^terni_')\" -ge 90 ] || exit 1; ! printf '%s\\n' \"$n\" | grep -v '^terni_' || exit 1; done; ! '${CMAKE_READELF}' -d \"$2\" | grep -i shaderc"
+                       sh $<TARGET_FILE:terni_c> $<TARGET_FILE:terni_c_runtime>)
+    endif()
+  endif()
+
   # A software Vulkan driver given by the game (add_vulkan_driver). Found where Mesa's
   # lavapipe is installed as a library; elsewhere pass -DTERNI_SOFTWARE_DRIVER=<library>.
   find_library(TERNI_SOFTWARE_DRIVER NAMES vulkan_lvp
@@ -331,7 +396,8 @@ endif()
 # Install / find_package(Terni) support
 # ---------------------------------------------------------------------------
 include(GNUInstallDirs)
-install(TARGETS ${TERNI_LIBRARIES} EXPORT TerniTargets ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+install(TARGETS ${TERNI_LIBRARIES} EXPORT TerniTargets ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(DIRECTORY include/terni DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 # The notices a game ships beside its program: Terni-NOTICES.txt with Terni::core (the rule
 # compiler's libraries), Terni-runtime-NOTICES.txt with Terni::runtime alone. TERNI_NOTICES_DIR

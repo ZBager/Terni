@@ -14,6 +14,9 @@ integer form of a field's type (a quantity of 1.5 is `384`, a rate of 1.5 is
 - [Script parser](#script-parser)
 - [Lower level: ComputeRunner](#lower-level-computerunner)
 
+For C, C# and other languages, the same simulation is behind plain C functions in a
+shared library: see [The C API](c-api.md).
+
 ## World description
 
 ### `WorldBuilder`

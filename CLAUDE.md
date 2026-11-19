@@ -91,10 +91,11 @@ ctest --test-dir build --output-on-failure
 
 | Path | Contents |
 | --- | --- |
-| `include/terni/` | Public headers. `game.hpp` is the main API (`WorldBuilder`, `load_game`, `GameSim`) |
+| `include/terni/` | Public headers. `game.hpp` is the main API (`WorldBuilder`, `load_game`, `GameSim`); `terni.h` is the C API |
 | `src/game_sim.cpp` | Prelude generation, SPIR-V cache, modifier store, `GameSim`, saves |
 | `src/game_builder.cpp`, `src/game_load.cpp` | Validation; the data-folder loader |
 | `src/compute_runner.cpp` | Vulkan: buffers, pipelines, the per-tick command buffers, transfers, order-check runs |
+| `src/c_api.cpp` | The C API of `include/terni/terni.h`, built into the shared libraries `terni` and `terni_runtime` |
 | `src/rule_compiler_*.cpp` | GLSL to SPIR-V with shaderc (`core`) or none (`runtime`) |
 | `src/order_lint.cpp` | Load-time warnings for order-dependent stages |
 | `src/vk_context.cpp` | The Vulkan instance and device, device choice, drivers added by the game |
@@ -132,6 +133,11 @@ ctest --test-dir build --output-on-failure
   change, since old results no longer compare. Update `docs/benchmark.md` if the sizes or
   the reference results change, and redraw its charts: add the machine's JSON files with
   `bench/charts/add_results.py`, then run `bench/charts/make_charts.py` (matplotlib).
+- **The C API** (`include/terni/terni.h`, `src/c_api.cpp`): a call or struct added or
+  changed there goes into `docs/c-api.md` and `tests/test_c_api.c` too. Add to it, never
+  rearrange: changing a struct's layout or what a call means bumps `TERNI_ABI_VERSION`.
+  The header stays plain C99, ASCII apart from the licence header. New C++ API that hosts use usually wants a C
+  call as well.
 - **Public API that the engine plugins use** (`GameSim`, `GameSimOptions`, `Game`,
   `VulkanContext::list_devices`, `compile_rules`): after pushing, move the pin in
   [TerniIntegrations](https://github.com/ZBager/TerniIntegrations) (`native/CMakeLists.txt`),

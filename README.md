@@ -124,6 +124,7 @@ Linux.
 | [Embedding in an engine](docs/embedding.md) | Devices, the per-tick loop, shipping, saves, lockstep multiplayer; the ready-made engine plugins |
 | [Determinism](docs/determinism.md) | The contract, order checks, parity testing |
 | [API reference](docs/api.md) | The public types and calls (lower-level details are in the headers) |
+| [The C API](docs/c-api.md) | Terni from C, C# and other languages, through a shared library |
 | [Design](docs/design.md) | Why Terni is built this way, and what it measured |
 | [Benchmark](docs/benchmark.md) | Measure Terni on your hardware against a CPU implementation of the same world |
 | [Roadmap](docs/roadmap.md) | What comes next |

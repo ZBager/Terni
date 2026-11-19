@@ -69,6 +69,12 @@ The first public version.
   writes past the end of a field reads 0 and writes nothing, the same on every device;
   `DeviceInfo::robustness` says what each device does. A lost device, for example after
   a rule ran too long, throws `terni::DeviceLost`.
+- **C API**: `include/terni/terni.h`, plain C functions over a world handle, in the shared
+  libraries `terni` (with the rule compiler) and `terni_runtime`, which export nothing
+  else (`TERNI_C_API`, on when Terni is the top-level project). It covers what the C++
+  API offers hosts of data-folder games, and adds a starting state written by the host
+  before the start, one bundle added to many rows in one call, and a modifier replaced
+  in one call.
 - **Licence notices**: `notices/Terni-NOTICES.txt` (Terni and the rule compiler's
   libraries) and `notices/Terni-runtime-NOTICES.txt` (Terni alone), ready to ship beside a
   game; `cmake --install` installs them, and `TERNI_NOTICES_DIR` names their folder.
