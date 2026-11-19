@@ -327,7 +327,14 @@ if(TERNI_BUILD_TESTS)
              COMMAND ${_in_folder} -DTOOL=$<TARGET_FILE:terni_compile_rules>
                      "-DARGS=@FOLDER@/game|@FOLDER@/tool cache" "-DEXPECT=rules: [0-9]+ compiled"
                      -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_in_utf8_folder.cmake)
-    set_tests_properties(utf8_paths_tools_run utf8_paths_tools_compile PROPERTIES FIXTURES_REQUIRED utf8_folder)
+    add_test(NAME utf8_paths_tools_check
+             COMMAND ${_in_folder} -DTOOL=$<TARGET_FILE:terni_check> "-DARGS=@FOLDER@/game|--ticks|5"
+                     "-DEXPECT=ready: 0 errors, 0 warnings" -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_in_utf8_folder.cmake)
+    add_test(NAME utf8_paths_tools_script_check
+             COMMAND ${_in_folder} -DTOOL=$<TARGET_FILE:terni_script_check> "-DARGS=@FOLDER@/game"
+                     "-DEXPECT=6 files.* 0 errors in 0 files" -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_in_utf8_folder.cmake)
+    set_tests_properties(utf8_paths_tools_run utf8_paths_tools_compile utf8_paths_tools_check
+                         utf8_paths_tools_script_check PROPERTIES FIXTURES_REQUIRED utf8_folder)
   endif()
 
   # These two check the shader math against __int128 on the CPU (GCC and Clang, including

@@ -25,7 +25,7 @@ namespace fs = std::filesystem;
 namespace {
 
 bool is_script(const fs::path& p) {
-    std::string ext = p.extension().string();
+    std::string ext = terni::detail::utf8_string(p.extension());
     std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return char(std::tolower(c)); });
     return ext == ".txt" || ext == ".gui" || ext == ".gfx" || ext == ".asset" || ext == ".mod" || ext == ".sfx" ||
            ext == ".settings";
@@ -34,7 +34,7 @@ bool is_script(const fs::path& p) {
 // Plain-text documents that ship with a .txt extension but are never loaded as
 // script (licenses, credits, readmes, modding how-tos, patch notes, Wwise reports).
 bool is_document(const fs::path& p) {
-    std::string s = p.string();
+    std::string s = terni::detail::utf8_string(p);
     std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return char(std::tolower(c)); });
     for (const char* k : {"license", "licence", "credits", "readme", "how_to", "changelog", "thirdparty", "copying",
                           "patchnotes", "sound/banks/",   // Wwise sound-bank reports (tab-separated)

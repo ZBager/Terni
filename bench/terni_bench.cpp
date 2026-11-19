@@ -322,7 +322,7 @@ int main(int argc, char** argv) {
                            ("terni_bench_" + std::to_string(Clock::now().time_since_epoch().count()));
     CompileStats compiled;
     try {
-        compiled = compile_rules(*game, cache.string());
+        compiled = compile_rules(*game, terni::detail::utf8_string(cache));
     } catch (const std::exception& e) {
         std::printf("error: %s\n", e.what());
         return 1;
@@ -379,7 +379,7 @@ int main(int argc, char** argv) {
         try {
             GameSimOptions options;
             options.device = int(d);
-            options.spirv_cache_dir = cache.string();
+            options.spirv_cache_dir = terni::detail::utf8_string(cache);
             const auto t0 = Clock::now();
             std::unique_ptr<GameSim> started;
             std::vector<std::pair<std::string, uint32_t>> pop_reads;  // (field, read_each_tick id)

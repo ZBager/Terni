@@ -34,9 +34,9 @@ namespace {
 const char* const READ_FOLDERS[] = {"schema", "common", "common/modifiers", "history", "rules"};
 
 std::string folder_name(const std::string& root) {
-    fs::path p = fs::path(root).lexically_normal();
+    fs::path p = terni::detail::utf8_path(root).lexically_normal();
     if (p.filename().empty()) p = p.parent_path();
-    return p.filename().generic_string();
+    return terni::detail::utf8_generic_string(p.filename());
 }
 
 void usage() {
@@ -67,7 +67,7 @@ int main(int argc, char** argv) {
     }
     if (roots.empty()) return usage(), 2;
     for (const auto& r : roots)
-        if (!fs::is_directory(r)) {
+        if (!fs::is_directory(terni::detail::utf8_path(r))) {
             std::printf("error: '%s' is not a folder\n", r.c_str());
             return 2;
         }
@@ -90,10 +90,13 @@ int main(int argc, char** argv) {
     std::map<std::string, size_t> owner;  // path in the game -> the folder it comes from
     for (size_t r = 0; r < roots.size(); ++r) {
         std::vector<std::string> replaces, adds;
-        for (const auto& e : fs::recursive_directory_iterator(roots[r])) {
+        const fs::path root = terni::detail::utf8_path(roots[r]);
+        for (const auto& e : fs::recursive_directory_iterator(root)) {
             if (!e.is_regular_file()) continue;
-            const std::string rel = fs::relative(e.path(), roots[r]).generic_string();
-            const std::string ext = e.path().extension().string(), dir = fs::path(rel).parent_path().generic_string();
+            const fs::path rel_path = fs::relative(e.path(), root);
+            const std::string rel = terni::detail::utf8_generic_string(rel_path);
+            const std::string ext = terni::detail::utf8_string(e.path().extension());
+            const std::string dir = terni::detail::utf8_generic_string(rel_path.parent_path());
             const bool read_txt = ext == ".txt" && std::find(std::begin(READ_FOLDERS), std::end(READ_FOLDERS), dir) !=
                                                        std::end(READ_FOLDERS);
             const bool rule = ext == ".glsl" && dir == "rules";
@@ -122,10 +125,10 @@ int main(int argc, char** argv) {
     std::set<std::string> stages;
     for (const auto& s : game->stages) stages.insert(s.name);
     for (const auto& [rel, r] : owner)
-        if (fs::path(rel).parent_path() == "rules" && fs::path(rel).extension() == ".glsl" &&
-            !stages.count(fs::path(rel).stem().string()))
+        if (const fs::path p = terni::detail::utf8_path(rel); p.parent_path() == "rules" && p.extension() == ".glsl" &&
+                                                     !stages.count(terni::detail::utf8_string(p.stem())))
             warn(folder_name(roots[r]) + "/" + rel + " is not used: rules/stages.txt has no stage '" +
-                 fs::path(rel).stem().string() + "'");
+                 terni::detail::utf8_string(p.stem()) + "'");
     if (game->ok())
         std::printf("  %zu entity types, %zu stages, %zu modifier bundles\n", game->entities.size(), game->stages.size(),
                     game->bundles.size());
@@ -137,7 +140,7 @@ int main(int argc, char** argv) {
     if (game->ok()) {
         std::puts("\ncompiling");
         try {
-            const CompileStats stats = compile_rules(*game, cache.string());
+            const CompileStats stats = compile_rules(*game, terni::detail::utf8_string(cache));
             std::printf("  %u shaders in %.0f ms\n", stats.compiled, stats.ms);
             compiled = true;
         } catch (const std::exception& e) {
@@ -172,7 +175,7 @@ int main(int argc, char** argv) {
             try {
                 GameSimOptions o;
                 o.device = int(d.index);
-                o.spirv_cache_dir = cache.string();
+                o.spirv_cache_dir = terni::detail::utf8_string(cache);
                 o.cache_only = true;
                 GameSim sim(*game, o);
                 double slowest = 0;
