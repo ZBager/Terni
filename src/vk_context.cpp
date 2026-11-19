@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception
 // Copyright (C) 2026 Rafał Zając
 #include "terni/vk_context.hpp"
+#include "utf8_path.hpp"
 
 #include <algorithm>
 #include <cstdlib>
@@ -181,7 +182,7 @@ void add_vulkan_driver(const std::string& library_path) {
         throw std::runtime_error("add_vulkan_driver: the Vulkan loader on this machine cannot take a driver from "
                                  "the application (it is older than 1.3.234)");
     std::error_code ec;
-    const std::filesystem::path path = std::filesystem::absolute(std::filesystem::path(library_path), ec);
+    const std::filesystem::path path = std::filesystem::absolute(detail::utf8_path(library_path), ec);
     if (ec || !std::filesystem::exists(path, ec))
         throw std::runtime_error("add_vulkan_driver: no file '" + library_path + "'");
     VkDirectDriverLoadingInfoLUNARG info{VK_STRUCTURE_TYPE_DIRECT_DRIVER_LOADING_INFO_LUNARG};
@@ -496,7 +497,7 @@ VkShaderModule VulkanContext::create_shader(const std::vector<uint32_t>& spirv) 
 }
 
 VkShaderModule VulkanContext::load_shader(const std::string& path) {
-    std::ifstream f(path, std::ios::binary | std::ios::ate);
+    std::ifstream f(detail::utf8_path(path), std::ios::binary | std::ios::ate);
     if (!f) throw std::runtime_error("cannot open shader " + path);
     const size_t size = static_cast<size_t>(f.tellg());
     std::vector<uint32_t> code((size + 3) / 4);

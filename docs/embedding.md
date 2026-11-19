@@ -119,10 +119,16 @@ terni::GameSim sim(*game, options);                              // finds the ad
 `terni_run <game folder> --driver <library>` runs a game with an added driver and
 compares it with every other device.
 
-### Locale
+### Locale and paths
 
 The generated shader code does not depend on the process locale. Your engine may set a
 global C++ locale with digit grouping or a decimal comma; nothing changes.
+
+Paths (game and mod folders, the SPIR-V cache, a driver) are UTF-8 strings on every
+platform, and so are the file names in messages. On Windows that is not the code page a
+narrow string usually means: convert from UTF-16 with `WideCharToMultiByte(CP_UTF8, ...)`
+or from a `std::filesystem::path` with `u8string()`. A player whose user folder is named
+in another script can then keep the cache, saves and mods there.
 
 ## The per-tick loop
 

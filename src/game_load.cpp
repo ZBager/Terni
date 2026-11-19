@@ -12,6 +12,7 @@
 #include "terni/fixed.hpp"
 #include "terni/game.hpp"
 #include "terni/script.hpp"
+#include "utf8_path.hpp"
 
 namespace fs = std::filesystem;
 
@@ -124,7 +125,7 @@ public:
         for (auto& d : history) fill_history_rows(*d);    // pass 2: values
         bool have_stages = false;
         for (auto& d : read_folder("rules"))
-            if (fs::path(d->path).filename() == "stages.txt") {
+            if (detail::utf8_path(d->path).filename() == "stages.txt") {
                 load_stages(*d);
                 have_stages = true;
             }
@@ -135,12 +136,12 @@ private:
     Game& g() { return b_.game(); }
     // A file's path in messages: relative to its folder, which is named too when there are mods.
     std::string rel(const std::string& path) const {
-        const std::string generic = fs::path(path).generic_string();
+        const std::string generic = detail::utf8_generic_string(detail::utf8_path(path));
         for (auto r = roots_.rbegin(); r != roots_.rend(); ++r) {
-            const std::string root = fs::path(*r).generic_string();
+            const std::string root = detail::utf8_generic_string(detail::utf8_path(*r));
             if (generic.size() > root.size() && generic.compare(0, root.size(), root) == 0 && generic[root.size()] == '/') {
                 const std::string inside = generic.substr(root.size() + 1);
-                return roots_.size() > 1 ? fs::path(*r).filename().generic_string() + "/" + inside : inside;
+                return roots_.size() > 1 ? detail::utf8_generic_string(detail::utf8_path(*r).filename()) + "/" + inside : inside;
             }
         }
         return generic;
@@ -154,15 +155,15 @@ private:
         Docs docs;
         std::map<std::string, fs::path> by_name;  // file name -> the last folder's copy; sorted: a fixed load order
         for (const auto& root : roots_) {
-            const fs::path dir = fs::path(root) / name;
+            const fs::path dir = detail::utf8_path(root) / name;
             if (!fs::is_directory(dir)) continue;
             for (const auto& e : fs::directory_iterator(dir))
-                if (e.is_regular_file() && e.path().extension() == ".txt") by_name[e.path().filename().string()] = e.path();
+                if (e.is_regular_file() && e.path().extension() == ".txt") by_name[detail::utf8_string(e.path().filename())] = e.path();
         }
         for (const auto& [file_name, f] : by_name) {
-            auto doc = script::parse_file(f.string());
+            auto doc = script::parse_file(detail::utf8_string(f));
             if (!doc) {
-                error({rel(f.string()), 0}, "cannot read file");
+                error({rel(detail::utf8_string(f)), 0}, "cannot read file");
                 continue;
             }
             for (const auto& e : doc->errors) error({rel(doc->path), e.line}, e.message);
@@ -431,9 +432,10 @@ private:
             if (const auto* cl = it.block->find("clear"); cl && cl->is_block())
                 for (const auto& c : cl->block->items) clear.push_back(str(c.scalar));
             std::string source;
-            fs::path src = fs::path(roots_.front()) / "rules" / (name + ".glsl");
+            fs::path src = detail::utf8_path(roots_.front()) / "rules" / (name + ".glsl");
             for (const auto& root : roots_)  // the last folder that has it
-                if (fs::is_regular_file(fs::path(root) / "rules" / (name + ".glsl"))) src = fs::path(root) / "rules" / (name + ".glsl");
+                if (fs::is_regular_file(detail::utf8_path(root) / "rules" / (name + ".glsl")))
+                    src = detail::utf8_path(root) / "rules" / (name + ".glsl");
             std::ifstream f(src, std::ios::binary);
             if (!f) {
                 error(at(d, it), "missing rule source rules/" + name + ".glsl");
@@ -444,7 +446,7 @@ private:
             }
             b_.stage(name, fe ? str(fe->scalar) : "", source, clear, at(d, it));
             for (auto& st : g().stages)
-                if (st.name == name && st.source_file.empty()) st.source_file = rel(src.string());
+                if (st.name == name && st.source_file.empty()) st.source_file = rel(detail::utf8_string(src));
             if (const auto* dp = it.block->find("dispatch")) {
                 const std::string v = str(dp->scalar);
                 if (v == "workgroup") b_.stage_dispatch(name, Dispatch::Workgroup, at(d, *dp));
@@ -488,9 +490,9 @@ std::unique_ptr<Game> load_game(const std::vector<std::string>& roots) {
     if (roots.empty()) throw std::invalid_argument("load_game: no folder");
     std::vector<std::string> abs;
     for (const auto& r : roots) {
-        fs::path p = fs::absolute(r).lexically_normal();
+        fs::path p = fs::absolute(detail::utf8_path(r)).lexically_normal();
         if (p.filename().empty()) p = p.parent_path();  // "game/" -> "game"
-        abs.push_back(p.string());
+        abs.push_back(detail::utf8_string(p));
     }
     WorldBuilder b(abs.front());
     Loader(b, abs).run();

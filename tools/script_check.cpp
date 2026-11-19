@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "terni/script.hpp"
+#include "utf8_args.hpp"
 
 namespace fs = std::filesystem;
 
@@ -54,6 +55,8 @@ struct Result {
 }  // namespace
 
 int main(int argc, char** argv) {
+    terni::tools::Utf8Args utf8(argc, argv);
+    argv = utf8.argv();
     int max_shown = 25;
     bool show_warnings = false;
     std::vector<std::string> roots;
@@ -72,12 +75,13 @@ int main(int argc, char** argv) {
     for (const std::string& root : roots) {
         std::vector<std::string> files;
         size_t documents = 0;
-        if (fs::is_regular_file(root)) files.push_back(root);
+        const fs::path root_path = terni::detail::utf8_path(root);
+        if (fs::is_regular_file(root_path)) files.push_back(root);
         else
-            for (const auto& e : fs::recursive_directory_iterator(root, fs::directory_options::skip_permission_denied))
+            for (const auto& e : fs::recursive_directory_iterator(root_path, fs::directory_options::skip_permission_denied))
                 if (e.is_regular_file() && is_script(e.path())) {
-                    if (is_document(fs::relative(e.path(), root))) ++documents;
-                    else files.push_back(e.path().string());
+                    if (is_document(fs::relative(e.path(), root_path))) ++documents;
+                    else files.push_back(terni::detail::utf8_string(e.path()));
                 }
         std::sort(files.begin(), files.end());
 
@@ -109,7 +113,7 @@ int main(int argc, char** argv) {
             if (!r.warnings.empty()) ++warn_files;
             if (show_warnings)
                 for (const auto& w : r.warnings)
-                    std::printf("  WARN %s:%u:%u: %s\n", fs::relative(r.path, root).string().c_str(), w.line, w.column,
+                    std::printf("  WARN %s:%u:%u: %s\n", terni::detail::utf8_string(fs::relative(terni::detail::utf8_path(r.path), root_path)).c_str(), w.line, w.column,
                                 w.message.c_str());
             warns += r.warnings.size();
             for (const auto& w : r.warnings) ++warn_kinds[w.message];
@@ -118,7 +122,7 @@ int main(int argc, char** argv) {
                 errs += r.errors.size();
                 for (const auto& e : r.errors)
                     if (shown++ < max_shown)
-                        std::printf("  ERROR %s:%u:%u: %s\n", fs::relative(r.path, root).string().c_str(), e.line, e.column,
+                        std::printf("  ERROR %s:%u:%u: %s\n", terni::detail::utf8_string(fs::relative(terni::detail::utf8_path(r.path), root_path)).c_str(), e.line, e.column,
                                     e.message.c_str());
             }
         }

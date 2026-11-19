@@ -69,6 +69,11 @@ The first public version.
   writes past the end of a field reads 0 and writes nothing, the same on every device;
   `DeviceInfo::robustness` says what each device does. A lost device, for example after
   a rule ran too long, throws `terni::DeviceLost`.
+- **UTF-8 paths**: paths given to Terni and file names in its messages are UTF-8 on
+  every platform. On Windows they used to be in the system code page, so a folder named
+  in another script (a player's user folder, say) could not be used. A Windows host that
+  passed code-page strings with non-ASCII characters passes UTF-8 now. The command-line
+  tools take their arguments as Windows gives them and print UTF-8.
 - **C API**: `include/terni/terni.h`, plain C functions over a world handle, in the shared
   libraries `terni` (with the rule compiler) and `terni_runtime`, which export nothing
   else (`TERNI_C_API`, on when Terni is the top-level project). It covers what the C++

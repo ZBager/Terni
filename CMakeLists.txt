@@ -178,7 +178,7 @@ if(TERNI_COMPILE_TOOL)
   # Fills the SPIR-V cache of a game whose program has no compiler (Terni::runtime), e.g.
   # when mods change rules. Found beside it: the shaderc libraries a game ships with it.
   add_executable(terni_compile_rules tools/terni_compile_rules.cpp)
-  target_link_libraries(terni_compile_rules PRIVATE terni_core)
+  target_link_libraries(terni_compile_rules PRIVATE terni_core $<$<PLATFORM_ID:Windows>:shell32>)
   target_compile_options(terni_compile_rules PRIVATE ${TERNI_COMPILE_OPTIONS})
   if(NOT WIN32 AND NOT APPLE)
     set_target_properties(terni_compile_rules PROPERTIES INSTALL_RPATH "$ORIGIN")
@@ -189,17 +189,17 @@ endif()
 if(TERNI_BUILD_TOOLS)
   find_package(OpenMP REQUIRED)
   add_executable(terni_script_check tools/script_check.cpp)
-  target_link_libraries(terni_script_check PRIVATE terni_core OpenMP::OpenMP_CXX)
+  target_link_libraries(terni_script_check PRIVATE terni_core OpenMP::OpenMP_CXX $<$<PLATFORM_ID:Windows>:shell32>)  # wide command line
   target_compile_options(terni_script_check PRIVATE ${TERNI_COMPILE_OPTIONS})
 
   add_executable(terni_run tools/terni_run.cpp)
-  target_link_libraries(terni_run PRIVATE terni_core)
+  target_link_libraries(terni_run PRIVATE terni_core $<$<PLATFORM_ID:Windows>:shell32>)  # wide command line
   target_compile_options(terni_run PRIVATE ${TERNI_COMPILE_OPTIONS})
   add_executable(terni_check tools/terni_check.cpp)  # what a modder runs before publishing
-  target_link_libraries(terni_check PRIVATE terni_core)
+  target_link_libraries(terni_check PRIVATE terni_core $<$<PLATFORM_ID:Windows>:shell32>)  # wide command line
   target_compile_options(terni_check PRIVATE ${TERNI_COMPILE_OPTIONS})
   add_executable(terni_diff tools/terni_diff.cpp)  # compares saves on the host: no compiler, no GPU work
-  target_link_libraries(terni_diff PRIVATE terni_runtime)
+  target_link_libraries(terni_diff PRIVATE terni_runtime $<$<PLATFORM_ID:Windows>:shell32>)
   target_compile_options(terni_diff PRIVATE ${TERNI_COMPILE_OPTIONS})
 
   # docs/getting-started.md walks through this one
@@ -231,7 +231,7 @@ if(TERNI_BUILD_BENCHMARK)
     endif()
   endif()
   add_executable(terni_bench bench/terni_bench.cpp bench/machine.cpp bench/frame_load.cpp)
-  target_link_libraries(terni_bench PRIVATE terni_bench_world)
+  target_link_libraries(terni_bench PRIVATE terni_bench_world $<$<PLATFORM_ID:Windows>:shell32>)
   target_include_directories(terni_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)  # the frame load compiles a shader
   target_compile_options(terni_bench PRIVATE ${TERNI_COMPILE_OPTIONS})
   target_compile_definitions(terni_bench PRIVATE TERNI_BENCH_TERNI_VERSION="${PROJECT_VERSION}"
@@ -304,6 +304,21 @@ if(TERNI_BUILD_TESTS)
   add_test(NAME device_health COMMAND test_device_health)
   terni_test(test_broken_rules tests/test_broken_rules.cpp)
   add_test(NAME broken_rules COMMAND test_broken_rules)
+  terni_test(test_paths tests/test_paths.cpp)  # UTF-8 paths on every platform
+  target_include_directories(test_paths PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  add_test(NAME utf8_paths COMMAND test_paths)
+  set_tests_properties(utf8_paths PROPERTIES FIXTURES_SETUP utf8_folder)
+  if(TERNI_BUILD_TOOLS)  # ... also as the tools' arguments (on Windows, not in the code page)
+    set(_in_folder ${CMAKE_COMMAND} -DFOLDER_FILE=${CMAKE_CURRENT_BINARY_DIR}/utf8_folder.txt)
+    add_test(NAME utf8_paths_tools_run
+             COMMAND ${_in_folder} -DTOOL=$<TARGET_FILE:terni_run> "-DARGS=@FOLDER@/game|--ticks|20"
+                     "-DEXPECT=hash [0-9a-f]+" -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_in_utf8_folder.cmake)
+    add_test(NAME utf8_paths_tools_compile
+             COMMAND ${_in_folder} -DTOOL=$<TARGET_FILE:terni_compile_rules>
+                     "-DARGS=@FOLDER@/game|@FOLDER@/tool cache" "-DEXPECT=rules: [0-9]+ compiled"
+                     -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_in_utf8_folder.cmake)
+    set_tests_properties(utf8_paths_tools_run utf8_paths_tools_compile PROPERTIES FIXTURES_REQUIRED utf8_folder)
+  endif()
 
   # These two check the shader math against __int128 on the CPU (GCC and Clang, including
   # MinGW). The SPIR-V they test is the same whichever compiler built the host.

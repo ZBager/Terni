@@ -15,8 +15,11 @@
 #include <vector>
 
 #include "terni/game.hpp"
+#include "utf8_args.hpp"
 
 int main(int argc, char** argv) {
+    terni::tools::Utf8Args utf8(argc, argv);
+    argv = utf8.argv();
     if (argc < 3) {
         std::fprintf(stderr, "usage: %s <game folder> [mod folder ...] <spirv cache folder>\n", argv[0]);
         return 2;

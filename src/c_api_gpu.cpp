@@ -22,6 +22,7 @@
 #include <string>
 
 #include "terni/vk_context.hpp"
+#include "utf8_path.hpp"
 
 namespace terni::c_api {
 // In c_api.cpp: sets terni_last_error() for this thread.
@@ -193,7 +194,7 @@ terni_status terni_add_shipped_driver(const char* folder, int32_t* result) {
         done = true;
         try {
             std::error_code ec;
-            const std::filesystem::path file = std::filesystem::path(folder) / terni_shipped_driver_name();
+            const std::filesystem::path file = terni::detail::utf8_path(folder) / terni_shipped_driver_name();
             bool system_has_one = false;
             for (const terni::DeviceInfo& d : terni::VulkanContext::list_devices())
                 system_has_one = system_has_one || (d.usable && d.cpu());
@@ -202,7 +203,7 @@ terni_status terni_add_shipped_driver(const char* folder, int32_t* result) {
             } else if (system_has_one) {
                 first_result = TERNI_DRIVER_SYSTEM_HAS_ONE;
             } else {
-                terni::add_vulkan_driver(file.string());
+                terni::add_vulkan_driver(terni::detail::utf8_string(file));
                 first_result = TERNI_DRIVER_ADDED;
             }
         } catch (const std::exception& e) {

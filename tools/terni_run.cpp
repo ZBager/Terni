@@ -15,10 +15,13 @@
 
 #include "terni/game.hpp"
 #include "terni/vk_context.hpp"
+#include "utf8_args.hpp"
 
 using namespace terni;
 
 int main(int argc, char** argv) {
+    terni::tools::Utf8Args utf8(argc, argv);
+    argv = utf8.argv();
     std::string root;
     int ticks = 100;
     bool show_prelude = false, validation = false, dump = false;

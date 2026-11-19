@@ -16,13 +16,14 @@
 #include <vector>
 
 #include "terni/game.hpp"
+#include "utf8_args.hpp"
 
 using namespace terni;
 
 namespace {
 
 std::vector<uint8_t> read_file(const std::string& path) {
-    std::ifstream f(path, std::ios::binary);
+    std::ifstream f(terni::detail::utf8_path(path), std::ios::binary);
     if (!f) throw std::runtime_error("cannot read " + path);
     return std::vector<uint8_t>(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
 }
@@ -47,6 +48,8 @@ std::string row_text(const std::vector<int64_t>* v, size_t row, uint32_t per_row
 }  // namespace
 
 int main(int argc, char** argv) {
+    terni::tools::Utf8Args utf8(argc, argv);
+    argv = utf8.argv();
     std::vector<std::string> paths;
     size_t show = 5;
     for (int i = 1; i < argc; ++i) {

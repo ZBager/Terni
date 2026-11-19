@@ -24,6 +24,7 @@
 #include "machine.hpp"
 #include "terni/game.hpp"
 #include "terni/vk_context.hpp"
+#include "../tools/utf8_args.hpp"
 
 using namespace terni;
 using namespace terni::bench;
@@ -179,6 +180,8 @@ std::string json_string(const std::string& s) {
 }  // namespace
 
 int main(int argc, char** argv) {
+    terni::tools::Utf8Args utf8(argc, argv);
+    argv = utf8.argv();
     BenchConfig config;
     find_size("medium", config);
     uint32_t ticks = 0, warmup = 0;
@@ -577,7 +580,7 @@ int main(int argc, char** argv) {
               << (r.differs.empty() ? "true" : "false") << "}";
         }
         o << "\n  ],\n  \"identical\": " << (identical ? "true" : "false") << "\n}\n";
-        std::ofstream out(json_path, std::ios::binary);
+        std::ofstream out(terni::detail::utf8_path(json_path), std::ios::binary);
         out << o.str();
         if (!out) {
             std::printf("error: cannot write %s\n", json_path.c_str());

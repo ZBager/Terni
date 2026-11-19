@@ -3,7 +3,8 @@
 Everything is in namespace `terni`. Include `terni/game.hpp` for the world description
 and the simulation; the other headers are smaller utilities. Raw values are the
 integer form of a field's type (a quantity of 1.5 is `384`, a rate of 1.5 is
-`98304`); `terni/fixed.hpp` converts.
+`98304`); `terni/fixed.hpp` converts. Strings are UTF-8, paths included, on every
+platform.
 
 - [World description](#world-description): `WorldBuilder`, `load_game`, `Game`
 - [Simulation](#simulation): `GameSim`, `GameSimOptions`

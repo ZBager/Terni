@@ -100,8 +100,8 @@ build it to load `terni_runtime` instead.
 - **Indices.** Entity types, their fields, bundles, modifier keys and defines are
   numbered from 0 in the order the game declares them.
 - **Strings** are UTF-8 and end with a NUL byte. A string the API returns belongs to
-  Terni; each call says how long it stays valid. On Windows, paths are for now limited
-  to the characters of the system code page.
+  Terni; each call says how long it stays valid. Paths are UTF-8 too, on Windows as
+  well.
 - **Lists** (devices, diagnostics, hashes, stage times, order issues, a modifier
   breakdown) are kept for you: one call fills a list and returns its length, and an
   accessor reads an item by index. A list stays valid until the call that fills it is

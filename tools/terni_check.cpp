@@ -23,6 +23,7 @@
 
 #include "terni/game.hpp"
 #include "terni/vk_context.hpp"
+#include "utf8_args.hpp"
 
 using namespace terni;
 namespace fs = std::filesystem;
@@ -47,6 +48,8 @@ void usage() {
 }  // namespace
 
 int main(int argc, char** argv) {
+    terni::tools::Utf8Args utf8(argc, argv);
+    argv = utf8.argv();
     std::vector<std::string> roots, drivers;
     std::vector<uint32_t> devices;
     int ticks = 100;

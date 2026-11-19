@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception
 // Copyright (C) 2026 Rafał Zając
 #include "terni/script.hpp"
+#include "utf8_path.hpp"
 
 #include <fstream>
 #include <sstream>
@@ -350,7 +351,7 @@ std::unique_ptr<Document> parse(std::string text, std::string path) {
 }
 
 std::unique_ptr<Document> parse_file(const std::string& path) {
-    std::ifstream f(path, std::ios::binary);
+    std::ifstream f(detail::utf8_path(path), std::ios::binary);
     if (!f) return nullptr;
     std::ostringstream ss;
     ss << f.rdbuf();

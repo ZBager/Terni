@@ -35,6 +35,7 @@
 #include "device_health.hpp"
 #include "embedded_glsl.hpp"
 #include "rule_compiler.hpp"
+#include "utf8_path.hpp"
 
 namespace terni {
 
@@ -395,12 +396,13 @@ public:
                 w.str(detail::kEmbeddedGlsl[i].path), w.str(detail::kEmbeddedGlsl[i].content);
         } else {
             std::vector<std::filesystem::path> files;
-            for (const auto& e : std::filesystem::directory_iterator(std::filesystem::path(dir_) / "terni"))
+            for (const auto& e : std::filesystem::directory_iterator(detail::utf8_path(dir_) / "terni"))
                 if (e.is_regular_file()) files.push_back(e.path());
             std::sort(files.begin(), files.end());
             for (const auto& f : files) {
                 std::string content;
-                if (read(("terni/" + f.filename().string()).c_str(), content)) w.str(f.filename().string()), w.str(content);
+                const std::string name = detail::utf8_string(f.filename());
+                if (read(("terni/" + name).c_str(), content)) w.str(name), w.str(content);
             }
         }
         fingerprint_ = fnv64(w.buf.data(), w.buf.size());
@@ -415,7 +417,7 @@ public:
                 }
             return false;
         }
-        std::ifstream f(dir_ + "/" + requested, std::ios::binary);
+        std::ifstream f(detail::utf8_path(dir_) / requested, std::ios::binary);
         if (!f) return false;
         std::ostringstream ss;
         ss << f.rdbuf();
@@ -755,7 +757,7 @@ uint64_t cache_key(const std::string& source, const ShaderLibrary& library) {
 std::filesystem::path cache_file(const std::string& dir, uint64_t key) {
     char hex[17];
     std::snprintf(hex, sizeof(hex), "%016llx", static_cast<unsigned long long>(key));
-    return std::filesystem::path(dir) / (std::string(hex) + ".spv");
+    return detail::utf8_path(dir) / (std::string(hex) + ".spv");
 }
 
 bool cache_load(const std::string& dir, uint64_t key, std::vector<uint32_t>& spirv) {
@@ -785,7 +787,7 @@ void cache_store(const std::string& dir, uint64_t key, const std::vector<uint32_
     std::vector<uint32_t> existing;
     if (cache_load(dir, key, existing) && existing == spirv) return;
     std::error_code ec;
-    std::filesystem::create_directories(dir, ec);
+    std::filesystem::create_directories(detail::utf8_path(dir), ec);
     Writer body;
     for (uint32_t v : spirv) body.u32(v);
     Writer w;
@@ -798,7 +800,8 @@ void cache_store(const std::string& dir, uint64_t key, const std::vector<uint32_
     unique.imbue(std::locale::classic());
     unique << std::hex << std::hash<std::thread::id>{}(std::this_thread::get_id()) << '-'
            << std::chrono::steady_clock::now().time_since_epoch().count() << '-' << writes++;
-    const std::filesystem::path tmp = file.string() + "." + unique.str() + ".tmp";
+    std::filesystem::path tmp = file;
+    tmp += "." + unique.str() + ".tmp";
     {
         std::ofstream out(tmp, std::ios::binary);
         out.write(reinterpret_cast<const char*>(w.buf.data()), std::streamsize(w.buf.size()));

@@ -17,8 +17,7 @@
  *   No call throws, aborts or exits.
  * - Lookups by name return -1 when there is no such thing; they never fail otherwise.
  * - Strings are NUL-terminated UTF-8. Strings the API returns belong to Terni: each
- *   call says how long they stay valid. On Windows, paths are for now limited to the
- *   characters of the system code page.
+ *   call says how long they stay valid. Paths are UTF-8 too, on Windows as well.
  * - Lists (devices, diagnostics, hashes, stage times, ...) are kept in the world, or for
  *   devices in the library: a call fills one and returns its length, and an accessor reads
  *   an item by index. A list stays valid until the call that fills it is made again, or

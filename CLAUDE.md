@@ -26,6 +26,11 @@ otherwise, and update it when an item is done or the plan changes.
   through `fx_*` / `terni::fx`; sums through integer atomics on `agg` values; randomness
   only from `rng_roll(entity, tick, salt)`; a stage never reads a row another thread of the
   same stage writes. Any change to arithmetic needs a parity test across devices.
+- **Paths are UTF-8 strings on every platform.** Make a `std::filesystem::path` from a
+  string, or a string from one, only through `src/utf8_path.hpp` (never `path(std::string)`
+  or `path.string()`: on Windows they use the code page, and `string()` throws for
+  characters it lacks). Tools start `main` with `terni::tools::Utf8Args`
+  (`tools/utf8_args.hpp`). `test_paths` and the `utf8_paths_*` tests check it.
 - **Generated text must not depend on the process locale.** Streams that produce GLSL,
   cache keys or reports imbue `std::locale::classic()`; identifier checks and case
   changes are ASCII-only.
