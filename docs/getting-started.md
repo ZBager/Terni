@@ -20,9 +20,10 @@ driver that runs on the CPU, is enough to start.
 | Windows (Visual Studio) | Visual Studio 2022 or 2026 with "Desktop development with C++" (includes CMake and Ninja), and the [Vulkan SDK](https://vulkan.lunarg.com/sdk/home#windows) (includes shaderc and `glslc`) |
 | Windows (MSYS2, UCRT64 shell) | `mingw-w64-ucrt-x86_64-{gcc,libgomp,cmake,ninja,vulkan-headers,vulkan-loader,shaderc}` |
 
-`terni_script_check` reads files on every core with OpenMP (part of GCC and MSVC, but a
-separate `libgomp` package in MSYS2; `libomp` for Clang); without it, it uses one. Package names change between releases; if one is
-missing, search for "shaderc" or "vulkan loader" in your package manager.
+`libgomp` (OpenMP) is optional: `terni_script_check` uses it to read files on every core.
+A .NET SDK, also optional, adds the test of the C# wrapper. Package names change between
+releases; if one is missing, search for "shaderc" or "vulkan loader" in your package
+manager.
 
 Check that Vulkan sees a device:
 
@@ -64,7 +65,8 @@ ctest --preset windows-msvc
 
 The Vulkan SDK installer puts its `Bin` folder on `PATH`; the tools and tests need the
 `shaderc_shared.dll` found there. With MSYS2, use the `windows-mingw` preset from a
-UCRT64 shell. The programs land in `build-<preset>/` instead of `build/`.
+UCRT64 shell: it builds with MSYS2's own shaderc, so the Vulkan SDK's `Bin` folder need
+not be on `PATH`. The programs land in `build-<preset>/` instead of `build/`.
 
 ## 3. Run the examples
 
@@ -195,9 +197,10 @@ add_subdirectory(external/terni)
 target_link_libraries(my_game PRIVATE Terni::core)
 ```
 
-As a subproject only the libraries are built. See
-[Embedding in an engine](embedding.md) for FetchContent, `find_package`, the
-build without the shader compiler, and how to run the tick inside a game loop.
+As a subproject only the libraries and `terni_compile_rules` (the rule compiler a game
+can ship) are built. See [Embedding in an engine](embedding.md) for FetchContent,
+`find_package`, the build without the shader compiler, and how to run the tick inside a
+game loop, and [The C API](c-api.md) for C, C# and other languages.
 
 With Flax Engine or Godot, use the plugins in [TerniIntegrations](https://github.com/ZBager/TerniIntegrations) instead: they
 bring Terni to the engine's scripting and editor.

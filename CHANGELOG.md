@@ -34,7 +34,8 @@ The first public version.
 - **Platforms**: Linux, and Windows with Visual Studio 2022 and 2026 (MSVC) or MinGW-w64,
   with the same checksums, SPIR-V cache keys and results on all of them; rule files
   read the same whatever their line endings. `CMakePresets.json` for each platform, and
-  continuous integration that runs the whole suite on lavapipe on all three.
+  continuous integration that runs the whole suite on lavapipe on all three. OpenMP is
+  optional, and a MinGW build takes MSYS2's own shaderc before the Vulkan SDK's.
 - **Entities at run time**: an entity type marked `dynamic = yes`
   (`WorldBuilder::entity_dynamic`) has rows that are created and destroyed during play.
   Rules get `<entity>_alive(i)`, `<entity>_destroy(i)` and `<entity>_generation[i]`,

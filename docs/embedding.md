@@ -40,10 +40,11 @@ find_package(Terni REQUIRED)            # CMAKE_PREFIX_PATH=/opt/terni
 target_link_libraries(my_game PRIVATE Terni::core)
 ```
 
-As a subproject, only the libraries are built; `TERNI_BUILD_TOOLS` and
-`TERNI_BUILD_TESTS` turn the tools and tests on. Terni's libraries are static; if you
-link them into a shared library (a plugin, or a library loaded from C#), set
-`CMAKE_POSITION_INDEPENDENT_CODE ON` before adding Terni.
+As a subproject, only the libraries and `terni_compile_rules` are built;
+`TERNI_BUILD_TOOLS` and `TERNI_BUILD_TESTS` turn the tools and tests on, and
+`TERNI_C_API` the C API's shared libraries ([The C API](c-api.md)). Terni's libraries
+are static and built as position-independent code, so they can go into a shared
+library of yours (a plugin, say).
 
 ### Two builds: with and without the rule compiler
 
@@ -315,10 +316,12 @@ Compiling the rules needs shaderc, which a player's system may not have (or may 
 a version built for another system). Compile them at build time instead:
 
 ```cpp
-// a small build tool, linked with Terni::core; no GPU needed
+// in a build tool linked with Terni::core; no GPU needed
 auto game = terni::load_game("data/my_game");
 terni::CompileStats s = terni::compile_rules(*game, "dist/spirv-cache");
 ```
+
+or with the tool that comes with Terni: `terni_compile_rules data/my_game dist/spirv-cache`.
 
 Ship the cache folder with the game and link the game with `Terni::runtime`:
 
@@ -353,8 +356,8 @@ includes the rule compiler, `Terni-runtime-NOTICES.txt` if it links only
 **If your engine has its own shader compiler.** Some engines export their own copy of
 glslang or SPIRV-Tools, and a system shaderc loaded into the same process can bind to
 those symbols and crash. Either link the game with `Terni::runtime`, or set
-`options.cache_only = true` and fill the cache in a separate process (`compile_rules`
-in a small tool) before starting.
+`options.cache_only = true` and fill the cache in a separate process
+(`terni_compile_rules`) before starting.
 
 ## Rules you did not write
 

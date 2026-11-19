@@ -90,7 +90,7 @@ for (const terni::DeviceInfo& d : terni::VulkanContext::list_devices()) {
     o.device = int(d.index);
     terni::GameSim sim(*game, o);
     for (int t = 0; t < 1000; ++t) { apply_scripted_commands(sim, t); sim.tick(); }
-    print(d.name, terni::combine(terni::hash_fields(sim.snapshot())));
+    print(d.name, terni::combine(sim.field_hashes()));
 }
 ```
 
@@ -98,13 +98,15 @@ Add lavapipe (Mesa's CPU Vulkan driver) to any machine to get a second device fo
 free; it runs the same shaders and gives the same bits. Also save halfway, load the save
 on another device, and check that the continued run ends with the same hash.
 `sim.field_hashes()` gives the same hashes as `terni::field_hashes(sim.snapshot())`,
-computed on the device without reading the state back, so it can be checked every tick.
+computed on the device without reading the state back, so it can be checked every tick
+(`terni_run` prints the older `combine(hash_fields(snapshot()))` instead).
 When two runs differ, save both at the same tick and run `terni_diff` on the saves: it
 names the fields and rows that differ.
 `terni_run <folder>` does the device comparison for a data folder. `terni_bench` does it
 for a world of up to 100 million pops, and also compares it with a C++ implementation
 of the same rules on 1 to all CPU threads; on five machines with NVIDIA, AMD and Intel
-GPUs, every run has ended in the same state ([Benchmark](benchmark.md)).
+GPUs, with Linux and Windows, every run has ended in the same state
+([Benchmark](benchmark.md)).
 
 ## What Terni guarantees
 

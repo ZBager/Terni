@@ -109,7 +109,8 @@ map, characters, cities with buildings) and use Terni for the world underneath.
 - **Capacities set before the world starts**: entity types that come and go live within
   a capacity, which a game can set from its map before starting.
 - **A second Vulkan device** next to your renderer, on the same GPU or another one.
-- **An engine binding**: the [Flax and Godot plugins](https://github.com/ZBager/TerniIntegrations), or the C++ API.
+- **An engine binding**: the [Flax and Godot plugins](https://github.com/ZBager/TerniIntegrations), the C++ API, or the
+  [C API](c-api.md) and its C# wrapper.
 
 ## If you are not sure
 

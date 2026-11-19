@@ -20,7 +20,7 @@ experiments measured.
 | Entities are created at the end of a tick, never in the middle of a stage | Threads that each grabbed a free row would get different rows from run to run. Rules ask through a count field instead; built-in stages number the requests and the free rows in a fixed order, and request k takes free row k, as a single thread would | A new entity is alive from the next tick; the built-in stages pass over the rows of a dynamic entity type and of those that ask in every tick a spawn line runs in, and over its alive bits in every other |
 | A destroyed row rests for one tick before it is used again | Every death and every new row shows in the one bit per row the host reads back each tick, and rules that hold a ref get a tick to see the entity gone | A row cannot be reused at once; refs checked less often than every tick compare generations |
 | Robust buffer access (robustBufferAccess2) always on | Rules from mods may index past the end of a field; with it such a read gives 0 and such a write is dropped, the same on every device, so a broken mod neither crashes nor desyncs a game | Nothing measurable at `medium`; devices without it get plain robustBufferAccess, whose results differ between drivers |
-| A standalone library with no engine code | It is meant to be embedded by any engine | Engine plugins live in [TerniIntegrations](https://github.com/ZBager/TerniIntegrations), and games can embed Terni directly |
+| A standalone library with no engine code | It is meant to be embedded by any engine | Engine plugins live in [TerniIntegrations](https://github.com/ZBager/TerniIntegrations), and games can embed Terni directly, from C++ or through the C API |
 
 ## What the benchmark measures
 
@@ -48,7 +48,8 @@ Ryzen 5 7640HS (6 cores, 12 threads), an RTX 4050 and a Radeon 760M:
   1-million-pop world in 38 ms on twelve threads: 8 times slower than the C++ on the
   same threads, and 66 times slower than the RTX 4050.
 - **Exact everywhere.** Every run, on every device and thread count, ends with the same
-  state hash, on five machines with NVIDIA, AMD and Intel GPUs, a Steam Deck among them.
+  state hash, on five machines with NVIDIA, AMD and Intel GPUs, a Steam Deck among them,
+  and with Windows as with Linux.
 
 ## What the first experiments measured
 
@@ -96,5 +97,7 @@ several features:
 | With a tick polled once a frame, device health measured the frame rate, not the GPU | Ticks are timed on the device's own clock; `stage_times()` gives the GPU time per stage |
 | Rows asked for once a month cost the spawn stages every day, and a new row could not tell which of its parent's requests it answered | Spawn lines with a schedule (`every`, `offset`) and an `ordinal` |
 | Comparing state hashes meant reading the whole state back | `field_hashes()` on the device; `terni_diff` names the rows where two saves differ |
+| Games and plugins in C# each wrote their own C layer over the C++ API, and lacked calls a lockstep game makes | The C API (`terni.h`, shared libraries `terni` and `terni_runtime`) and a C# wrapper |
+| A game embedding Terni directly copied its licence notices from the engine plugins | `notices/` ships with Terni, with an install rule |
 
 The ones still open are on the [roadmap](roadmap.md).

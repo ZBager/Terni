@@ -7,8 +7,9 @@ documentation fixes and code are all welcome.
 
 Please include the Terni version or commit, your operating system, the output of
 `vulkaninfo --summary`, and the smallest world or test that shows the problem. For a
-determinism problem (different results on different devices), the per-field hashes
-from `hash_fields(sim.snapshot())` on each device say which field diverged first.
+determinism problem (different results on different devices), `sim.field_hashes()` on
+each device says which field diverged, and `terni_diff` on two saves of the same tick
+names the rows.
 
 ## Building and testing
 
@@ -24,7 +25,7 @@ Visual Studio and MSYS2 (see [getting started](docs/getting-started.md)).
 
 Continuous integration (`.github/workflows/ci.yml`) builds every push with GCC on Linux,
 with Visual Studio 2022 and 2026, and with MinGW-w64, and runs the whole suite on
-lavapipe. Keep the code standard C++20: no compiler extensions such as `__int128`
+lavapipe, the C# wrapper's test included. Keep the code standard C++20: no compiler extensions such as `__int128`
 (tests may use it as a reference, built only where the compiler has it), and only ASCII
 in string literals and generated text.
 

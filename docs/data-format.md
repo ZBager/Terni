@@ -13,8 +13,8 @@ my_game/
   rules/       stages.txt (the tick order) and one <stage>.glsl per stage
 ```
 
-Everything a mod may change is in these folders. A mod is a copy of the folder with
-some files changed or added.
+Everything a mod may change is in these folders. A mod is a folder laid out the same
+way, holding only the files it changes or adds ([Mods](#mods)).
 
 ## Names
 
@@ -161,7 +161,8 @@ planet = { id = latium  owner = ROM  housing = 12000  pop = 8200.5
 - `add_modifier` applies a bundle at the start: `name`, optional `duration` (ticks)
   and `scale` (default 1).
 - Rows in use (the count) are the rows created here. Games that generate their world
-  in code set rows with `WorldBuilder` or by filling `Game::tables` before starting.
+  in code set rows with `WorldBuilder` or by filling `Game::tables` before starting
+  (from the C API: `terni_set_start_count()` and `terni_write_start()`).
 
 ## rules/
 

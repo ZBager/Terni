@@ -29,8 +29,9 @@ game loads, so mods can change the rules themselves, not only the numbers.
   `file:line`, and a checksum over everything that defines behaviour keeps saves and
   multiplayer peers honest. Mods are folders on top of the game's, and `terni_check`
   checks one before it is published; a patched game still loads older saves.
-- **Engine-agnostic.** A C++20 library with no engine dependency. Your engine draws,
-  plays sound and runs the UI; Terni owns the simulation state.
+- **Engine-agnostic.** A C++20 library with no engine dependency, and a C API with a C#
+  wrapper for other languages. Your engine draws, plays sound and runs the UI; Terni
+  owns the simulation state.
 - **Paradox-style modifiers.** Additive, scalable, timed modifier bundles with
   inheritance in one or more steps (a province inherits from its district, region and
   realm), totals kept exact and tooltips
@@ -55,7 +56,7 @@ in development, but the API can still change between versions.
 | Platform | Status |
 | --- | --- |
 | Linux | Developed and tested here: NVIDIA (proprietary driver), AMD (RADV), lavapipe |
-| Windows | Visual Studio 2022 and 2026 (MSVC), and MinGW-w64 (MSYS2). Continuous integration runs the whole test suite with both, on lavapipe; parity also checked on an NVIDIA and an AMD GPU |
+| Windows | Visual Studio 2022 and 2026 (MSVC), and MinGW-w64 (MSYS2). Continuous integration runs the whole test suite with both, on lavapipe; the suite and the benchmark also pass on an RTX 4070 Ti and an AMD integrated GPU, with the same state as on Linux |
 | macOS, consoles, web | Not supported |
 | GPUs | Vulkan 1.3 with synchronization2; no 64-bit shader features needed. Intel: the benchmark gives identical results on an HD Graphics 620; the test suite has not yet run on an Intel GPU |
 
@@ -71,8 +72,8 @@ ctest --test-dir build                        # unit tests and GPU parity on eve
 ```
 
 Requirements: CMake 3.21+, a C++20 compiler (GCC, Clang, or Visual Studio 2022 or
-2026), the Vulkan loader and headers, and shaderc (`libshaderc` and `glslc`). The tools
-also need OpenMP.
+2026), the Vulkan loader and headers, and shaderc (`libshaderc` and `glslc`). The C#
+wrapper's test runs where a .NET SDK is installed.
 See [Getting started](docs/getting-started.md) for packages per system.
 
 ## Using Terni in your game
