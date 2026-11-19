@@ -38,6 +38,13 @@ find_package(Vulkan REQUIRED)
 if(TERNI_RULE_COMPILER)
   # shaderc: compiles game rules (GLSL) at load time, so mods can change them
   # (the Vulkan SDK on Windows ships it next to the Vulkan loader and headers)
+  if(MINGW)
+    # MSYS2's own shaderc first: its DLL is beside the compiler, on the shell's PATH. The
+    # Vulkan SDK's is built for MSVC, and its DLL is on no MSYS2 PATH, so programs linked
+    # with it would not start there.
+    find_library(SHADERC_LIB NAMES shaderc_shared shaderc)
+    find_path(SHADERC_INCLUDE shaderc/shaderc.hpp)
+  endif()
   get_filename_component(_terni_vulkan_libdir "${Vulkan_LIBRARY}" DIRECTORY)
   find_library(SHADERC_LIB NAMES shaderc_shared shaderc HINTS ${_terni_vulkan_libdir} "$ENV{VULKAN_SDK}/Lib" REQUIRED)
   find_path(SHADERC_INCLUDE shaderc/shaderc.hpp HINTS ${Vulkan_INCLUDE_DIRS} "$ENV{VULKAN_SDK}/Include" REQUIRED)
