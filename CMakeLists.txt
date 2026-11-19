@@ -187,9 +187,12 @@ if(TERNI_COMPILE_TOOL)
 endif()
 
 if(TERNI_BUILD_TOOLS)
-  find_package(OpenMP REQUIRED)
+  find_package(OpenMP)  # terni_script_check reads files on every core with it, on one without
   add_executable(terni_script_check tools/script_check.cpp)
-  target_link_libraries(terni_script_check PRIVATE terni_core OpenMP::OpenMP_CXX $<$<PLATFORM_ID:Windows>:shell32>)  # wide command line
+  target_link_libraries(terni_script_check PRIVATE terni_core $<$<PLATFORM_ID:Windows>:shell32>)  # wide command line
+  if(OpenMP_CXX_FOUND)
+    target_link_libraries(terni_script_check PRIVATE OpenMP::OpenMP_CXX)
+  endif()
   target_compile_options(terni_script_check PRIVATE ${TERNI_COMPILE_OPTIONS})
 
   add_executable(terni_run tools/terni_run.cpp)

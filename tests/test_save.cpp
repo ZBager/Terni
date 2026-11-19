@@ -268,17 +268,17 @@ int main() {
         const auto original = town_world(0), patched = town_world(1);
         CHECK(original->ok() && patched->ok() && original->warnings.empty() && patched->warnings.empty());
         const uint32_t town = 0, cart = 1;
-        GameSim a(*original, devices[0]);
-        for (int t = 0; t < 3; ++t) a.tick();
-        CHECK(a.create_entity(cart) == 3 && a.create_entity(cart) == 4);
-        CHECK(a.destroy_entity(cart, 1));
-        const ModifierHandle boom = a.add_modifier(uint32_t(original->bundle_index("boom")), town, 1);
-        const ModifierHandle doomed = a.add_modifier(uint32_t(original->bundle_index("doomed")), town, 2, fx::ONE, 50);
-        const ModifierHandle glow = a.add_modifier(uint32_t(original->bundle_index("glow")), 2, 0);
-        a.write_field(town, "stock", 3, {fx::qty(77), fx::qty(78)});
-        for (int t = 0; t < 2; ++t) a.tick();
-        const std::vector<uint8_t> old = a.save();
-        const auto pop = a.read_field(town, "pop"), stock = a.read_field(town, "stock"), load = a.read_field(cart, "load");
+        GameSim saved(*original, devices[0]);
+        for (int t = 0; t < 3; ++t) saved.tick();
+        CHECK(saved.create_entity(cart) == 3 && saved.create_entity(cart) == 4);
+        CHECK(saved.destroy_entity(cart, 1));
+        const ModifierHandle boom = saved.add_modifier(uint32_t(original->bundle_index("boom")), town, 1);
+        const ModifierHandle doomed = saved.add_modifier(uint32_t(original->bundle_index("doomed")), town, 2, fx::ONE, 50);
+        const ModifierHandle glow = saved.add_modifier(uint32_t(original->bundle_index("glow")), 2, 0);
+        saved.write_field(town, "stock", 3, {fx::qty(77), fx::qty(78)});
+        for (int t = 0; t < 2; ++t) saved.tick();
+        const std::vector<uint8_t> old = saved.save();
+        const auto pop = saved.read_field(town, "pop"), stock = saved.read_field(town, "stock"), load = saved.read_field(cart, "load");
         CHECK(save_checksum(old) == game_checksum(*original));
 
         std::vector<uint64_t> after;  // per device: the state some ticks after the load
@@ -310,10 +310,10 @@ int main() {
             const auto load2 = b.read_field(cart, "load"), fresh = b.read_field(cart, "fresh");
             for (uint32_t c = 0; c < 32; ++c) {
                 same &= load2[c] == (c < 16 ? load[c] : 0) && fresh[c] == 7;
-                same &= b.entity_alive(cart, c) == (c < 16 && a.entity_alive(cart, c));
-                same &= b.entity_generation(cart, c) == (c < 16 ? a.entity_generation(cart, c) : 0);
+                same &= b.entity_alive(cart, c) == (c < 16 && saved.entity_alive(cart, c));
+                same &= b.entity_generation(cart, c) == (c < 16 ? saved.entity_generation(cart, c) : 0);
             }
-            same &= b.entity_count(cart) == a.entity_count(cart) && b.entities_alive(cart) == a.entities_alive(cart);
+            same &= b.entity_count(cart) == saved.entity_count(cart) && b.entities_alive(cart) == saved.entities_alive(cart);
             same &= b.entity_count(2) == 2 && b.read_field(2, "length") == std::vector<int32_t>({3, 4, 0, 0});
             CHECK(same);
             CHECK(b.modifier_alive(boom) && !b.modifier_alive(doomed) && !b.modifier_alive(glow) && b.modifier_count() == 1);

@@ -9,8 +9,6 @@
 // Script files: .txt .gui .gfx .asset .mod .sfx .settings (localisation .yml and
 // shader .fxh/.shader are different formats).
 
-#include <omp.h>
-
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
@@ -87,7 +85,9 @@ int main(int argc, char** argv) {
 
         const auto t0 = std::chrono::steady_clock::now();
         std::vector<Result> results(files.size());
+#ifdef _OPENMP  // optional: without it, one thread
 #pragma omp parallel for schedule(dynamic, 8)
+#endif
         for (int64_t i = 0; i < int64_t(files.size()); ++i) {
             Result& r = results[size_t(i)];
             r.path = files[size_t(i)];

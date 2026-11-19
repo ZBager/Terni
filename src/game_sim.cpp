@@ -1974,9 +1974,9 @@ std::vector<std::string> GameSim::load(const std::vector<uint8_t>& data, SaveMat
             // anew each tick. What fits is copied; the rest is zero (no row, nothing pending).
             // The scratch columns are the spawn stages' working memory, laid out differently by
             // other Terni versions; only the four that carry state must fit exactly.
-            const bool state = info.own == "alive_bits" || info.own == "generation" || info.own == "terni_prev" ||
-                               info.own == "terni_cool";
-            if (same_game && state && col->words.size() != m.columns[c].size())
+            const bool carries_state = info.own == "alive_bits" || info.own == "generation" ||
+                                       info.own == "terni_prev" || info.own == "terni_cool";
+            if (same_game && carries_state && col->words.size() != m.columns[c].size())
                 throw std::runtime_error("save: '" + m.column_names[c] + "' has the wrong size");
             columns[c].assign(m.columns[c].size(), 0);
             std::copy_n(col->words.begin(), std::min(col->words.size(), columns[c].size()), columns[c].begin());
