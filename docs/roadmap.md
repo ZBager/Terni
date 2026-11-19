@@ -66,17 +66,18 @@ next begins. Windows and Linux first.
    Scripting, with background starts and ticks, cooked games that ship the rule
    compiler (so mods can change rules), mod folders on top of the game's, saves loaded
    by name, a lost device as its own event, state hashes on the device, GPU time per
-   stage in the editor, and the simulation on the GPU the engine renders with. Tested
-   on Linux and Windows (the mods, saves by name, lost devices, hashes and stage times
-   so far on Linux). Still to come: shipping a software Vulkan driver.
+   stage in the editor, the simulation on the GPU the engine renders with, and a
+   software Vulkan driver (Mesa's lavapipe) shipped with the game for machines without
+   a usable GPU. Tested on Linux and Windows (the mods, saves by name, lost devices,
+   hashes, stage times and the software driver so far on Linux).
 2. **Godot** (done): a GDExtension addon for GDScript and C#, with
    background starts and ticks, a Terni tab in the debugger, exported games that ship
    the rule compiler, mod folders on top of the game's, saves loaded by name, a lost
    device as its own signal, state hashes on the device, GPU time per stage in the
    debugger and the Monitors tab, and the simulation on the GPU the engine renders with
-   (Vulkan or Direct3D 12). Tested on Linux and Windows (the mods, saves by name, lost
-   devices, hashes and stage times so far on Linux). Still to come: shipping a software
-   Vulkan driver.
+   (Vulkan or Direct3D 12), and the same software Vulkan driver. Tested on Linux and
+   Windows (the mods, saves by name, lost devices, hashes and stage times so far on
+   Linux; the software driver on both).
 3. **A C API and a shared library build**, in Terni itself, for engines that cannot
    link the C++ library or that load Terni from other languages, with a C# wrapper that
    does not depend on any engine (for dedicated servers and test tools). It covers what
@@ -134,7 +135,7 @@ invalid, not as a time. See [Benchmark](benchmark.md).
    on what counts as a breaking change (the API, the save format, `game_checksum`, the
    cache format), a table of supported platforms, and built libraries and tools for
    Linux, MSVC and MinGW with each release. The licence notices a game needs ship with
-   Terni itself, with an install rule. TerniIntegrations gets CI of its own.
+   Terni itself, with an install rule.
 2. **Mod tooling** (done): mod folders load on top of the game's
    (`load_game({game, mod, ...})`), and `terni_check` is the one command a modder runs
    before publishing: files, errors and warnings with `file:line`, compile errors, order
