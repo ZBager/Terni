@@ -469,4 +469,5 @@ Terni does not include networking; it gives you a state that is the same everywh
 Terni's main API is C++. For C#, other languages and engines whose own headers are not
 C++20 or that build without exceptions, Terni has a C API in a shared library (`terni`,
 or `terni_runtime` without the rule compiler): plain C functions over a world handle,
-returning status codes, where no call throws. See [The C API](c-api.md).
+returning status codes, where no call throws, and a C# wrapper over it that needs no
+engine. See [The C API](c-api.md).

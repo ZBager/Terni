@@ -1,0 +1,10 @@
+<!-- SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception -->
+<!-- Copyright (C) 2026 Rafał Zając -->
+<Project>
+  <!-- Build output goes outside the source tree when TERNI_DOTNET_ARTIFACTS is set (ctest
+       sets it to the build folder), else into artifacts/ here (ignored by git). -->
+  <PropertyGroup>
+    <ArtifactsPath Condition="'$(TERNI_DOTNET_ARTIFACTS)' != ''">$(TERNI_DOTNET_ARTIFACTS)</ArtifactsPath>
+    <ArtifactsPath Condition="'$(ArtifactsPath)' == ''">$(MSBuildThisFileDirectory)artifacts</ArtifactsPath>
+  </PropertyGroup>
+</Project>

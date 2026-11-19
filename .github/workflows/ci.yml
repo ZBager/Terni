@@ -38,6 +38,9 @@ jobs:
             mesa-vulkan-drivers vulkan-validationlayers vulkan-tools
       - name: Vulkan devices
         run: vulkaninfo --summary
+      - uses: actions/setup-dotnet@v4  # the C# wrapper's test
+        with:
+          dotnet-version: 8.0.x
       - run: cmake --preset linux
       - run: cmake --build --preset linux
       - run: ctest --preset linux
@@ -91,6 +94,9 @@ jobs:
       - uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
+      - uses: actions/setup-dotnet@v4  # the C# wrapper's test
+        with:
+          dotnet-version: 8.0.x
       - run: cmake --preset windows-msvc
       - run: cmake --build --preset windows-msvc
       - run: ctest --preset windows-msvc

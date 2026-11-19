@@ -56,6 +56,35 @@ target_link_libraries(my_host PRIVATE Terni::c)   # or Terni::c_runtime
 At startup, compare `terni_abi_version()` with `TERNI_ABI_VERSION` from the header you
 built with. A library of another ABI version may lay out its structs differently.
 
+## From C#
+
+`bindings/csharp/Terni` is a C# wrapper over the C API that depends on no engine: a
+.NET Standard 2.1 library (C# 8), so .NET 6 and later, Mono and Unity can use it, in a
+game, a dedicated server or a test tool. Add the project (or its two source files) to
+your solution and put the native library beside your program.
+
+```csharp
+using Terni;
+
+using var world = new World();
+world.Load("data/my_game", "mods/my_mod");          // throws TerniException; world.Errors lists them
+world.Start(new StartOptions { CacheDir = "spirv-cache" });
+
+int planet = world.FindEntity("planet");
+int pop = world.Subscribe(planet, "pop");            // copied back with every tick
+for (int t = 0; t < 100; ++t) world.Tick();
+ReadOnlySpan<int> pops = world.Subscription(pop);    // raw Q24.8 values, no GPU round trip
+
+byte[] save = world.Save();
+ulong hash = world.StateHash;                        // compare with lockstep peers
+```
+
+Calls that fail throw a `TerniException` whose `Status` says what kind of failure it
+was; a lost device throws `DeviceLostException`. The names follow the C API
+(`terni_rows_free` is `World.RowsFree`, `terni_device_count` and `terni_device_info`
+are `Library.Devices()`). The wrapper loads `terni`; define `TERNI_RUNTIME` when you
+build it to load `terni_runtime` instead.
+
 ## Conventions
 
 - **A world** (`terni_world*`) holds one game and, once started, its simulation on one
@@ -197,3 +226,5 @@ Every function is declared, with a comment, in `include/terni/terni.h`.
 | Measurements | `terni_stage_times`, `terni_stage_time_at`, `terni_health`, `terni_compile_stats_of`, `terni_last_tick_ms`, `terni_last_tick_gpu_ms`, `terni_device_name`, `terni_report`, `terni_move_to_device` |
 
 Worlds described in code (`WorldBuilder`) are C++ only; the C API loads data folders.
+In C#, `World` has a method or property for each call on a world, and the static class
+`Library` has the rest.

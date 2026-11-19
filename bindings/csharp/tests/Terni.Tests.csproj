@@ -1,0 +1,17 @@
+<!-- SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception -->
+<!-- Copyright (C) 2026 Rafał Zając -->
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The C# wrapper's test, run by ctest (c_api_csharp) with the arguments
+       <terni library> <Terni source folder> -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RollForward>Major</RollForward>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Terni/Terni.csproj" />
+  </ItemGroup>
+</Project>

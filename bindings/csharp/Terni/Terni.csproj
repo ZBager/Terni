@@ -1,0 +1,17 @@
+<!-- SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception -->
+<!-- Copyright (C) 2026 Rafał Zając -->
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Terni for C#, over the C API in the shared library terni (or terni_runtime: define
+       TERNI_RUNTIME). .NET Standard 2.1 and C# 8, so .NET 6+, Mono and Unity can use it;
+       no engine is needed. -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>8.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>Terni</RootNamespace>
+    <AssemblyName>Terni</AssemblyName>
+    <Version>0.1.0</Version>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+</Project>

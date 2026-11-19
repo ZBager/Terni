@@ -85,7 +85,7 @@ next begins. Windows and Linux first.
    the start, a generated starting state, state hashes per entity type, modifiers added
    to many rows in one call, load warnings and compile statistics. The two integrations
    below are built on it, and the Flax and Godot plugins move to it. Done so far: the C
-   API and its shared libraries ([The C API](c-api.md)).
+   API, its shared libraries and the C# wrapper ([The C API](c-api.md)).
 4. **Unreal Engine**: a runtime plugin with a Blueprint API.
 5. **Unity**: a package of C# bindings.
 

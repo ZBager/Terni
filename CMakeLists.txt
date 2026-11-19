@@ -343,6 +343,15 @@ if(TERNI_BUILD_TESTS)
                                                           TERNI_TEST_BINARY_DIR="${CMAKE_CURRENT_BINARY_DIR}")
     add_test(NAME c_api_runtime COMMAND test_c_api_runtime)
     set_tests_properties(c_api_runtime PROPERTIES FIXTURES_REQUIRED runtime_cache)
+    # ... and the C# wrapper over it, where a .NET SDK is installed
+    find_program(TERNI_DOTNET dotnet DOC ".NET SDK for the C# wrapper's test (c_api_csharp)")
+    if(TERNI_DOTNET)
+      add_test(NAME c_api_csharp
+               COMMAND ${TERNI_DOTNET} run -c Release --project ${CMAKE_CURRENT_SOURCE_DIR}/bindings/csharp/tests
+                       -- $<TARGET_FILE:terni_c> ${CMAKE_CURRENT_SOURCE_DIR})
+      set_tests_properties(c_api_csharp PROPERTIES TIMEOUT 1200  # the first run restores and builds
+                           ENVIRONMENT "TERNI_DOTNET_ARTIFACTS=${CMAKE_CURRENT_BINARY_DIR}/dotnet;DOTNET_CLI_TELEMETRY_OPTOUT=1;DOTNET_NOLOGO=1")
+    endif()
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_NM)
       # ... whose libraries export the functions of terni.h and nothing else, and the
       # runtime one needs no shaderc
