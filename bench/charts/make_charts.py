@@ -30,7 +30,7 @@ POPS = {"tiny": 1024, "small": 50_000, "medium": 1_000_000, "large": 6_000_000, 
         "giant": 50_000_000, "colossal": 100_000_000}
 POP_LABEL = {"tiny": "1K", "small": "50K", "medium": "1M", "large": "6M", "huge": "10M", "giant": "50M",
              "colossal": "100M"}
-MACHINES = ["RTX 4050 laptop", "RTX 3070 laptop", "Desktop", "Intel laptop", "Steam Deck"]
+MACHINES = ["RTX 4050 laptop", "RTX 3070 laptop", "Desktop", "Desktop, Windows", "Intel laptop", "Steam Deck"]
 FULL = "RTX 4050 laptop"  # the machine with results at every size
 
 THEMES = {
@@ -91,6 +91,8 @@ def short(device):
     for cut in (" (RADV", " (KBL"):
         if cut in device:
             device = device[:device.index(cut)]
+    if device == "Radeon(TM) Graphics":  # the 7800X3D's, as AMD's Windows driver names it
+        device = "7800X3D Radeon"
     return device.replace("Custom GPU 0405", "Steam Deck GPU")
 
 

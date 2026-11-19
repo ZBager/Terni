@@ -1,7 +1,7 @@
 # Roadmap
 
 Terni is pre-1.0. What larger games needed first is done, and so are a reproducible
-benchmark (only results from Windows are missing) and what games need before they ship.
+benchmark and what games need before they ship.
 What remains is ongoing work, integrations for game engines, and the preparation of
 stable public releases. The order is a priority, not a promise.
 
@@ -126,9 +126,9 @@ invalid, not as a time. See [Benchmark](benchmark.md).
    too small for a world are skipped.
 4. **A smoke test** (done): the tiny world on every device and on the CPU reference,
    compared after every tick; timings are never checked in CI.
-5. **Documentation** (done, results from three laptops, a desktop and a Steam Deck so
-   far): how to run it, what it measures, how to read the results, and an issue template
-   for sending them in. Still to come: reference results from Windows.
+5. **Documentation** (done, results from three laptops, a desktop with Linux and with
+   Windows, and a Steam Deck): how to run it, what it measures, how to read the results,
+   and an issue template for sending them in.
 
 ## Public releases
 

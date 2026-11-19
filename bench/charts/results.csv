@@ -91,3 +91,31 @@ Desktop,cpu_all,"CPU reference, 16 threads",colossal,pops,317.5266,317.5266
 Desktop,discrete,NVIDIA GeForce RTX 4070 Ti,medium,ui,0.1836,0.1359
 Desktop,integrated,AMD Ryzen 7 7800X3D 8-Core Processor (RADV RAPHAEL_MENDOCINO),medium,ui,3.9035,3.8288
 Desktop,lavapipe,"llvmpipe (LLVM 23.1.4, 256 bits)",medium,ui,24.323,24.2179
+"Desktop, Windows",discrete,NVIDIA GeForce RTX 4070 Ti,tiny,pops,0.0879,0.0303
+"Desktop, Windows",integrated,AMD Radeon(TM) Graphics,tiny,pops,0.1531,0.0488
+"Desktop, Windows",cpu_1,"CPU reference, 1 thread",tiny,pops,0.0338,0.0338
+"Desktop, Windows",cpu_all,"CPU reference, 16 threads",tiny,pops,0.0342,0.0342
+"Desktop, Windows",discrete,NVIDIA GeForce RTX 4070 Ti,small,pops,0.1729,0.039
+"Desktop, Windows",integrated,AMD Radeon(TM) Graphics,small,pops,0.5637,0.3814
+"Desktop, Windows",cpu_1,"CPU reference, 1 thread",small,pops,1.7137,1.7137
+"Desktop, Windows",cpu_all,"CPU reference, 16 threads",small,pops,0.3254,0.3254
+"Desktop, Windows",discrete,NVIDIA GeForce RTX 4070 Ti,medium,pops,1.5648,0.1638
+"Desktop, Windows",integrated,AMD Radeon(TM) Graphics,medium,pops,6.1341,4.527
+"Desktop, Windows",cpu_1,"CPU reference, 1 thread",medium,pops,33.9394,33.9394
+"Desktop, Windows",cpu_all,"CPU reference, 16 threads",medium,pops,5.5393,5.5393
+"Desktop, Windows",discrete,NVIDIA GeForce RTX 4070 Ti,large,pops,12.1656,1.2639
+"Desktop, Windows",integrated,AMD Radeon(TM) Graphics,large,pops,28.8304,20.38
+"Desktop, Windows",cpu_1,"CPU reference, 1 thread",large,pops,209.9887,209.9887
+"Desktop, Windows",cpu_all,"CPU reference, 16 threads",large,pops,29.8468,29.8468
+"Desktop, Windows",discrete,NVIDIA GeForce RTX 4070 Ti,huge,pops,14.5802,2.1316
+"Desktop, Windows",integrated,AMD Radeon(TM) Graphics,huge,pops,48.0735,34.0584
+"Desktop, Windows",cpu_1,"CPU reference, 1 thread",huge,pops,351.9423,351.9423
+"Desktop, Windows",cpu_all,"CPU reference, 16 threads",huge,pops,35.6275,35.6275
+"Desktop, Windows",discrete,NVIDIA GeForce RTX 4070 Ti,giant,pops,71.6783,10.3883
+"Desktop, Windows",integrated,AMD Radeon(TM) Graphics,giant,pops,212.9429,142.3633
+"Desktop, Windows",cpu_1,"CPU reference, 1 thread",giant,pops,1673.5427,1673.5427
+"Desktop, Windows",cpu_all,"CPU reference, 16 threads",giant,pops,174.6023,174.6023
+"Desktop, Windows",discrete,NVIDIA GeForce RTX 4070 Ti,colossal,pops,142.4748,20.6901
+"Desktop, Windows",integrated,AMD Radeon(TM) Graphics,colossal,pops,414.0592,275.3031
+"Desktop, Windows",cpu_1,"CPU reference, 1 thread",colossal,pops,3357.0534,3357.0534
+"Desktop, Windows",cpu_all,"CPU reference, 16 threads",colossal,pops,455.1993,455.1993

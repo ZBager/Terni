@@ -256,7 +256,7 @@ reading every pop back narrows their lead to 1.3 to 2.6 times from `medium` up. 
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/benchmark/medium-machines-dark.svg">
-  <img alt="The medium world on each of five machines, one row per approach: discrete GPU, integrated GPU, lavapipe, CPU reference on all threads and on one. GPU rows show compute alone and the total with every pop read back. Machines without a discrete or integrated GPU show N/A on that row." src="images/benchmark/medium-machines-light.svg">
+  <img alt="The medium world on each of five machines, and the desktop again with Windows, one row per approach: discrete GPU, integrated GPU, lavapipe, CPU reference on all threads and on one. GPU rows show compute alone and the total with every pop read back. Machines without a discrete or integrated GPU show N/A on that row." src="images/benchmark/medium-machines-light.svg">
 </picture>
 
 The medium world on every machine, one row per approach. A filled dot is the compute
@@ -282,10 +282,13 @@ NVIDIA driver 620.70 and Mesa 26.2 (RADV, the Intel driver and lavapipe):
   integrated GPU.
 - **Steam Deck**: its AMD APU (4 Zen 2 cores, 8 threads, and an integrated RDNA 2 GPU with
   8 compute units), with SteamOS; built and run in an Arch Linux container (Distrobox).
+- **Desktop, Windows**: the same desktop with Windows 11 (25H2), built with Visual Studio
+  2022 (MSVC 19.44), NVIDIA driver 610.88 and AMD's driver 25.2.1. Every size; no
+  lavapipe. Logitech, AMD and fan-control programs were running in the background.
 
 Every run ended in the same state as every other at the same size, on every machine:
-`medium` (hash `83415c984147cf51`) on all five, every size on the RTX 4050 laptop and the
-desktop.
+`medium` (hash `83415c984147cf51`) on all of them, every size on the RTX 4050 laptop and
+the desktop, with Linux and with Windows.
 
 ### `medium`, the baseline
 
@@ -312,6 +315,16 @@ Every pop read back each tick (the default):
 | CPU reference, 4 threads | 7.85 | | 3.7x |
 | CPU reference, 8 threads | 5.42 | | 5.4x |
 | CPU reference, 16 threads | 3.97 | | 7.4x |
+
+| Desktop, Windows | Total ms | Compute ms | vs 1 CPU thread |
+| --- | ---: | ---: | ---: |
+| RTX 4070 Ti | 1.56 | 0.16 | 22x |
+| Ryzen 7800X3D integrated Radeon | 6.13 | 4.53 | 5.5x |
+| CPU reference, 1 thread | 33.9 | | 1x |
+| CPU reference, 2 threads | 17.4 | | 2.0x |
+| CPU reference, 4 threads | 9.00 | | 3.8x |
+| CPU reference, 8 threads | 6.96 | | 4.9x |
+| CPU reference, 16 threads | 5.54 | | 6.1x |
 
 | RTX 3070 laptop | Total ms | Compute ms | vs 1 CPU thread |
 | --- | ---: | ---: | ---: |
@@ -398,6 +411,16 @@ compute ms in brackets:
 | `giant` | 74.3 (11.2) | 192 (148) | N/A | 1,485 | 163 |
 | `colossal` | 152 (22.5) | 382 (292) | N/A | 2,972 | 318 |
 
+| Desktop, Windows | RTX 4070 Ti | 7800X3D integrated Radeon | CPU, 1 thread | CPU, 16 threads |
+| --- | ---: | ---: | ---: | ---: |
+| `tiny` | 0.088 (0.030) | 0.153 (0.049) | 0.034 | 0.034 |
+| `small` | 0.173 (0.039) | 0.564 (0.381) | 1.71 | 0.325 |
+| `medium` | 1.56 (0.164) | 6.13 (4.53) | 33.9 | 5.54 |
+| `large` | 12.2 (1.26) | 28.8 (20.4) | 210 | 29.8 |
+| `huge` | 14.6 (2.13) | 48.1 (34.1) | 352 | 35.6 |
+| `giant` | 71.7 (10.4) | 213 (142) | 1,674 | 175 |
+| `colossal` | 142 (20.7) | 414 (275) | 3,357 | 455 |
+
 From `large` up, a tick costs about the same per pop. Compute alone, the RTX 4050 is
 about 58 times faster than one CPU thread and 9 times faster than twelve; the RTX 4070
 Ti about 130 times faster than one thread and 14 to 16 times faster than sixteen.
@@ -405,6 +428,21 @@ Reading every pop back takes five to six times as long as the compute, and even 
 RTX 4050 stays about 1.6 times faster than its twelve threads and the RTX 4070 Ti about
 2.2 times faster than its sixteen. lavapipe is N/A at `giant` and `colossal`: one pop
 field is larger than the 128 MiB a buffer may have there.
+
+The same desktop with Windows and with Linux, every pop read back:
+
+- The RTX 4070 Ti computes as fast on both (within 10%). Its total is the same at
+  `medium` and lower with Windows at `giant` and `colossal` (142 against 152 ms), but
+  higher at `tiny` and `small` (0.09 against 0.06 ms at `tiny`: each tick's submission
+  costs more), and at `large` it alternates between about 9.3 and 12.6 ms.
+- The integrated Radeon computes 15 to 20% faster with Mesa's RADV on Linux than with
+  AMD's own driver on Windows from `small` to `huge`, and 4 to 6% slower at `giant` and
+  `colossal`.
+- The CPU reference built with MSVC is 13 to 18% slower on one thread than with GCC on
+  Linux, and gains less from more threads (5.54 against 3.97 ms on sixteen at `medium`).
+  That is the compiler and its standard library, not Windows: on the same machine with
+  Windows, a MinGW-w64 build (GCC 16.2) takes 30.7 ms on one thread and 3.22 ms on
+  sixteen at `medium`, with the GPU times unchanged.
 
 `colossal` with `--readback ui`, every pop staying on the GPU: the RTX 4070 Ti takes
 22.5 ms per tick, the RTX 3070 Laptop 25.4 ms (24.8 ms compute), the RTX 4050 53.0 ms,
