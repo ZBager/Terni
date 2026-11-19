@@ -78,15 +78,14 @@ next begins. Windows and Linux first.
    (Vulkan or Direct3D 12), and the same software Vulkan driver. Tested on Linux and
    Windows (the mods, saves by name, lost devices, hashes and stage times so far on
    Linux; the software driver on both).
-3. **A C API and a shared library build**, in Terni itself, for engines that cannot
+3. **A C API and a shared library build** (done, [The C API](c-api.md)), in Terni itself, for engines that cannot
    link the C++ library or that load Terni from other languages, with a C# wrapper that
    does not depend on any engine (for dedicated servers and test tools). It covers what
    lockstep games use: `tick_checked()`, counts and the modifier store's capacity before
    the start, a generated starting state, state hashes per entity type, modifiers added
-   to many rows in one call, load warnings and compile statistics. The two integrations
-   below are built on it, and the Flax and Godot plugins move to it. Done so far: the C
-   API, its shared libraries, the C# wrapper and `terni_compile_rules`, the rule compiler a
-   game ships ([The C API](c-api.md)).
+   to many rows in one call, load warnings and compile statistics. With it come a C# wrapper
+   and `terni_compile_rules`, the rule compiler a game ships. The two integrations below
+   are built on it, and the Flax and Godot plugins move to it.
 4. **Unreal Engine**: a runtime plugin with a Blueprint API.
 5. **Unity**: a package of C# bindings.
 
