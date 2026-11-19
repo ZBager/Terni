@@ -323,9 +323,17 @@ terni::GameSim sim(*game, options);
 ```
 
 If a rule is missing from the cache (a mod changed it), the start fails with one
-error that names every missing stage. To let mods change rules anyway, ship the build
-tool with the game and run it into the same cache folder when a start fails, then start
-again: the tool needs shaderc, the game does not. Several programs and worlds may compile
+error that names every missing stage. To let mods change rules anyway, ship
+`terni_compile_rules` (built with Terni, `TERNI_COMPILE_TOOL`) and the shaderc libraries
+beside the game, and run it into the same cache folder when a start fails, then start
+again: the tool needs shaderc, the game does not.
+
+```sh
+terni_compile_rules data/my_game mods/my_mod spirv-cache   # exit code 0: the cache is complete
+```
+
+It prints the game's errors and warnings as `file:line: message`, like a failed start
+would. Several programs and worlds may compile
 into one cache folder at once. The cache key covers the full rule source
 (including the generated prelude, so the schema counts, but not capacities, which are
 set when the world starts), the GLSL library and the compile settings, but not the

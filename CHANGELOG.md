@@ -76,6 +76,8 @@ The first public version.
   before the start, one bundle added to many rows in one call, a modifier replaced in
   one call, the device a Vulkan or DirectX renderer uses (`terni_find_device()`), and a
   software Vulkan driver shipped with the game (`terni_add_shipped_driver()`).
+- **`terni_compile_rules`**: the rule compiler a game that links `Terni::runtime` ships
+  beside itself, so mods can change rules (`TERNI_COMPILE_TOOL`, on with the compiler).
 - **C#**: `bindings/csharp/Terni`, a wrapper over the C API for .NET Standard 2.1 (.NET,
   Mono, Unity) that depends on no engine; failures are exceptions.
 - **Licence notices**: `notices/Terni-NOTICES.txt` (Terni and the rule compiler's

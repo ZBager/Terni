@@ -73,6 +73,8 @@ ctest --test-dir build --output-on-failure
 - `./build/terni_check <game folder> [mod folder ...] [--ticks N] [--no-run] [--strict]` checks a
   game with mods on top as a modder would before publishing (files, errors, compile, order
   problems at run time, parity); exit 0 when ready.
+- `./build/terni_compile_rules <game folder> [mod folder ...] <cache folder>` fills a SPIR-V
+  cache; games that link `Terni::runtime` ship it to compile rules that mods change.
 - `./build/terni_diff a.sav b.sav [--rows N]` names the entity types, fields and rows where
   two saves differ (no GPU needed).
 - `./build/terni_bench [--size tiny|small|medium|large|huge|giant|colossal] [--threads 1,2,8|powers|sweep|all] [--readback pops|ui] [--json FILE]`
@@ -101,7 +103,7 @@ ctest --test-dir build --output-on-failure
 | `src/vk_context.cpp` | The Vulkan instance and device, device choice, drivers added by the game |
 | `src/device_health.hpp` | Tick-time statistics behind `GameSim::device_health()` |
 | `shaders/terni/` | The GLSL library, embedded into the binary at build time |
-| `tools/` | `terni_run`, `terni_check` (mods before publishing), `terni_diff` (two saves), `terni_script_check` (Paradox script corpora) |
+| `tools/` | `terni_run`, `terni_check` (mods before publishing), `terni_diff` (two saves), `terni_compile_rules` (ships with games), `terni_script_check` (Paradox script corpora) |
 | `tests/` | Test programs; `tests/data/` holds small games for loader tests, most of them broken on purpose, and `galaxy_mods/` for `terni_check` |
 | `examples/` | `mini_galaxy` (a data folder) and `hello_towns` (a world in code) |
 | `bench/` | `terni_bench`: the benchmark world and its rules, the CPU reference, machine details, the frame load behind `--frame-load`; `bench/charts/` holds the results behind the charts in `docs/benchmark.md` and the Python scripts that draw them (documentation only, not part of the build) |

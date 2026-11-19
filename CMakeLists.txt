@@ -23,6 +23,11 @@ endif()
 option(TERNI_BUILD_TOOLS "Build terni_run, terni_check, terni_diff and terni_script_check" ${_terni_develop})
 option(TERNI_BUILD_TESTS "Build the test suite (needs glslc)" ${_terni_develop})
 option(TERNI_BUILD_BENCHMARK "Build terni_bench, the benchmark against a CPU reference" ${_terni_develop})
+option(TERNI_COMPILE_TOOL "Build terni_compile_rules, the rule compiler a game ships beside itself"
+       ${TERNI_RULE_COMPILER})
+if(TERNI_COMPILE_TOOL AND NOT TERNI_RULE_COMPILER)
+  message(FATAL_ERROR "TERNI_COMPILE_TOOL needs TERNI_RULE_COMPILER")
+endif()
 option(TERNI_C_API "Build the C API (include/terni/terni.h) as shared libraries: terni and terni_runtime"
        ${PROJECT_IS_TOP_LEVEL})
 if((TERNI_BUILD_TOOLS OR TERNI_BUILD_TESTS OR TERNI_BUILD_BENCHMARK) AND NOT TERNI_RULE_COMPILER)
@@ -169,6 +174,18 @@ endfunction()
 # ---------------------------------------------------------------------------
 # Tools
 # ---------------------------------------------------------------------------
+if(TERNI_COMPILE_TOOL)
+  # Fills the SPIR-V cache of a game whose program has no compiler (Terni::runtime), e.g.
+  # when mods change rules. Found beside it: the shaderc libraries a game ships with it.
+  add_executable(terni_compile_rules tools/terni_compile_rules.cpp)
+  target_link_libraries(terni_compile_rules PRIVATE terni_core)
+  target_compile_options(terni_compile_rules PRIVATE ${TERNI_COMPILE_OPTIONS})
+  if(NOT WIN32 AND NOT APPLE)
+    set_target_properties(terni_compile_rules PROPERTIES INSTALL_RPATH "$ORIGIN")
+  endif()
+  install(TARGETS terni_compile_rules RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
+
 if(TERNI_BUILD_TOOLS)
   find_package(OpenMP REQUIRED)
   add_executable(terni_script_check tools/script_check.cpp)
@@ -343,6 +360,22 @@ if(TERNI_BUILD_TESTS)
                                                           TERNI_TEST_BINARY_DIR="${CMAKE_CURRENT_BINARY_DIR}")
     add_test(NAME c_api_runtime COMMAND test_c_api_runtime)
     set_tests_properties(c_api_runtime PROPERTIES FIXTURES_REQUIRED runtime_cache)
+    if(TERNI_COMPILE_TOOL)
+      # ... from a cache that terni_compile_rules filled, with a mod on top
+      add_test(NAME compile_rules_tool
+               COMMAND terni_compile_rules ${CMAKE_CURRENT_SOURCE_DIR}/examples/mini_galaxy
+                       ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/galaxy_mods/good_mod ${CMAKE_CURRENT_BINARY_DIR}/tool_cache)
+      set_tests_properties(compile_rules_tool PROPERTIES FIXTURES_SETUP tool_cache
+                           PASS_REGULAR_EXPRESSION "rules: [0-9]+ compiled, [0-9]+ cached")
+      add_test(NAME compile_rules_tool_errors
+               COMMAND terni_compile_rules ${CMAKE_CURRENT_SOURCE_DIR}/examples/mini_galaxy
+                       ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/galaxy_mods/typo_mod ${CMAKE_CURRENT_BINARY_DIR}/tool_unused)
+      set_tests_properties(compile_rules_tool_errors PROPERTIES PASS_REGULAR_EXPRESSION
+                           "rule .empire_income. failed to compile:.*rules/empire_income.glsl:5: error")
+      add_test(NAME c_api_runtime_mod COMMAND test_c_api_runtime --mod ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/galaxy_mods/good_mod
+                                              ${CMAKE_CURRENT_BINARY_DIR}/tool_cache)
+      set_tests_properties(c_api_runtime_mod PROPERTIES FIXTURES_REQUIRED tool_cache)
+    endif()
     # ... and the C# wrapper over it, where a .NET SDK is installed
     find_program(TERNI_DOTNET dotnet DOC ".NET SDK for the C# wrapper's test (c_api_csharp)")
     if(TERNI_DOTNET)

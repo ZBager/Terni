@@ -38,7 +38,7 @@ terni_world_destroy(world);
 | Library | File | What it does |
 | --- | --- | --- |
 | `terni` (`Terni::c`) | `terni.dll`, `libterni.so` | Compiles rules when a world starts, so mods can change them. Needs shaderc beside it (`shaderc_shared.dll` on Windows) |
-| `terni_runtime` (`Terni::c_runtime`) | `terni_runtime.dll`, `libterni_runtime.so` | No rule compiler: every rule comes from a SPIR-V cache filled beforehand ([Shipping](embedding.md#shipping)) |
+| `terni_runtime` (`Terni::c_runtime`) | `terni_runtime.dll`, `libterni_runtime.so` | No rule compiler: every rule comes from a SPIR-V cache filled beforehand, by `terni_compile_rules` for example ([Shipping](embedding.md#shipping)) |
 
 Both export exactly the functions in `include/terni/terni.h` and nothing else. They are
 built when Terni is the top-level CMake project, or with `-DTERNI_C_API=ON`:
