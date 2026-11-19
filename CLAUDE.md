@@ -114,6 +114,7 @@ ctest --test-dir build --output-on-failure
 | `bench/` | `terni_bench`: the benchmark world and its rules, the CPU reference, machine details, the frame load behind `--frame-load`; `bench/charts/` holds the results behind the charts in `docs/benchmark.md` and the Python scripts that draw them (documentation only, not part of the build) |
 | `bindings/csharp/` | The C# wrapper over the C API (`Terni/`, .NET Standard 2.1, C# 8) and its test (`tests/`, run by ctest as `c_api_csharp` where `dotnet` is installed) |
 | `docs/` | User documentation, written for outside game developers |
+| `.github/workflows/` | `ci.yml` (every push), `release.yml` (packages for a tag `vX.Y.Z`, or a rehearsal by hand) |
 | `notices/` | The licence notices a game ships: `Terni-NOTICES.txt` (with the rule compiler), `Terni-runtime-NOTICES.txt` |
 
 ## Changes that require other changes
@@ -148,6 +149,12 @@ ctest --test-dir build --output-on-failure
   rearrange: changing a struct's layout or what a call means bumps `TERNI_ABI_VERSION`.
   The header stays plain C99, ASCII apart from the licence header. New C++ API that hosts use usually wants a C
   call as well.
+- **Anything `docs/releases.md` calls breaking** (the C++ or C API, simulation results,
+  what `game_checksum` hashes, old saves no longer loading, data-folder keys or GLSL
+  names): say so in `CHANGELOG.md` with what users must do, and it can ship only in a new
+  minor version (before 1.0) or major version (from 1.0), never in a patch.
+- **A release**: the version lives only in `project(Terni VERSION ...)`; follow "Making a
+  release" in `CONTRIBUTING.md`. Tag only when the user asks.
 - **Public API that the engine plugins use** (`GameSim`, `GameSimOptions`, `Game`,
   `VulkanContext::list_devices`, `compile_rules`): after pushing, move the pin in
   [TerniIntegrations](https://github.com/ZBager/TerniIntegrations) (`native/CMakeLists.txt`),

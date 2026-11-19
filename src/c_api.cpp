@@ -17,6 +17,7 @@
 
 #include "terni/game.hpp"
 #include "terni/state_hash.hpp"
+#include "terni/version.hpp"
 #include "terni/vk_context.hpp"
 
 namespace {

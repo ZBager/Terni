@@ -14,6 +14,7 @@ platform.
 - [State hashes](#state-hashes)
 - [Script parser](#script-parser)
 - [Lower level: ComputeRunner](#lower-level-computerunner)
+- [Version](#version)
 
 For C, C# and other languages, the same simulation is behind plain C functions in a
 shared library: see [The C API](c-api.md).
@@ -228,3 +229,12 @@ same buffers. `stage_timings()` gives each stage's GPU time, as `GameSim::stage_
 which is what `GameSim::device_health()` judges.
 The header documents every call, including the transfers (`queue_write`,
 `add_tick_readback`) and `VulkanContext`'s buffer and submission helpers.
+
+## Version
+
+`terni/version.hpp` gives the version of the Terni a program was built with:
+`TERNI_VERSION_MAJOR`, `TERNI_VERSION_MINOR`, `TERNI_VERSION_PATCH` and
+`TERNI_VERSION_STRING` (macros, usable from C too), and `terni::version_major`,
+`version_minor`, `version_patch` and `version_string`. Lockstep peers compare the major
+and minor version along with `game_checksum()`
+([Releases and compatibility](releases.md#lockstep-peers-need-the-same-terni)).

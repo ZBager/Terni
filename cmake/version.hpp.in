@@ -1,0 +1,21 @@
+// SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception
+// Copyright (C) 2026 Rafał Zając
+#pragma once
+// Terni's version, made from the CMake project version (do not edit the generated file).
+// The macros work from C too (terni.h's terni_version() gives the same string).
+// Lockstep peers compare it as well as game_checksum(): results are guaranteed the same
+// only between builds of the same MAJOR.MINOR (docs/releases.md).
+
+#define TERNI_VERSION_MAJOR @PROJECT_VERSION_MAJOR@
+#define TERNI_VERSION_MINOR @PROJECT_VERSION_MINOR@
+#define TERNI_VERSION_PATCH @PROJECT_VERSION_PATCH@
+#define TERNI_VERSION_STRING "@PROJECT_VERSION@"
+
+#ifdef __cplusplus
+namespace terni {
+inline constexpr int version_major = TERNI_VERSION_MAJOR;
+inline constexpr int version_minor = TERNI_VERSION_MINOR;
+inline constexpr int version_patch = TERNI_VERSION_PATCH;
+inline constexpr const char* version_string = TERNI_VERSION_STRING;
+}  // namespace terni
+#endif

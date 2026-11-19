@@ -1,0 +1,182 @@
+# SPDX-License-Identifier: LGPL-2.1-only WITH AdditionRef-Terni-linking-exception
+# Copyright (C) 2026 Rafał Zając
+#
+# Builds the release packages: Linux, Windows with Visual Studio, Windows with MinGW-w64.
+# Each is built in Release, runs the whole test suite (on lavapipe), and is installed into
+# a folder that becomes a .tar.gz or .zip. Pushing a tag vX.Y.Z (the version in
+# CMakeLists.txt, with its own section in CHANGELOG.md) also makes a draft GitHub release
+# with the packages, for a person to check and publish. Started by hand, it only builds
+# the packages and keeps them as artifacts of the run: a rehearsal. See docs/releases.md.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  VULKAN_SDK_VERSION: 1.4.363.1
+
+jobs:
+  version:
+    name: Version and changelog
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: version
+        name: The version in CMakeLists.txt matches the tag and has a changelog section
+        run: |
+          version=$(sed -n 's/^project(Terni VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          heading=$(grep -m1 "^## $version\b" CHANGELOG.md || true)
+          if [ -z "$heading" ]; then echo "::error::CHANGELOG.md has no section '## $version'"; exit 1; fi
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+              echo "::error::tag $GITHUB_REF_NAME, but CMakeLists.txt says version $version"; exit 1
+            fi
+            if echo "$heading" | grep -qi unreleased; then
+              echo "::error::CHANGELOG.md still calls $version unreleased"; exit 1
+            fi
+          fi
+
+  linux:
+    name: Linux (GCC, Ubuntu 22.04)
+    needs: version
+    # The oldest supported runner: the programs need its glibc (2.35) or newer.
+    runs-on: ubuntu-22.04
+    env:
+      PACKAGE: terni-${{ needs.version.outputs.version }}-linux-x86_64
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ninja-build g++ libvulkan-dev glslc libshaderc-dev \
+            mesa-vulkan-drivers vulkan-tools
+      - run: vulkaninfo --summary
+      - run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build build
+      - run: ctest --test-dir build --output-on-failure
+      - name: Package
+        run: |
+          cmake --install build --prefix "$PACKAGE"
+          cp README.md CHANGELOG.md "$PACKAGE/"
+          tar czf "$PACKAGE.tar.gz" "$PACKAGE"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PACKAGE }}
+          path: ${{ env.PACKAGE }}.tar.gz
+
+  windows-msvc:
+    name: Windows (Visual Studio 2022)
+    needs: version
+    runs-on: windows-2022
+    env:
+      PACKAGE: terni-${{ needs.version.outputs.version }}-windows-msvc-x64
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install the Vulkan SDK and lavapipe
+        uses: jakoch/install-vulkan-sdk-action@v1
+        with:
+          vulkan_version: ${{ env.VULKAN_SDK_VERSION }}
+          install_runtime: true
+          install_lavapipe: true
+          cache: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Put the Vulkan SDK (shaderc, glslc) and the Vulkan loader on PATH
+        shell: pwsh
+        run: |
+          "$env:VULKAN_SDK\Bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "$env:VULKAN_SDK\runtime\x64" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - uses: actions/setup-dotnet@v4  # the C# wrapper's test
+        with:
+          dotnet-version: 8.0.x
+      - run: cmake --preset windows-msvc -DTERNI_INSTALL_SHADERC=ON
+      - run: cmake --build --preset windows-msvc
+      - run: ctest --preset windows-msvc
+      - name: Package
+        shell: pwsh
+        run: |
+          cmake --install build-windows-msvc --prefix $env:PACKAGE
+          Copy-Item README.md, CHANGELOG.md $env:PACKAGE
+          Compress-Archive -Path $env:PACKAGE -DestinationPath "$env:PACKAGE.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PACKAGE }}
+          path: ${{ env.PACKAGE }}.zip
+
+  windows-mingw:
+    name: Windows (MinGW-w64)
+    needs: version
+    runs-on: windows-latest
+    env:
+      PACKAGE: terni-${{ needs.version.outputs.version }}-windows-mingw-x64
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install lavapipe
+        uses: jakoch/install-vulkan-sdk-action@v1
+        with:
+          vulkan_version: ${{ env.VULKAN_SDK_VERSION }}
+          install_runtime_only: true
+          install_lavapipe: true
+          cache: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-libgomp
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-vulkan-headers
+            mingw-w64-ucrt-x86_64-vulkan-loader
+            mingw-w64-ucrt-x86_64-shaderc
+      - run: cmake --preset windows-mingw
+      - run: cmake --build --preset windows-mingw
+      - run: ctest --preset windows-mingw
+      - name: Install
+        run: |
+          cmake --install build-windows-mingw --prefix "$PACKAGE"
+          cp README.md CHANGELOG.md "$PACKAGE/"
+      - name: Package
+        shell: pwsh
+        run: Compress-Archive -Path $env:PACKAGE -DestinationPath "$env:PACKAGE.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PACKAGE }}
+          path: ${{ env.PACKAGE }}.zip
+
+  release:
+    name: Draft release
+    if: github.ref_type == 'tag'
+    needs: [version, linux, windows-msvc, windows-mingw]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Release notes from CHANGELOG.md, checksums, draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          awk -v v="$VERSION" '/^## /{ on = index($0, "## " v) == 1; next } on' CHANGELOG.md > notes.md
+          (cd dist && sha256sum * > SHA256SUMS)
+          gh release create "$GITHUB_REF_NAME" --draft --verify-tag --title "Terni $VERSION" --notes-file notes.md dist/*

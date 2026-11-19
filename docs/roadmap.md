@@ -132,11 +132,11 @@ invalid, not as a time. See [Benchmark](benchmark.md).
 
 ## Public releases
 
-1. **Versioned releases** with a changelog and a stable API from 1.0: a written policy
-   on what counts as a breaking change (the API, the save format, `game_checksum`, the
-   cache format), a table of supported platforms, and built libraries and tools for
-   Linux, MSVC and MinGW with each release. (The licence notices a game needs already
-   ship with Terni, in `notices/`.)
+1. **Versioned releases** with a changelog and a stable API from 1.0. Done: the policy
+   on what counts as a breaking change, the supported platforms
+   ([Releases and compatibility](releases.md)), a version header, and a workflow that
+   builds, tests and packages the libraries and tools for Linux, MSVC and MinGW for each
+   tag. Still to come: the first tagged release, 0.1.0.
 2. **Mod tooling** (done): mod folders load on top of the game's
    (`load_game({game, mod, ...})`), and `terni_check` is the one command a modder runs
    before publishing: files, errors and warnings with `file:line`, compile errors, order

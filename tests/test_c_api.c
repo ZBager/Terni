@@ -13,6 +13,7 @@
 #include <vulkan/vulkan.h>
 
 #include "terni/terni.h"
+#include "terni/version.hpp"
 
 static int failures = 0;
 #define CHECK(cond)                                                     \
@@ -52,7 +53,7 @@ static uint64_t state_hash(terni_world* w) {
 
 static void library_and_game(void) {
     CHECK(terni_abi_version() == TERNI_ABI_VERSION);
-    CHECK(strlen(terni_version()) >= 5);
+    CHECK(strcmp(terni_version(), TERNI_VERSION_STRING) == 0 && TERNI_VERSION_MAJOR >= 0);
     CHECK(terni_can_compile_rules() == 1);
 
     // a broken game: its errors, and nothing loaded

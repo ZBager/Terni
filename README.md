@@ -51,7 +51,8 @@ game loads, so mods can change the rules themselves, not only the numbers.
 ## Status
 
 Terni is **pre-1.0 (0.1.0)**: the core is tested and has been used by several games
-in development, but the API can still change between versions.
+in development, but the API can still change between minor versions
+([Releases and compatibility](docs/releases.md)).
 
 | Platform | Status |
 | --- | --- |
@@ -129,6 +130,7 @@ Linux.
 | [Design](docs/design.md) | Why Terni is built this way, and what it measured |
 | [Benchmark](docs/benchmark.md) | Measure Terni on your hardware against a CPU implementation of the same world |
 | [Roadmap](docs/roadmap.md) | What comes next |
+| [Releases and compatibility](docs/releases.md) | What a new version may change, supported platforms, release packages |
 | [Licensing](docs/licensing.md) | What a game using Terni may do and must do |
 
 ## Licence

@@ -41,6 +41,23 @@ in string literals and generated text.
 - **Style**: follow the surrounding code (4 spaces, lines up to 120 columns, comments
   that say why, not what).
 
+## Making a release
+
+1. Decide the version from what changed since the last one
+   ([Releases and compatibility](docs/releases.md)): a breaking change needs a new minor
+   version before 1.0, anything that changes simulation results too.
+2. Set it in `project(Terni VERSION ...)` in `CMakeLists.txt`, the one place it lives
+   (`terni/version.hpp` is made from it), and give `CHANGELOG.md` a section
+   `## X.Y.Z (YYYY-MM-DD)` with every change since the last release.
+3. Optionally rehearse: run the Release workflow by hand (Actions, "Release", "Run
+   workflow"). It builds and tests the three packages and keeps them as artifacts.
+4. Commit, then tag and push the tag: `git tag vX.Y.Z && git push origin vX.Y.Z`. The
+   workflow checks that the tag, the project version and the changelog agree, builds
+   and tests the packages, and makes a draft release with them, `SHA256SUMS` and the
+   changelog section as notes.
+5. Check the draft (download a package, run `bin/terni_run` on `examples/mini_galaxy`
+   from the source tree) and publish it.
+
 ## Licence
 
 Terni is licensed under the LGPL 2.1 with the Terni Linking Exception (`LICENSE`,

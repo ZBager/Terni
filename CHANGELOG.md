@@ -86,6 +86,12 @@ The first public version.
   beside itself, so mods can change rules (`TERNI_COMPILE_TOOL`, on with the compiler).
 - **C#**: `bindings/csharp/Terni`, a wrapper over the C API for .NET Standard 2.1 (.NET,
   Mono, Unity) that depends on no engine; failures are exceptions.
+- **Versions and releases**: `terni/version.hpp` (`TERNI_VERSION_STRING`,
+  `terni::version_major`, ...), which lockstep peers compare along with the game
+  checksum; `docs/releases.md`, on what counts as a breaking change and the supported
+  platforms; `cmake --install` also installs the tools; release packages for Linux,
+  Visual Studio and MinGW built and tested by a workflow (`TERNI_INSTALL_SHADERC` puts
+  `shaderc_shared.dll` in the Visual Studio one).
 - **Licence notices**: `notices/Terni-NOTICES.txt` (Terni and the rule compiler's
   libraries) and `notices/Terni-runtime-NOTICES.txt` (Terni alone), ready to ship beside a
   game; `cmake --install` installs them, and `TERNI_NOTICES_DIR` names their folder.

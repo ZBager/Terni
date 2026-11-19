@@ -34,6 +34,7 @@ if((TERNI_BUILD_TOOLS OR TERNI_BUILD_TESTS OR TERNI_BUILD_BENCHMARK) AND NOT TER
   message(FATAL_ERROR "TERNI_BUILD_TOOLS, TERNI_BUILD_TESTS and TERNI_BUILD_BENCHMARK need TERNI_RULE_COMPILER")
 endif()
 
+include(GNUInstallDirs)
 find_package(Vulkan REQUIRED)
 if(TERNI_RULE_COMPILER)
   # shaderc: compiles game rules (GLSL) at load time, so mods can change them
@@ -52,6 +53,8 @@ endif()
 find_package(Threads REQUIRED)
 
 set(TERNI_SHADER_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/shaders CACHE INTERNAL "Terni GLSL library folder")
+# terni/version.hpp, from the project version above: the one place a release sets it
+configure_file(cmake/version.hpp.in ${CMAKE_CURRENT_BINARY_DIR}/generated/include/terni/version.hpp @ONLY)
 if(MSVC)
   # /utf-8: the sources, and the GLSL library embedded from them, are UTF-8. Without it
   # MSVC reads them in the system code page, and the embedded bytes (and with them every
@@ -97,7 +100,8 @@ function(terni_library target export_name compiler_source)
   set_target_properties(${target} PROPERTIES EXPORT_NAME ${export_name})  # the same name for find_package users
   target_compile_features(${target} PUBLIC cxx_std_20)
   target_include_directories(${target}
-    PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>
+    PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+           $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/generated/include> $<INSTALL_INTERFACE:include>
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   target_link_libraries(${target} PUBLIC Vulkan::Vulkan PRIVATE Threads::Threads ${CMAKE_DL_LIBS})
   target_compile_options(${target} PRIVATE ${TERNI_COMPILE_OPTIONS})
@@ -123,8 +127,9 @@ function(terni_c_library target export_name output_name static_library)
   add_library(Terni::${export_name} ALIAS ${target})
   target_link_libraries(${target} PRIVATE ${static_library})
   target_include_directories(${target} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+                                              $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/generated/include>
                                               $<INSTALL_INTERFACE:include>)
-  target_compile_definitions(${target} PRIVATE TERNI_C_BUILD TERNI_VERSION_STRING="${PROJECT_VERSION}")
+  target_compile_definitions(${target} PRIVATE TERNI_C_BUILD)
   target_compile_options(${target} PRIVATE ${TERNI_COMPILE_OPTIONS})
   set_target_properties(${target} PROPERTIES OUTPUT_NAME ${output_name} EXPORT_NAME ${export_name}
                         C_VISIBILITY_PRESET hidden CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
@@ -216,6 +221,8 @@ if(TERNI_BUILD_TOOLS)
   add_executable(hello_towns examples/hello_towns/hello_towns.cpp)
   target_link_libraries(hello_towns PRIVATE terni_core)
   target_compile_options(hello_towns PRIVATE ${TERNI_COMPILE_OPTIONS})
+
+  install(TARGETS terni_run terni_check terni_diff terni_script_check RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
 # ---------------------------------------------------------------------------
@@ -477,10 +484,10 @@ endif()
 # ---------------------------------------------------------------------------
 # Install / find_package(Terni) support
 # ---------------------------------------------------------------------------
-include(GNUInstallDirs)
 install(TARGETS ${TERNI_LIBRARIES} EXPORT TerniTargets ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-install(DIRECTORY include/terni DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(DIRECTORY include/terni ${CMAKE_CURRENT_BINARY_DIR}/generated/include/terni
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 # The notices a game ships beside its program: Terni-NOTICES.txt with Terni::core (the rule
 # compiler's libraries), Terni-runtime-NOTICES.txt with Terni::runtime alone. TERNI_NOTICES_DIR
 # names their folder, in this source tree or (from TerniConfig.cmake) where they are installed.
@@ -489,6 +496,18 @@ install(FILES LICENSE LICENSE-EXCEPTION notices/Terni-NOTICES.txt notices/Terni-
         DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/terni)
 install(DIRECTORY shaders/terni DESTINATION ${CMAKE_INSTALL_DATADIR}/terni/shaders)  # for terni_add_shaders users
 install(EXPORT TerniTargets NAMESPACE Terni:: DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Terni)
+# A release package for Visual Studio carries shaderc's DLL beside the programs and the
+# terni library, which need it (its licence is in Terni-NOTICES.txt). Elsewhere shaderc
+# comes from the system's packages (Linux) or MSYS2.
+option(TERNI_INSTALL_SHADERC "Install shaderc_shared.dll beside the programs (Windows, Vulkan SDK)" OFF)
+if(TERNI_INSTALL_SHADERC)
+  if(NOT (WIN32 AND TERNI_RULE_COMPILER))
+    message(FATAL_ERROR "TERNI_INSTALL_SHADERC is for Windows builds with the rule compiler")
+  endif()
+  get_filename_component(_terni_shaderc_libdir "${SHADERC_LIB}" DIRECTORY)
+  find_file(TERNI_SHADERC_DLL shaderc_shared.dll HINTS "${_terni_shaderc_libdir}/../Bin" "$ENV{VULKAN_SDK}/Bin" REQUIRED)
+  install(FILES ${TERNI_SHADERC_DLL} DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
 file(RELATIVE_PATH _terni_notices_from_config ${CMAKE_INSTALL_FULL_LIBDIR}/cmake/Terni
      ${CMAKE_INSTALL_FULL_DATADIR}/licenses/terni)
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/TerniConfig.cmake
