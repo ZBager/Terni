@@ -333,13 +333,21 @@ endif()
 include(GNUInstallDirs)
 install(TARGETS ${TERNI_LIBRARIES} EXPORT TerniTargets ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
 install(DIRECTORY include/terni DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-install(FILES LICENSE LICENSE-EXCEPTION DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/terni)
+# The notices a game ships beside its program: Terni-NOTICES.txt with Terni::core (the rule
+# compiler's libraries), Terni-runtime-NOTICES.txt with Terni::runtime alone. TERNI_NOTICES_DIR
+# names their folder, in this source tree or (from TerniConfig.cmake) where they are installed.
+set(TERNI_NOTICES_DIR ${CMAKE_CURRENT_SOURCE_DIR}/notices CACHE INTERNAL "Terni's licence notices")
+install(FILES LICENSE LICENSE-EXCEPTION notices/Terni-NOTICES.txt notices/Terni-runtime-NOTICES.txt
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/terni)
 install(DIRECTORY shaders/terni DESTINATION ${CMAKE_INSTALL_DATADIR}/terni/shaders)  # for terni_add_shaders users
 install(EXPORT TerniTargets NAMESPACE Terni:: DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Terni)
+file(RELATIVE_PATH _terni_notices_from_config ${CMAKE_INSTALL_FULL_LIBDIR}/cmake/Terni
+     ${CMAKE_INSTALL_FULL_DATADIR}/licenses/terni)
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/TerniConfig.cmake
 "include(CMakeFindDependencyMacro)
 find_dependency(Vulkan)
 find_dependency(Threads)
 include(\${CMAKE_CURRENT_LIST_DIR}/TerniTargets.cmake)
+get_filename_component(TERNI_NOTICES_DIR \"\${CMAKE_CURRENT_LIST_DIR}/${_terni_notices_from_config}\" ABSOLUTE)
 ")
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/TerniConfig.cmake DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Terni)

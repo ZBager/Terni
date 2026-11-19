@@ -53,6 +53,27 @@ libraries, or linked into a program), include their licence texts and notices, a
 those licences ask. A game that ships only `Terni::runtime` and a SPIR-V cache
 contains none of them.
 
+## The notices file
+
+Terni comes with ready-made notices files in [`notices/`](../notices). Put one beside
+your game's program, or include its text in your credits:
+
+| You ship | File |
+| --- | --- |
+| `Terni::core`, or a tool linked with it (the rule compiler) | `Terni-NOTICES.txt`: Terni's notice and the licence texts of shaderc, glslang, SPIRV-Tools and SPIRV-Headers |
+| `Terni::runtime` only | `Terni-runtime-NOTICES.txt`: Terni's notice |
+
+In CMake, `TERNI_NOTICES_DIR` names the folder, whether Terni was added with
+`add_subdirectory()`, `FetchContent` or `find_package(Terni)`; `cmake --install`
+puts both files in `share/licenses/terni`:
+
+```cmake
+install(FILES ${TERNI_NOTICES_DIR}/Terni-NOTICES.txt DESTINATION .)
+```
+
+If you ship other libraries (a software Vulkan driver, for example), add their notices
+to your own.
+
 ## Where the line is
 
 | Your work | Licence |

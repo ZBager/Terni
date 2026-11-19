@@ -332,6 +332,10 @@ set when the world starts), the GLSL library and the compile settings, but not t
 compiler version: a cache built on one machine works on every other. Every file carries a content hash, so a damaged file is never handed to
 the driver.
 
+Ship Terni's licence notices beside the program: `Terni-NOTICES.txt` if the game
+includes the rule compiler, `Terni-runtime-NOTICES.txt` if it links only
+`Terni::runtime`. Both are in `TERNI_NOTICES_DIR` ([Licensing](licensing.md#the-notices-file)).
+
 **If your engine has its own shader compiler.** Some engines export their own copy of
 glslang or SPIRV-Tools, and a system shaderc loaded into the same process can bind to
 those symbols and crash. Either link the game with `Terni::runtime`, or set

@@ -105,6 +105,7 @@ ctest --test-dir build --output-on-failure
 | `examples/` | `mini_galaxy` (a data folder) and `hello_towns` (a world in code) |
 | `bench/` | `terni_bench`: the benchmark world and its rules, the CPU reference, machine details, the frame load behind `--frame-load`; `bench/charts/` holds the results behind the charts in `docs/benchmark.md` and the Python scripts that draw them (documentation only, not part of the build) |
 | `docs/` | User documentation, written for outside game developers |
+| `notices/` | The licence notices a game ships: `Terni-NOTICES.txt` (with the rule compiler), `Terni-runtime-NOTICES.txt` |
 
 ## Changes that require other changes
 
@@ -122,6 +123,8 @@ ctest --test-dir build --output-on-failure
   breaking change.
 - **New rules in tests or examples** must load without order warnings, or mark a
   deliberate line with `// terni: order ok`.
+- **Libraries `Terni::core` links** (or Terni's own notice): update `notices/` and the table in
+  `docs/licensing.md`; TerniIntegrations ships these files.
 - **Data-folder syntax** (`game_load.cpp`): update `docs/data-format.md`.
 - **The benchmark world** (`bench/`): every rule in `bench_world.cpp` has a twin in
   `cpu_reference.cpp`; change both together (`test_bench` compares them on every

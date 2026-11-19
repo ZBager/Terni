@@ -69,6 +69,9 @@ The first public version.
   writes past the end of a field reads 0 and writes nothing, the same on every device;
   `DeviceInfo::robustness` says what each device does. A lost device, for example after
   a rule ran too long, throws `terni::DeviceLost`.
+- **Licence notices**: `notices/Terni-NOTICES.txt` (Terni and the rule compiler's
+  libraries) and `notices/Terni-runtime-NOTICES.txt` (Terni alone), ready to ship beside a
+  game; `cmake --install` installs them, and `TERNI_NOTICES_DIR` names their folder.
 - **Machines without a usable GPU**: `add_vulkan_driver()` loads a software Vulkan driver
   shipped with the game (such as lavapipe), and the rules run on the CPU with the same
   results; `DeviceInfo::cpu()`; `list_devices()` is empty, instead of throwing, where

@@ -1,0 +1,16 @@
+Notices for Terni
+=================
+
+This program uses Terni. Its notice follows.
+
+
+Terni
+-----
+
+This program uses Terni (https://github.com/ZBager/Terni).
+Copyright (C) 2026 Rafał Zając.
+Licensed under the GNU Lesser General Public License, version 2.1 only, with the
+Terni Linking Exception:
+https://github.com/ZBager/Terni/blob/main/LICENSE
+https://github.com/ZBager/Terni/blob/main/LICENSE-EXCEPTION
+The source code of Terni is at https://github.com/ZBager/Terni.
