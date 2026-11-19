@@ -107,7 +107,7 @@ endif()
 #   terni_runtime   over Terni::runtime (rules from a SPIR-V cache only)
 # ---------------------------------------------------------------------------
 function(terni_c_library target export_name output_name static_library)
-  add_library(${target} SHARED src/c_api.cpp)
+  add_library(${target} SHARED src/c_api.cpp src/c_api_gpu.cpp)
   add_library(Terni::${export_name} ALIAS ${target})
   target_link_libraries(${target} PRIVATE ${static_library})
   target_include_directories(${target} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -117,6 +117,7 @@ function(terni_c_library target export_name output_name static_library)
   set_target_properties(${target} PROPERTIES OUTPUT_NAME ${output_name} EXPORT_NAME ${export_name}
                         C_VISIBILITY_PRESET hidden CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
   if(WIN32)
+    target_link_libraries(${target} PRIVATE dxgi)  # the adapter of a DirectX renderer
     # terni.dll, not libterni.dll (MinGW), so that every language finds it by its plain name;
     # the import library must not overwrite the static library of the same name (MSVC)
     set_target_properties(${target} PROPERTIES PREFIX "" ARCHIVE_OUTPUT_NAME ${output_name}_dll)
@@ -327,7 +328,7 @@ if(TERNI_BUILD_TESTS)
     # the C API, from a program written in C, through the shared library
     enable_language(C)
     add_executable(test_c_api tests/test_c_api.c)
-    target_link_libraries(test_c_api PRIVATE terni_c)
+    target_link_libraries(test_c_api PRIVATE terni_c Vulkan::Vulkan)  # a renderer's own Vulkan instance
     set_target_properties(test_c_api PROPERTIES C_STANDARD 99 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
     if(NOT MSVC)
       target_compile_options(test_c_api PRIVATE -Wall -Wextra -Wpedantic)
@@ -363,6 +364,13 @@ if(TERNI_BUILD_TESTS)
                        --driver ${TERNI_SOFTWARE_DRIVER})
     endif()
     if(NOT WIN32)  # the Vulkan loader ignores VK_DRIVER_FILES in elevated processes, as on Windows CI
+      if(TERNI_C_API AND TERNI_SOFTWARE_DRIVER MATCHES "libvulkan_lvp\\.so$")
+        # ... and the C API adds the one shipped beside a game when the system has none
+        get_filename_component(_terni_driver_dir ${TERNI_SOFTWARE_DRIVER} DIRECTORY)
+        add_test(NAME c_api_shipped_driver COMMAND test_c_api --shipped-driver-alone ${_terni_driver_dir})
+        set_tests_properties(c_api_shipped_driver PROPERTIES
+                             ENVIRONMENT "VK_DRIVER_FILES=${CMAKE_CURRENT_BINARY_DIR}/no_vulkan_drivers")
+      endif()
       # ... and is enough on a machine with no Vulkan driver of its own
       terni_test(test_software_driver tests/test_software_driver.cpp)
       add_test(NAME software_driver_alone COMMAND test_software_driver ${TERNI_SOFTWARE_DRIVER})

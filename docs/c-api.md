@@ -105,6 +105,33 @@ built with. A library of another ABI version may lay out its structs differently
    (part of a row), `terni_create_entity()` / `terni_destroy_entity()`, modifiers.
 7. `terni_save()` / `terni_load_save()`, `terni_stop()`, `terni_world_destroy()`.
 
+## The renderer's GPU and machines without one
+
+To run the simulation on the GPU your renderer uses, ask the renderer's own objects for
+its GPU and find the matching device:
+
+```c
+terni_renderer_gpu gpu;
+terni_vulkan_renderer_gpu(vk_instance, NULL, vk_physical_device, &gpu);  // a Vulkan renderer
+// terni_dxgi_adapter_gpu(dxgi_adapter, &gpu);                          // a DirectX one (Windows)
+int32_t device = -1;
+terni_find_device(&gpu, &device);           // -1: the renderer's GPU cannot run the simulation
+
+terni_start_options options;
+terni_start_options_init(&options);
+options.device = device;                    // -1 falls back to the preference
+terni_start(world, &options);
+```
+
+The match goes by the Vulkan UUID, then the adapter LUID, then by vendor and name when
+exactly one usable device has them.
+
+For machines whose GPUs cannot run the simulation (an old GPU, a virtual machine, a
+server), ship a software Vulkan driver such as Mesa's lavapipe beside your program, and
+call `terni_add_shipped_driver(folder, &result)` before listing devices. It adds the
+driver unless the system has a software device of its own, and works once per process.
+The default preference then falls back to it when no GPU can run the simulation.
+
 ## A starting state from your code
 
 A game that generates its map from a seed writes the starting state before the start,
@@ -156,6 +183,7 @@ Every function is declared, with a comment, in `include/terni/terni.h`.
 | --- | --- |
 | Library | `terni_abi_version`, `terni_version`, `terni_last_error`, `terni_can_compile_rules` |
 | Devices | `terni_device_count`, `terni_device_info`, `terni_add_vulkan_driver`, `terni_pick_device` |
+| The renderer's GPU, a shipped driver | `terni_vulkan_renderer_gpu`, `terni_dxgi_renderer_gpu`, `terni_dxgi_adapter_gpu`, `terni_find_device`, `terni_shipped_driver_name`, `terni_add_shipped_driver` |
 | World | `terni_world_create`, `terni_world_destroy`, `terni_load`, `terni_unload`, `terni_loaded`, `terni_diagnostic_count`, `terni_diagnostic` |
 | What the game declares | `terni_entity_count`, `terni_entity_name`, `terni_find_entity`, `terni_capacity`, `terni_dynamic`, `terni_field_count`, `terni_field_name`, `terni_find_field`, `terni_field_info_of`, `terni_find_row`, `terni_row_id`, `terni_define_count`, `terni_define_name`, `terni_find_define`, `terni_define_value`, `terni_bundle_count`, `terni_bundle_name`, `terni_find_bundle`, `terni_modifier_key_count`, `terni_modifier_key_name`, `terni_find_modifier_key`, `terni_checksum` |
 | Before the start | `terni_set_capacity`, `terni_set_modifier_capacity`, `terni_set_start_count`, `terni_start_count`, `terni_write_start`, `terni_read_start`, `terni_add_start_modifier`, `terni_compile_rules` |

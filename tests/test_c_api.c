@@ -10,6 +10,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <vulkan/vulkan.h>
+
 #include "terni/terni.h"
 
 static int failures = 0;
@@ -379,6 +381,96 @@ static void compiled_ahead(void) {
     terni_world_destroy(w);
 }
 
+// A renderer's GPU, from its own Vulkan objects, is the device of the same UUID; by
+// vendor and name when the renderer's instance gives no IDs.
+static void renderer_gpu(void) {
+    VkApplicationInfo app;
+    memset(&app, 0, sizeof app);
+    app.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+    app.apiVersion = VK_API_VERSION_1_1;
+    VkInstanceCreateInfo info;
+    memset(&info, 0, sizeof info);
+    info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    info.pApplicationInfo = &app;
+    VkInstance instance = VK_NULL_HANDLE;
+    if (vkCreateInstance(&info, NULL, &instance) != VK_SUCCESS) {
+        CHECK(!"a renderer's Vulkan instance");
+        return;
+    }
+    uint32_t n = 0;
+    vkEnumeratePhysicalDevices(instance, &n, NULL);
+    VkPhysicalDevice physical[16];
+    if (n > 16) n = 16;
+    vkEnumeratePhysicalDevices(instance, &n, physical);
+    uint32_t count = 0;
+    OK(terni_device_count(&count));
+    int matched = 0;
+    for (uint32_t i = 0; i < n; ++i) {
+        terni_renderer_gpu gpu;
+        OK(terni_vulkan_renderer_gpu(instance, NULL, physical[i], &gpu));
+        CHECK(gpu.has_uuid && gpu.name[0]);
+        int32_t usable_twin = -1;  // the usable Terni device with this UUID
+        for (uint32_t d = 0; d < count; ++d) {
+            terni_device dev;
+            OK(terni_device_info(d, &dev));
+            if (dev.usable && memcmp(dev.uuid, gpu.uuid, 16) == 0) usable_twin = (int32_t)d;
+        }
+        int32_t found = -2;
+        OK(terni_find_device(&gpu, &found));
+        CHECK(found == usable_twin);
+        matched += found >= 0;
+        gpu.has_uuid = 0;
+        gpu.has_luid = 0;
+        OK(terni_find_device(&gpu, &found));
+        CHECK(found == -1 || found == usable_twin);  // -1 only where two usable devices share the name
+    }
+    CHECK(matched > 0);
+    vkDestroyInstance(instance, NULL);
+
+    terni_renderer_gpu nobody;
+    memset(&nobody, 0, sizeof nobody);
+    nobody.has_uuid = 1;
+    strcpy(nobody.name, "no such GPU");
+    int32_t found = 0;
+    OK(terni_find_device(&nobody, &found));
+    CHECK(found == -1);
+    CHECK(terni_vulkan_renderer_gpu(NULL, NULL, NULL, &nobody) == TERNI_INVALID);
+#ifdef _WIN32
+    OK(terni_dxgi_renderer_gpu(0, &nobody));  // every Windows machine has adapter 0
+    CHECK(nobody.has_luid && nobody.name[0]);
+    OK(terni_find_device(&nobody, &found));
+#else
+    CHECK(terni_dxgi_renderer_gpu(0, &nobody) == TERNI_INVALID);
+#endif
+
+    // a folder without the driver: nothing to add, and the answer holds for the process
+    int32_t result = -1;
+    OK(terni_add_shipped_driver(TERNI_TEST_BINARY_DIR, &result));
+    CHECK(result == TERNI_DRIVER_NOT_SHIPPED);
+    OK(terni_add_shipped_driver(TERNI_TEST_DATA, &result));
+    CHECK(result == TERNI_DRIVER_NOT_SHIPPED);
+    CHECK(strstr(terni_shipped_driver_name(), "vulkan_lvp") != NULL);
+}
+
+// With no Vulkan driver of the system's own (VK_DRIVER_FILES names none), the driver
+// shipped in `folder` is added and the world runs on it.
+static void shipped_driver_alone(const char* folder) {
+    int32_t result = -1;
+    OK(terni_add_shipped_driver(folder, &result));
+    CHECK(result == TERNI_DRIVER_ADDED);
+    uint32_t count = 0;
+    OK(terni_device_count(&count));
+    CHECK(count == 1);
+    terni_device d;
+    OK(terni_device_info(0, &d));
+    CHECK(d.usable && d.cpu);
+    terni_world* w = loaded(galaxy);
+    OK(terni_start(w, NULL));
+    for (int t = 0; t < 10; ++t) OK(terni_tick(w));
+    printf("  on the shipped driver: %s\n", terni_device_name(w));
+    terni_world_destroy(w);
+}
+
 // Entities that come and go: created by the host, alive bits, rows free.
 static void dynamic_entities(void) {
     terni_world* w = loaded(armies);
@@ -412,8 +504,14 @@ static void dynamic_entities(void) {
     terni_world_destroy(w);
 }
 
-int main(void) {
+int main(int argc, char** argv) {
+    if (argc == 3 && strcmp(argv[1], "--shipped-driver-alone") == 0) {
+        shipped_driver_alone(argv[2]);
+        printf("test_c_api --shipped-driver-alone: %s\n", failures == 0 ? "PASS" : "FAIL");
+        return failures == 0 ? 0 : 1;
+    }
     library_and_game();
+    renderer_gpu();
     every_device();
     state_and_modifiers();
     generated_start();

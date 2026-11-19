@@ -121,6 +121,44 @@ TERNI_API terni_status terni_add_vulkan_driver(const char* library_path);
 TERNI_API terni_status terni_pick_device(int32_t preference, const uint8_t* uuid16, const uint8_t* luid8,
                                          int32_t* device);
 
+/* ---- the renderer's GPU, and a software driver shipped with the game ---- */
+
+/* What a renderer says about its GPU, to run the simulation on the same one. */
+typedef struct terni_renderer_gpu {
+    int32_t has_uuid;  /* a Vulkan physical device UUID */
+    uint8_t uuid[16];
+    int32_t has_luid;  /* an adapter LUID (DirectX, or Vulkan on Windows) */
+    uint8_t luid[8];
+    uint32_t vendor_id; /* PCI vendor ID, and the name: the last resort */
+    char name[256];     /* UTF-8 */
+} terni_renderer_gpu;
+
+/* From a Vulkan renderer's own objects: its VkInstance, the vkGetInstanceProcAddr it
+ * uses (NULL: the Vulkan loader's) and the VkPhysicalDevice it renders with. */
+TERNI_API terni_status terni_vulkan_renderer_gpu(void* instance, void* get_instance_proc_addr,
+                                                 void* physical_device, terni_renderer_gpu* gpu);
+/* From a DirectX renderer: DXGI adapter number `adapter_index`, or its adapter object
+ * (an IDXGIAdapter*). Windows only: elsewhere they return TERNI_INVALID. */
+TERNI_API terni_status terni_dxgi_renderer_gpu(uint32_t adapter_index, terni_renderer_gpu* gpu);
+TERNI_API terni_status terni_dxgi_adapter_gpu(void* adapter, terni_renderer_gpu* gpu);
+/* The usable device that is the renderer's GPU: by UUID, then LUID, then by vendor and
+ * name if exactly one usable device has them. *device = -1 if none. Pass the index to
+ * terni_start_options.device. */
+TERNI_API terni_status terni_find_device(const terni_renderer_gpu* gpu, int32_t* device);
+
+#define TERNI_DRIVER_ADDED 0          /* the shipped driver was added to the system's */
+#define TERNI_DRIVER_NOT_SHIPPED 1    /* there is none in the folder */
+#define TERNI_DRIVER_SYSTEM_HAS_ONE 2 /* the system has a usable software device: not needed */
+/* The file name of a software Vulkan driver on this system: "vulkan_lvp.dll" or
+ * "libvulkan_lvp.so". */
+TERNI_API const char* terni_shipped_driver_name(void);
+/* Adds the software Vulkan driver shipped in `folder` (terni_shipped_driver_name()) to
+ * the system's, unless the system has a usable software device already. A machine whose
+ * GPUs cannot run the simulation then still has a device, and TERNI_PREFER_DISCRETE
+ * falls back to it. Works once per process: call it before devices are listed; later
+ * calls give the first call's result. *result gets TERNI_DRIVER_ADDED, ... */
+TERNI_API terni_status terni_add_shipped_driver(const char* folder, int32_t* result);
+
 /* ---- a world ---- */
 
 TERNI_API terni_status terni_world_create(terni_world** world);

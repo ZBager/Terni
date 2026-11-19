@@ -224,6 +224,14 @@ terni_modifier from_handle(terni::ModifierHandle h) { return terni_modifier{h.sl
 
 }  // namespace
 
+namespace terni::c_api {  // for c_api_gpu.cpp
+terni_status fail(terni_status status, const std::string& message) {
+    g_last_error = message;
+    return status;
+}
+void clear_error() { g_last_error.clear(); }
+}  // namespace terni::c_api
+
 extern "C" {
 
 // ---- the library ----

@@ -73,8 +73,9 @@ The first public version.
   libraries `terni` (with the rule compiler) and `terni_runtime`, which export nothing
   else (`TERNI_C_API`, on when Terni is the top-level project). It covers what the C++
   API offers hosts of data-folder games, and adds a starting state written by the host
-  before the start, one bundle added to many rows in one call, and a modifier replaced
-  in one call.
+  before the start, one bundle added to many rows in one call, a modifier replaced in
+  one call, the device a Vulkan or DirectX renderer uses (`terni_find_device()`), and a
+  software Vulkan driver shipped with the game (`terni_add_shipped_driver()`).
 - **Licence notices**: `notices/Terni-NOTICES.txt` (Terni and the rule compiler's
   libraries) and `notices/Terni-runtime-NOTICES.txt` (Terni alone), ready to ship beside a
   game; `cmake --install` installs them, and `TERNI_NOTICES_DIR` names their folder.
