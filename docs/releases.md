@@ -60,7 +60,7 @@ The cache key covers Terni's GLSL library, so a new version of Terni (any change
 
 | Platform | Compilers | How it is tested |
 | --- | --- | --- |
-| Linux, x86-64 | GCC 11 or newer (the release packages are built with GCC 11 on Ubuntu 22.04; Terni is developed with GCC 16) | The whole suite on every push (CI, lavapipe), and on NVIDIA, AMD and Intel GPUs on the reference machines of the [benchmark](benchmark.md) |
+| Linux, x86-64 | GCC 12 or newer (the release packages are built with GCC 12 on Debian 12; Terni is developed with GCC 16) | The whole suite on every push (CI, lavapipe), and on NVIDIA, AMD and Intel GPUs on the reference machines of the [benchmark](benchmark.md) |
 | Windows 10 and 11, x64 | Visual Studio 2022 and 2026 (MSVC); MinGW-w64 (GCC, MSYS2 UCRT64) | The whole suite on every push with all three (CI, lavapipe), and on an RTX 4070 Ti and an AMD integrated GPU |
 | Not supported | macOS, consoles, the web, 32-bit systems | |
 
@@ -80,7 +80,7 @@ on each, and a `SHA256SUMS` file:
 
 | Package | For |
 | --- | --- |
-| `terni-<version>-linux-x86_64.tar.gz` | Linux with glibc 2.35 or newer; GCC 11 or newer to link the static libraries |
+| `terni-<version>-linux-x86_64.tar.gz` | Linux with glibc 2.36 or newer; GCC 12 or newer to link the static libraries |
 | `terni-<version>-windows-msvc-x64.zip` | Visual Studio 2022 or 2026 |
 | `terni-<version>-windows-mingw-x64.zip` | MinGW-w64 in MSYS2 UCRT64 |
 

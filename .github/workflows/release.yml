@@ -45,19 +45,21 @@ jobs:
           fi
 
   linux:
-    name: Linux (GCC, Ubuntu 22.04)
+    name: Linux (GCC 12, Debian 12)
     needs: version
-    # The oldest supported runner: the programs need its glibc (2.35) or newer.
-    runs-on: ubuntu-22.04
+    # Built on an older system than the runner's, so that the programs need only glibc
+    # 2.36 or newer. Debian 12 packages shaderc and glslc; Ubuntu 22.04 does not.
+    runs-on: ubuntu-latest
+    container: debian:12
     env:
       PACKAGE: terni-${{ needs.version.outputs.version }}-linux-x86_64
     steps:
-      - uses: actions/checkout@v7
       - name: Install packages
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ninja-build g++ libvulkan-dev glslc libshaderc-dev \
-            mesa-vulkan-drivers vulkan-tools
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates git cmake ninja-build g++ libvulkan-dev \
+            glslc libshaderc-dev mesa-vulkan-drivers vulkan-tools
+      - uses: actions/checkout@v7
       - run: vulkaninfo --summary
       - run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
       - run: cmake --build build

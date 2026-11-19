@@ -6,7 +6,7 @@ fifteen minutes.
 
 ## 1. Install the requirements
 
-Terni needs CMake 3.21 or newer, a C++20 compiler (GCC 11+, Clang 14+, or Visual Studio
+Terni needs CMake 3.21 or newer, a C++20 compiler (GCC 12 or newer, or Visual Studio
 2022 or 2026), the Vulkan loader and headers, and shaderc (the library and the `glslc`
 tool). A Vulkan 1.3 driver must be installed for at least one device; the drivers of
 current NVIDIA, AMD and Intel GPUs have one, and on Linux Mesa's lavapipe, a Vulkan
