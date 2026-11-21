@@ -1,4 +1,7 @@
-# Terni
+<p align="center">
+  <img src="docs/images/branding/terni-hero-icon.png" alt="Gold T set into a lavender province grid" width="192">
+</p>
+<h1 align="center">Terni</h1>
 
 **Deterministic, GPU-accelerated simulation for grand-strategy games.**
 
