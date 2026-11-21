@@ -98,6 +98,10 @@ nav a { font-size: .94rem; text-decoration: none; }
 .readback input { position: absolute; opacity: 0; }
 .readback input:checked + span { color: #251b16; background: var(--gold); border-color: var(--gold); }
 .readback input:focus-visible + span, .world-size input:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+@media (prefers-reduced-motion: no-preference) {
+  .bar-track span { transition: width 280ms cubic-bezier(.2, .7, .25, 1); }
+  .readback label span { transition: background-color 180ms ease-out, border-color 180ms ease-out, color 180ms ease-out; }
+}
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .start-layout > * { min-width: 0; }
 pre { margin: 0; padding: 1.3rem; overflow: auto; border: 1px solid var(--line); background: var(--hero); color: var(--lavender); font: .89rem/1.9 var(--mono); }

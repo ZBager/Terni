@@ -44,6 +44,11 @@ const axis = chart.querySelectorAll(".benchmark-axis span");
 const gpuRow = chart.querySelector(".benchmark-row.gpu");
 const cpuRow = chart.querySelector(".benchmark-row.cpu");
 const english = new Intl.NumberFormat("en", { maximumFractionDigits: 4 });
+const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+const changingLabels = [
+  population, title, detail, note, ...axis,
+  gpuRow.querySelector("strong"), cpuRow.querySelector("strong"),
+];
 
 function formatTime(value) {
   if (value === null) return "N/A";
@@ -83,7 +88,19 @@ function renderBenchmark() {
   summary.textContent = `${worldLabel}. ${gpuResult}. Ryzen 7 7800X3D ${formatTime(tier.cpu)}.`;
 }
 
-slider.addEventListener("input", renderBenchmark);
-controls.addEventListener("change", renderBenchmark);
+function transitionBenchmark() {
+  const previousText = changingLabels.map(label => label.textContent);
+  renderBenchmark();
+  if (reducedMotion.matches) return;
+
+  changingLabels.forEach((label, index) => {
+    if (label.textContent === previousText[index]) return;
+    label.getAnimations().forEach(animation => animation.cancel());
+    label.animate([{ opacity: 0.68 }, { opacity: 1 }], { duration: 200, easing: "ease-out" });
+  });
+}
+
+slider.addEventListener("input", transitionBenchmark);
+controls.querySelector(".readback").addEventListener("change", transitionBenchmark);
 renderBenchmark();
 controls.hidden = false;
