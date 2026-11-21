@@ -65,13 +65,23 @@
         <div>
           <p class="label">BENCHMARK</p>
           <h2>One million pops.<br>One simulation tick.</h2>
-          <p class="section-copy">On the RTX 4070 Ti benchmark machine, the rules took 0.16 ms. The full tick took 1.55 ms with every pop read back to the CPU.</p>
+          <p class="section-copy">On the Linux desktop benchmark, the RTX 4070 Ti completed the full tick about 2.6× as fast as the 16-thread Ryzen 7 7800X3D CPU reference, even with every pop read back to the CPU.</p>
           <a href="https://github.com/ZBager/Terni/blob/main/docs/benchmark.md#medium-the-baseline">See benchmark results</a>
         </div>
-        <dl class="measurements">
-          <div><dt>GPU compute</dt><dd>0.16 <small>ms</small></dd></div>
-          <div><dt>Full tick with readback</dt><dd>1.55 <small>ms</small></dd></div>
-        </dl>
+        <figure class="benchmark-chart">
+          <figcaption>Full tick time <span>Lower is better</span></figcaption>
+          <dl class="benchmark-bars">
+            <div class="benchmark-row gpu">
+              <dt>NVIDIA RTX 4070 Ti <small>GPU with full readback</small></dt>
+              <dd><strong>1.55 ms</strong><span class="bar-track" aria-hidden="true"><span style="width: 38.75%"></span></span></dd>
+            </div>
+            <div class="benchmark-row cpu">
+              <dt>AMD Ryzen 7 7800X3D <small>C++ CPU reference, 16 threads</small></dt>
+              <dd><strong>3.97 ms</strong><span class="bar-track" aria-hidden="true"><span style="width: 99.25%"></span></span></dd>
+            </div>
+          </dl>
+          <div class="benchmark-axis" aria-hidden="true"><span>0</span><span>1</span><span>2</span><span>3</span><span>4 ms</span></div>
+        </figure>
       </div>
     </section>
 
