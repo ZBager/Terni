@@ -11,6 +11,7 @@
   <title>Terni · Deterministic simulation for grand strategy</title>
   <link rel="icon" href="assets/terni-hero-icon.png">
   <link rel="stylesheet" href="style.css">
+  <script src="benchmark.js" defer></script>
 </head>
 <body>
   <a class="skip" href="#content">Skip to content</a>
@@ -64,15 +65,30 @@
       <div class="wrap benchmark-layout">
         <div>
           <p class="label">BENCHMARK</p>
-          <h2>One million pops.<br>One simulation tick.</h2>
-          <p class="section-copy">On the Linux desktop benchmark, the RTX 4070 Ti completed the full tick about 2.6× as fast as the 16-thread Ryzen 7 7800X3D CPU reference, even with every pop read back to the CPU.</p>
-          <a href="https://github.com/ZBager/Terni/blob/main/docs/benchmark.md#medium-the-baseline">See benchmark results</a>
+          <h2>From 1,024 to<br>100 million pops.</h2>
+          <p class="section-copy">Compare the RTX 4070 Ti with the 16-thread Ryzen 7 7800X3D C++ reference on the same Linux desktop. Change the world size and see how GPU readback affects tick time.</p>
+          <a href="https://github.com/ZBager/Terni/blob/main/docs/benchmark.md#every-size">See benchmark results</a>
         </div>
         <figure class="benchmark-chart">
-          <figcaption>Full tick time <span>Lower is better</span></figcaption>
+          <figcaption><b id="benchmark-metric">Full tick time</b> <span>Lower is better</span></figcaption>
+          <form id="benchmark-controls" hidden>
+            <div class="world-size">
+              <label for="world-size">World size</label>
+              <output id="world-pops" for="world-size">1,000,000 pops</output>
+              <input type="range" id="world-size" min="0" max="6" step="1" value="2" aria-valuetext="1,000,000 pops">
+              <div class="range-endpoints" aria-hidden="true"><span>1,024</span><span>100 million</span></div>
+            </div>
+            <fieldset class="readback">
+              <legend>GPU timing</legend>
+              <label><input type="radio" name="readback" value="compute"> <span>Compute</span></label>
+              <label><input type="radio" name="readback" value="ui"> <span>UI readback</span></label>
+              <label><input type="radio" name="readback" value="pops" checked> <span>Pops readback</span></label>
+            </fieldset>
+            <p id="benchmark-mode-note" class="mode-note">Includes reading every pop back to the CPU.</p>
+          </form>
           <dl class="benchmark-bars">
             <div class="benchmark-row gpu">
-              <dt>NVIDIA RTX 4070 Ti <small>GPU with full readback</small></dt>
+              <dt>NVIDIA RTX 4070 Ti <small id="gpu-detail">GPU with full readback</small></dt>
               <dd><strong>1.55 ms</strong><span class="bar-track" aria-hidden="true"><span style="width: 38.75%"></span></span></dd>
             </div>
             <div class="benchmark-row cpu">
@@ -80,17 +96,8 @@
               <dd><strong>3.97 ms</strong><span class="bar-track" aria-hidden="true"><span style="width: 99.25%"></span></span></dd>
             </div>
           </dl>
+          <p id="benchmark-summary" class="visually-hidden" role="status"></p>
           <div class="benchmark-axis" aria-hidden="true"><span>0</span><span>1</span><span>2</span><span>3</span><span>4 ms</span></div>
-        </figure>
-        <figure class="benchmark-chart benchmark-scaling">
-          <figcaption>Full tick time by population <span>Logarithmic scale · Lower is better</span></figcaption>
-          <ul class="scaling-legend">
-            <li class="gpu">RTX 4070 Ti with full readback</li>
-            <li class="cpu">Ryzen 7 7800X3D, 16 CPU threads</li>
-          </ul>
-          <img src="benchmark-tiers.svg" width="760" height="345" loading="lazy"
-               alt="Line chart across seven population tiers from 1,024 to 100 million pops. The CPU leads at 1,024 pops. The GPU leads from 50,000 pops onward, reaching 152 ms versus 318 ms for the CPU at 100 million.">
-          <p class="scaling-note">Linux desktop benchmark · <a href="https://github.com/ZBager/Terni/blob/main/docs/benchmark.md#every-size">View timings for every tier</a></p>
         </figure>
       </div>
     </section>

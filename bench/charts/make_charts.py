@@ -6,15 +6,13 @@
 
 Needs Python 3 and matplotlib; only for updating the documentation. Every chart is
 written twice, for light and dark pages: docs/images/benchmark/<name>-light.svg and
-<name>-dark.svg. The desktop comparison for GitHub Pages is written to
-site/benchmark-tiers.svg.
+<name>-dark.svg.
 """
 
 import csv
 import math
 import os
 from collections import defaultdict
-from io import StringIO
 
 import matplotlib
 
@@ -196,34 +194,6 @@ def tiers_time(rows, mode):
     fig.legend(handles=handles, loc="lower left", bbox_to_anchor=(0.012, 0.0), ncol=3, frameon=False,
                fontsize=8.5, labelcolor=t["ink2"], handlelength=2.2, columnspacing=1.4)
     save(fig, "tiers-time", mode)
-
-
-def site_tiers_time(rows):
-    """Linux desktop comparison for the GitHub Pages benchmark section."""
-    theme = dict(surface="#26263a", ink2="#c5bed2", muted="#c5bed2", grid="#3b384d", axis="#656078")
-    fig, ax = plt.subplots(figsize=(7.6, 3.45))
-    fig.subplots_adjust(left=0.12, right=0.97, top=0.95, bottom=0.13)
-    style(fig, ax, theme)
-    ax.tick_params(labelsize=11)
-    ax.set_yscale("log")
-    ax.set_ylim(0.022, 500)
-    ax.set_xlim(-0.25, len(TIERS) - 0.75)
-    ax.set_xticks(range(len(TIERS)), [POP_LABEL[tier] for tier in TIERS])
-    ax.set_yticks([0.03, 0.1, 1, 10, 100], ["0.03", "0.1", "1", "10", "100 ms"])
-    ax.minorticks_off()
-    for kind, color, linestyle, marker in [
-        ("discrete", "#f2b156", "-", "o"),
-        ("cpu_all", "#e2dbe6", "--", "s"),
-    ]:
-        times = [find(rows, "Desktop", kind, tier)["total_ms"] for tier in TIERS]
-        ax.plot(range(len(TIERS)), times, color=color, linestyle=linestyle, marker=marker,
-                markersize=6, markeredgecolor=theme["surface"], markeredgewidth=1.1, linewidth=2.2)
-    path = os.path.join(HERE, "..", "..", "site", "benchmark-tiers.svg")
-    svg = StringIO()
-    fig.savefig(svg, format="svg", facecolor=theme["surface"], metadata={"Date": None})
-    with open(path, "w", encoding="utf-8") as asset:
-        asset.writelines(line.rstrip() + "\n" for line in svg.getvalue().splitlines())
-    plt.close(fig)
 
 
 # ---------------------------------------------------------------------------------------
@@ -427,7 +397,6 @@ def medium_machines(rows, mode):
 def main():
     rows = load()
     plt.rcParams.update({"svg.fonttype": "path", "font.family": "DejaVu Sans", "svg.hashsalt": "terni"})
-    site_tiers_time(rows)
     for mode in ("light", "dark"):
         tiers_time(rows, mode)
         tiers_speedup(rows, mode)

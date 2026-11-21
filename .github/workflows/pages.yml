@@ -30,7 +30,7 @@ jobs:
       - name: Prepare static site
         run: |
           mkdir -p _site/assets
-          cp site/index.html site/style.css site/benchmark-tiers.svg _site/
+          cp site/index.html site/style.css site/benchmark.js _site/
           cp docs/images/branding/terni-hero-icon.png _site/assets/
       - uses: actions/upload-pages-artifact@v4
         with:
