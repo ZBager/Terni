@@ -82,6 +82,16 @@
           </dl>
           <div class="benchmark-axis" aria-hidden="true"><span>0</span><span>1</span><span>2</span><span>3</span><span>4 ms</span></div>
         </figure>
+        <figure class="benchmark-chart benchmark-scaling">
+          <figcaption>Full tick time by population <span>Logarithmic scale · Lower is better</span></figcaption>
+          <ul class="scaling-legend">
+            <li class="gpu">RTX 4070 Ti with full readback</li>
+            <li class="cpu">Ryzen 7 7800X3D, 16 CPU threads</li>
+          </ul>
+          <img src="benchmark-tiers.svg" width="760" height="345" loading="lazy"
+               alt="Line chart across seven population tiers from 1,024 to 100 million pops. The CPU leads at 1,024 pops. The GPU leads from 50,000 pops onward, reaching 152 ms versus 318 ms for the CPU at 100 million.">
+          <p class="scaling-note">Linux desktop benchmark · <a href="https://github.com/ZBager/Terni/blob/main/docs/benchmark.md#every-size">View timings for every tier</a></p>
+        </figure>
       </div>
     </section>
 
