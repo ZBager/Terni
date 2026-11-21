@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#202032">
+  <meta name="description" content="Terni is an open-source library for deterministic, GPU-accelerated simulation in grand-strategy games.">
+  <meta property="og:title" content="Terni · Deterministic simulation for grand strategy">
+  <meta property="og:description" content="Run populations, economies, and empires on the GPU. Keep every peer in lockstep.">
+  <meta property="og:image" content="https://zbager.github.io/Terni/assets/terni-hero-icon.png">
+  <title>Terni · Deterministic simulation for grand strategy</title>
+  <link rel="icon" href="assets/terni-hero-icon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip" href="#content">Skip to content</a>
+  <header class="top">
+    <div class="wrap top-inner">
+      <a class="brand" href="./"><span class="brand-icon"></span>Terni</a>
+      <nav aria-label="Main navigation">
+        <a href="#simulation">Simulation</a>
+        <a href="#benchmark">Benchmark</a>
+        <a href="#start">Get started</a>
+        <a class="source" href="https://github.com/ZBager/Terni">GitHub</a>
+      </nav>
+    </div>
+  </header>
+  <main id="content">
+    <section class="hero">
+      <div class="wrap hero-layout">
+        <div class="hero-copy">
+          <p class="label">GPU SIMULATION LIBRARY</p>
+          <h1>Big worlds.<br><em>Exact results.</em></h1>
+          <p class="intro">Terni runs the simulation tick of a grand-strategy game on the GPU. Model populations, markets, and empires, and keep every peer in lockstep.</p>
+          <div class="actions">
+            <a class="button primary" href="#start">Run the example</a>
+            <a class="button secondary" href="https://github.com/ZBager/Terni/blob/main/docs/getting-started.md">Read the guide</a>
+          </div>
+          <p class="platforms">C++20 <span>·</span> Vulkan 1.3 <span>·</span> Windows &amp; Linux</p>
+        </div>
+        <div class="hero-art">
+          <img src="assets/terni-hero-icon.png" width="512" height="512" alt="A gold T fitted into a lavender province grid">
+        </div>
+      </div>
+    </section>
+
+    <section class="simulation" id="simulation">
+      <div class="wrap">
+        <h2>Your game sets the rules.</h2>
+        <p class="section-copy">Describe a world in text files and GLSL. Your engine sends commands and reads the results it needs. Terni runs the ordered compute stages and keeps the simulation state on the device.</p>
+        <ol class="stages" aria-label="Mini Galaxy simulation stages">
+          <li><code>planet_growth</code><h3>Grow the population</h3><p>Apply growth and local modifiers per planet.</p></li>
+          <li><code>empire_income</code><h3>Collect taxes</h3><p>Sum planet taxes into each empire’s income.</p></li>
+          <li><code>empire_treasury</code><h3>Update the treasury</h3><p>Add the tick’s income to each empire’s balance.</p></li>
+        </ol>
+        <div class="details-grid">
+          <article><h3>Keep peers in sync</h3><p>Fixed-point arithmetic and stateless randomness give compatible devices the same bits when they run the same world and commands. Compare state hashes to detect divergence.</p><a href="https://github.com/ZBager/Terni/blob/main/docs/determinism.md">Determinism guide</a></article>
+          <article><h3>Give mods control of the rules</h3><p>Mod folders can change starting conditions, balance, and the GLSL rules themselves. Run <code>terni_check</code> before publishing a mod.</p><a href="https://github.com/ZBager/Terni/blob/main/docs/writing-rules.md">Writing rules</a></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="benchmark" id="benchmark">
+      <div class="wrap benchmark-layout">
+        <div>
+          <p class="label">BENCHMARK</p>
+          <h2>One million pops.<br>One simulation tick.</h2>
+          <p class="section-copy">On the RTX 4070 Ti benchmark machine, the rules took 0.16 ms. The full tick took 1.55 ms with every pop read back to the CPU.</p>
+          <a href="https://github.com/ZBager/Terni/blob/main/docs/benchmark.md#medium-the-baseline">See benchmark results</a>
+        </div>
+        <dl class="measurements">
+          <div><dt>GPU compute</dt><dd>0.16 <small>ms</small></dd></div>
+          <div><dt>Full tick with readback</dt><dd>1.55 <small>ms</small></dd></div>
+        </dl>
+      </div>
+    </section>
+
+    <section class="start" id="start">
+      <div class="wrap start-layout">
+        <div>
+          <h2>Run Mini Galaxy.</h2>
+          <p class="section-copy">Build Terni and run 100 ticks of a small world with planets, empires, and taxes. You’ll need CMake, Ninja, a C++20 compiler, the Vulkan SDK dependencies, and shaderc.</p>
+          <div class="actions">
+            <a class="button primary" href="https://github.com/ZBager/Terni/blob/main/docs/getting-started.md">Setup instructions</a>
+            <a class="button secondary" href="https://github.com/ZBager/Terni/releases">GitHub releases</a>
+          </div>
+          <p class="integration">Embedding Terni? <a href="https://github.com/ZBager/Terni/blob/main/docs/embedding.md">Read the integration guide</a> or <a href="https://github.com/ZBager/TerniIntegrations">explore the Godot and Flax plugins</a>.</p>
+        </div>
+        <pre tabindex="0" aria-label="Mini Galaxy build and run commands"><code>git clone https://github.com/ZBager/Terni.git
+cd Terni
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+./build/terni_run examples/mini_galaxy --ticks 100 --dump</code></pre>
+      </div>
+    </section>
+  </main>
+  <footer>
+    <div class="wrap footer-inner">
+      <a class="brand" href="./"><span class="brand-icon"></span>Terni</a>
+      <a href="https://github.com/ZBager/Terni/blob/main/docs/licensing.md">LGPL-2.1 with the Terni Linking Exception</a>
+      <a href="https://github.com/ZBager/Terni/issues">Issue tracker</a>
+    </div>
+  </footer>
+</body>
+</html>
