@@ -91,10 +91,10 @@ nav a { font-size: .94rem; text-decoration: none; }
 .world-size input, .range-endpoints { grid-column: 1 / -1; }
 .world-size input { width: 100%; margin: .35rem 0 0; accent-color: var(--gold); }
 .range-endpoints { display: flex; justify-content: space-between; }
-.readback { display: flex; flex-wrap: wrap; gap: .35rem; border: 0; padding: 0; margin: .9rem 0 .55rem; }
+.readback { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .35rem; min-inline-size: 0; border: 0; padding: 0; margin: .9rem 0 .55rem; }
 .readback legend { margin-bottom: .35rem; padding: 0; }
-.readback label { position: relative; }
-.readback label span { display: inline-block; padding: .35rem .65rem; border: 1px solid var(--line); cursor: pointer; font-size: .875rem; }
+.readback label { position: relative; display: grid; }
+.readback label span { display: grid; place-items: center; padding: .35rem .25rem; border: 1px solid var(--line); cursor: pointer; font-size: .875rem; text-align: center; }
 .readback input { position: absolute; opacity: 0; }
 .readback input:checked + span { color: #251b16; background: var(--gold); border-color: var(--gold); }
 .readback input:focus-visible + span, .world-size input:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
