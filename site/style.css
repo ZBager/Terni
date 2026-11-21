@@ -86,6 +86,7 @@ nav a { font-size: .94rem; text-decoration: none; }
 .world-size { display: grid; grid-template-columns: 1fr auto; gap: .3rem .65rem; }
 .world-size label, .readback legend { font-weight: 700; }
 .world-size output, .range-endpoints, .mode-note { color: var(--muted); font: .875rem/1.5 var(--mono); }
+.mode-note { min-block-size: 3em; white-space: pre-line; }
 .world-size output { color: var(--gold); }
 .world-size input, .range-endpoints { grid-column: 1 / -1; }
 .world-size input { width: 100%; margin: .35rem 0 0; accent-color: var(--gold); }

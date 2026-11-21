@@ -16,19 +16,19 @@ const modes = {
     key: "compute",
     title: "GPU compute time",
     detail: "GPU rules only",
-    note: "Excludes GPU transfers and other tick overhead. The CPU bar shows its full tick.",
+    note: "GPU rules only.\nCPU bar shows the full tick.",
   },
   ui: {
     key: "ui",
     title: "Full tick time",
     detail: "GPU with UI readback",
-    note: "Reads back only the data needed for the map and interface.",
+    note: "Reads map and UI data.\nPop data stays on the GPU.",
   },
   pops: {
     key: "full",
     title: "Full tick time",
     detail: "GPU with full readback",
-    note: "Includes reading every pop back to the CPU.",
+    note: "Reads all pops to the CPU.\nIncludes map and UI data.",
   },
 };
 
@@ -66,7 +66,7 @@ function renderBenchmark() {
   title.textContent = mode.title;
   detail.textContent = mode.detail;
   note.textContent = gpu === null
-    ? "UI readback was measured at 1 million and 100 million pops."
+    ? "No UI timing at this size.\nMeasured at 1M and 100M."
     : mode.note;
 
   const quarter = Math.max(gpu ?? 0, tier.cpu) / 4;
