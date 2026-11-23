@@ -114,7 +114,8 @@ ctest --test-dir build --output-on-failure
 | `bench/` | `terni_bench`: the benchmark world and its rules, the CPU reference, machine details, the frame load behind `--frame-load`; `bench/charts/` holds the results behind the charts in `docs/benchmark.md` and the Python scripts that draw them (documentation only, not part of the build) |
 | `bindings/csharp/` | The C# wrapper over the C API (`Terni/`, .NET Standard 2.1, C# 8) and its test (`tests/`, run by ctest as `c_api_csharp` where `dotnet` is installed) |
 | `docs/` | User documentation, written for outside game developers |
-| `.github/workflows/` | `ci.yml` (every push), `release.yml` (packages for a tag `vX.Y.Z`, or a rehearsal by hand) |
+| `.github/workflows/` | `ci.yml` (every push that changes more than `site/`), `release.yml` (packages for a tag `vX.Y.Z`, or a rehearsal by hand), `pages.yml` (publishes the website) |
+| `site/` | The website, https://zbager.github.io/Terni/: plain HTML, CSS and JavaScript, not part of the build. `pages.yml` names every file it publishes, so add new ones there |
 | `notices/` | The licence notices a game ships: `Terni-NOTICES.txt` (with the rule compiler), `Terni-runtime-NOTICES.txt` |
 
 ## Changes that require other changes
@@ -142,6 +143,9 @@ ctest --test-dir build --output-on-failure
   change, since old results no longer compare. Update `docs/benchmark.md` if the sizes or
   the reference results change, and redraw its charts: add the machine's JSON files with
   `bench/charts/add_results.py`, then run `bench/charts/make_charts.py` (matplotlib).
+  The website has its own copy of the Linux desktop's rows: update `tiers` in
+  `site/benchmark.js`, and the `medium` times, bar widths and axis written into
+  `site/index.html` (shown without JavaScript).
 - **The C API** (`include/terni/terni.h`, `src/c_api.cpp`): a call or struct added or
   changed there goes into `docs/c-api.md`, `tests/test_c_api.c` and the C# wrapper
   (`bindings/csharp/Terni/Native.cs`, `Terni.cs`, and its test) too. The wrapper stays

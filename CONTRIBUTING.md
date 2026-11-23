@@ -23,8 +23,8 @@ well, so every change is checked against a CPU driver too. A change is ready whe
 whole suite passes on every device you have. `CMakePresets.json` has presets for Linux,
 Visual Studio and MSYS2 (see [getting started](docs/getting-started.md)).
 
-Continuous integration (`.github/workflows/ci.yml`) builds every push with GCC on Linux,
-with Visual Studio 2022 and 2026, and with MinGW-w64, and runs the whole suite on
+Continuous integration (`.github/workflows/ci.yml`) builds every push that
+changes more than the website (`site/`) with GCC on Linux, with Visual Studio 2022 and 2026, and with MinGW-w64, and runs the whole suite on
 lavapipe, the C# wrapper's test included. Keep the code standard C++20: no compiler extensions such as `__int128`
 (tests may use it as a reference, built only where the compiler has it), and only ASCII
 in string literals and generated text.
@@ -56,7 +56,8 @@ in string literals and generated text.
    and tests the packages, and makes a draft release with them, `SHA256SUMS` and the
    changelog section as notes.
 5. Check the draft (download a package, run `bin/terni_run` on `examples/mini_galaxy`
-   from the source tree) and publish it.
+   from the source tree) and publish it. After the first release, also show the
+   "GitHub releases" button in `site/index.html`, which is commented out until then.
 
 ## Licence
 

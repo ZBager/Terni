@@ -5,6 +5,8 @@
 
 **Deterministic, GPU-accelerated simulation for grand-strategy games.**
 
+[Website](https://zbager.github.io/Terni/)
+
 Terni runs the tick of a strategy game — pops, markets, armies, realms — as Vulkan
 compute shaders, and gives **bit-identical results on every GPU and CPU**. That makes
 it fast enough for millions of simulated entities and exact enough to drive

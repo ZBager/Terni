@@ -8,8 +8,11 @@
 name: CI
 
 on:
+  # The website is not part of the build; pages.yml publishes it.
   push:
+    paths-ignore: ['site/**']
   pull_request:
+    paths-ignore: ['site/**']
   workflow_dispatch:
 
 permissions:
