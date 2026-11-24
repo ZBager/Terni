@@ -65,6 +65,7 @@ struct ComputeRunner::Impl {
         uint64_t clock = 0;      // the device clock when it was submitted; 0 if unknown
         std::chrono::steady_clock::time_point submitted, done;
     } flight;
+    uint32_t spin_us = 0;  // set_tick_spin()
     double last_tick_ms = 0;
     double last_gpu_ms = 0;  // stages only, from GPU timestamps
     double last_device_ms = 0;  // submission to the end of the tick, as the device saw it
@@ -220,7 +221,7 @@ struct ComputeRunner::Impl {
     // its time and timestamps, and make its readbacks the current ones.
     void finish() {
         if (!flight.active) return;
-        ctx.wait_submitted();
+        ctx.wait_submitted(spin_us);
         if (!flight.seen_done) flight.done = std::chrono::steady_clock::now();
         if (flight.pre) ctx.free_command_buffer(flight.pre);
         if (flight.post) ctx.free_command_buffer(flight.post);
@@ -482,6 +483,8 @@ bool ComputeRunner::tick_done() {
 }
 
 void ComputeRunner::tick_wait() { impl_->finish(); }
+
+void ComputeRunner::set_tick_spin(uint32_t microseconds) { impl_->spin_us = microseconds; }
 
 bool ComputeRunner::tick_in_flight() const { return impl_->flight.active; }
 

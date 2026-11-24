@@ -4,6 +4,7 @@
 #include "utf8_path.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -480,8 +481,14 @@ bool VulkanContext::submitted_done() {
     return true;
 }
 
-void VulkanContext::wait_submitted() {
+void VulkanContext::wait_submitted(uint32_t spin_us) {
     if (!async_pending_) return;
+    if (spin_us > 0 && props_.deviceType != VK_PHYSICAL_DEVICE_TYPE_CPU) {
+        const auto until = std::chrono::steady_clock::now() + std::chrono::microseconds(spin_us);
+        do {
+            if (submitted_done()) return;
+        } while (std::chrono::steady_clock::now() < until);
+    }
     VK_CHECK(vkWaitForFences(device_, 1, &async_fence_, VK_TRUE, UINT64_MAX));
     VK_CHECK(vkResetFences(device_, 1, &async_fence_));
     async_pending_ = false;

@@ -126,7 +126,9 @@ build it to load `terni_runtime` instead.
    `cache_only`.
 4. Tick: `terni_tick()` blocks; `terni_begin_tick()`, `terni_tick_ready()` and
    `terni_end_tick()` let your program keep rendering while the GPU works
-   ([Embedding](embedding.md#a-tick-that-does-not-block)).
+   ([Embedding](embedding.md#a-tick-that-does-not-block)). For very small ticks,
+   `terni_set_tick_spin()` before the start makes waits spin before they sleep
+   ([Embedding](embedding.md#waiting-for-small-ticks)).
 5. Read results: `terni_subscribe()` once for each field you show every frame, then
    `terni_subscription()` after each tick (no extra GPU round trip). `terni_read_field()`
    waits for the GPU; keep it for occasional reads.
@@ -216,7 +218,7 @@ Every function is declared, with a comment, in `include/terni/terni.h`.
 | World | `terni_world_create`, `terni_world_destroy`, `terni_load`, `terni_unload`, `terni_loaded`, `terni_diagnostic_count`, `terni_diagnostic` |
 | What the game declares | `terni_entity_count`, `terni_entity_name`, `terni_find_entity`, `terni_capacity`, `terni_dynamic`, `terni_field_count`, `terni_field_name`, `terni_find_field`, `terni_field_info_of`, `terni_find_row`, `terni_row_id`, `terni_define_count`, `terni_define_name`, `terni_find_define`, `terni_define_value`, `terni_bundle_count`, `terni_bundle_name`, `terni_find_bundle`, `terni_modifier_key_count`, `terni_modifier_key_name`, `terni_find_modifier_key`, `terni_checksum` |
 | Before the start | `terni_set_capacity`, `terni_set_modifier_capacity`, `terni_set_start_count`, `terni_start_count`, `terni_write_start`, `terni_read_start`, `terni_add_start_modifier`, `terni_compile_rules` |
-| Starting and stopping | `terni_start_options_init`, `terni_start`, `terni_stop`, `terni_running`, `terni_device_lost`, `terni_simulate_device_lost` |
+| Starting and stopping | `terni_start_options_init`, `terni_set_tick_spin`, `terni_start`, `terni_stop`, `terni_running`, `terni_device_lost`, `terni_simulate_device_lost` |
 | Ticks | `terni_tick`, `terni_begin_tick`, `terni_tick_ready`, `terni_end_tick`, `terni_tick_in_flight`, `terni_ticks`, `terni_tick_checked`, `terni_order_issue_at` |
 | State | `terni_read_field`, `terni_write_field`, `terni_write_values`, `terni_subscribe`, `terni_subscription` |
 | Entities at run time | `terni_create_entity`, `terni_destroy_entity`, `terni_alive`, `terni_generation`, `terni_rows_in_use`, `terni_rows_alive`, `terni_alive_bits`, `terni_rows_free` |

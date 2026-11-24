@@ -173,6 +173,7 @@ namespace Terni
 
         // ---- starting and stopping ----
         [DllImport(Library)] internal static extern void terni_start_options_init(out StartOptions options);
+        [DllImport(Library)] internal static extern int terni_set_tick_spin(IntPtr world, uint microseconds);
         [DllImport(Library)] internal static extern int terni_start(IntPtr world, in StartOptions options);
         [DllImport(Library)] internal static extern void terni_stop(IntPtr world);
         [DllImport(Library)] internal static extern int terni_running(IntPtr world);

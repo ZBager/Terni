@@ -129,7 +129,9 @@ public:
     // if nothing is pending).
     void submit(const std::vector<VkCommandBuffer>& cmds);
     bool submitted_done();
-    void wait_submitted();
+    // Spins for up to `spin_us` microseconds before it sleeps; never on a software device,
+    // whose own threads need the core.
+    void wait_submitted(uint32_t spin_us = 0);
 
     VkShaderModule load_shader(const std::string& spirv_path);
     VkShaderModule create_shader(const std::vector<uint32_t>& spirv);

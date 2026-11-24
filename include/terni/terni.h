@@ -273,6 +273,12 @@ TERNI_API void terni_start_options_init(terni_start_options* options);
 /* Starts the simulation on a device (stops a running one first). Options may be NULL for
  * the defaults. */
 TERNI_API terni_status terni_start(terni_world* world, const terni_start_options* options);
+/* How long waits for a tick (terni_tick(), terni_end_tick(), and calls that collect a
+ * tick) spin before they sleep, in microseconds; 0, as a new world has it, sleeps at once.
+ * Holds from the next terni_start() on. Saves the 10 us or so a sleeping thread takes to
+ * wake: worth it only for ticks well under a millisecond. It keeps a CPU core busy
+ * meanwhile, and does nothing on software devices. */
+TERNI_API terni_status terni_set_tick_spin(terni_world* world, uint32_t microseconds);
 TERNI_API void terni_stop(terni_world* world);
 TERNI_API int32_t terni_running(const terni_world* world);
 /* The device was lost (a rule ran too long and the driver reset the GPU, or the GPU went

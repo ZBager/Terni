@@ -136,6 +136,7 @@ namespace Terni
         public bool CacheOnly;
         public bool Validation;
         public string? ShaderLibraryDir;
+        public int SpinMicroseconds;  // waits for a tick spin this long before they sleep (terni_set_tick_spin)
     }
 
     internal static class Utf8
@@ -477,6 +478,8 @@ namespace Terni
             {
                 o.cache_dir = Utf8.Alloc(options.CacheDir);
                 o.shader_library_dir = Utf8.Alloc(options.ShaderLibraryDir);
+                if (options.SpinMicroseconds < 0) throw new ArgumentException("SpinMicroseconds is negative");
+                Check(Native.terni_set_tick_spin(H, (uint)options.SpinMicroseconds));
                 Check(Native.terni_start(H, o));
             }
             finally

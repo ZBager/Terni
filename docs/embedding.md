@@ -242,6 +242,19 @@ render();                                 // tick_result() still holds the last 
   of a key that inherits in several steps).
 - One tick is in flight at a time: `begin_tick()` collects the previous one first.
 
+### Waiting for small ticks
+
+A thread that waits for the GPU goes to sleep, and waking it takes 10 microseconds or so.
+That is nothing beside a tick of several milliseconds, but a good part of a very small one.
+`options.spin_us = 200` makes waits for a tick check for up to 200 microseconds before they
+sleep. In a world of 6,144 rows with one stage and one readback, it shortens a tick from
+0.037 to 0.025 ms on a laptop RTX 4050 and from 0.083 to 0.075 ms on a Radeon 760M.
+
+- The waiting thread keeps a CPU core busy meanwhile, so leave it off (the default) unless
+  your ticks take well under a millisecond and you run many of them in a row (a server, a
+  fast-forward). With `begin_tick()` and `tick_ready()` there is usually nothing to wait for.
+- It does nothing on software devices, whose own threads need the core.
+
 ### Host-side logic
 
 A typical host does the work that needs a graph search or a decision on the CPU,

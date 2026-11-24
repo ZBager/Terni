@@ -371,7 +371,11 @@ static void compiled_ahead(void) {
     terni_start_options_init(&o);
     o.cache_dir = dir;
     o.cache_only = 1;
+    CHECK(terni_set_tick_spin(NULL, 100) == TERNI_INVALID);
+    OK(terni_set_tick_spin(w, 100));
     OK(terni_start(w, &o));
+    OK(terni_tick(w));
+    CHECK(terni_ticks(w) == 1);
     OK(terni_compile_stats_of(w, &stats));
     CHECK(stats.compiled == 0 && stats.cached >= 5);
     // an options struct from an older, smaller header: the fields it lacks keep their defaults

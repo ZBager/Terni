@@ -385,6 +385,12 @@ struct GameSimOptions {
     std::string shader_library_dir;                       // "" = the GLSL library embedded in Terni;
                                                           // else a folder containing terni/*.glsl
     bool validation = false;                              // Vulkan validation layers
+    uint32_t spin_us = 0;                                 // waits for a tick (tick(), end_tick(), and calls that
+                                                          // collect one) spin for up to this many microseconds
+                                                          // before they sleep: saves the 10 us or so a sleeping
+                                                          // thread takes to wake, worth it only for ticks well
+                                                          // under a millisecond, and keeps a CPU core busy
+                                                          // meanwhile. No effect on software devices.
 };
 
 struct CompileStats {

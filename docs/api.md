@@ -96,6 +96,7 @@ their world can fill the starting state before creating a `GameSim`.
 | `cache_only` | false | Never compile; every rule must be in the cache |
 | `shader_library_dir` | "" | A folder with `terni/*.glsl` instead of the embedded library |
 | `validation` | false | Vulkan validation layers |
+| `spin_us` | 0 | Waits for a tick spin for up to this many microseconds before they sleep ([Embedding](embedding.md#waiting-for-small-ticks)) |
 
 ### `GameSim`
 

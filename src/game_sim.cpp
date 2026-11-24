@@ -1039,6 +1039,7 @@ struct GameSim::Impl {
     int hash_pipeline = -1;                    // on the current runner, once made
     std::vector<std::string> stage_names;      // the runner's stages: the rules', then the built-in ones
     bool validation = false;
+    uint32_t spin_us = 0;
     detail::DeviceHealthMonitor health;
     uint64_t earlier_sync_reads = 0;  // on runners this simulation has moved away from
     std::unique_ptr<ComputeRunner> runner;
@@ -1083,8 +1084,10 @@ struct GameSim::Impl {
         std::vector<ComputeSpecConstant> capacities;
         for (size_t e = 0; e < game.entities.size(); ++e)
             capacities.push_back({CAPACITY_CONSTANT0 + uint32_t(e), game.entities[e].capacity});
-        return std::make_unique<ComputeRunner>(device, validation, "", buffers, stages, std::vector<uint32_t>{}, true,
-                                               capacities);
+        auto made = std::make_unique<ComputeRunner>(device, validation, "", buffers, stages, std::vector<uint32_t>{},
+                                                    true, capacities);
+        made->set_tick_spin(spin_us);
+        return made;
     }
 
     // The rows that count towards `key` on (entity, row): the row itself, then the rows it
@@ -1406,6 +1409,7 @@ GameSim::GameSim(const Game& game, const GameSimOptions& options) : impl_(std::m
 
     m.spirv = std::move(spirv);
     m.validation = options.validation;
+    m.spin_us = options.spin_us;
     m.runner = m.make_runner(static_cast<uint32_t>(device), nullptr);
     for (const auto& st : game.stages) m.stage_names.push_back(st.name);
     for (const auto& st : spawn_stage_sources(game)) m.stage_names.push_back(st.name);

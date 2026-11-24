@@ -59,6 +59,8 @@ struct terni_world {
     std::vector<uint8_t> save;
     std::string device_name, report;
 
+    uint32_t spin_us = 0;  // terni_set_tick_spin()
+
     void clear_lists() {
         issues.clear();
         contributions.clear();
@@ -622,10 +624,16 @@ terni_status terni_start(terni_world* world, const terni_start_options* options)
         s.cache_only = o.cache_only != 0 || !terni::can_compile_rules();
         s.validation = o.validation != 0;
         if (o.shader_library_dir) s.shader_library_dir = o.shader_library_dir;
+        s.spin_us = world->spin_us;
         world->lost = false;
         world->simulate_lost = false;
         world->sim = std::make_unique<terni::GameSim>(g, s);
     });
+}
+
+terni_status terni_set_tick_spin(terni_world* world, uint32_t microseconds) {
+    TERNI_NEED(world);
+    return guard(world, [&] { world->spin_us = microseconds; });
 }
 
 void terni_stop(terni_world* world) {

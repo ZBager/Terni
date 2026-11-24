@@ -60,7 +60,7 @@ static class Program
         {
             using var w = new World();
             w.Load(galaxy);
-            w.Start(new StartOptions { Device = d.Index });
+            w.Start(new StartOptions { Device = d.Index, SpinMicroseconds = 100 });
             Check(w.DeviceName == d.Name, "device name");
             for (int t = 0; t < 200; ++t) w.Tick();
             ulong hash = w.StateHash;

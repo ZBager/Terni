@@ -63,6 +63,8 @@ public:
     bool tick_done();                                      // never blocks
     void tick_wait();                                      // blocks; nothing to do if none is in flight
     bool tick_in_flight() const;                           // submitted and not yet waited for
+    // Waits for a tick spin for up to this many microseconds before they sleep (0: at once).
+    void set_tick_spin(uint32_t microseconds);
     // Copy `bytes` of buffer `binding`, starting at byte `offset`, back to the host.
     void read(uint32_t binding, void* dst, uint64_t bytes, uint64_t offset = 0);
     // Copy host data into buffer `binding` at byte `offset` (between ticks).

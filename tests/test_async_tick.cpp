@@ -158,6 +158,22 @@ int main() {
         a.tick(), a.tick(), a.tick();
         CHECK(state_hash(a) == state_hash(b));
         hashes.push_back(state_hash(b));
+
+        // ---- waits that spin first: the same ticks, whether the spin sees them done or gives up
+        for (uint32_t us : {1u, 1000000u}) {
+            o.spin_us = us;
+            GameSim c(*w.game, o);
+            for (uint32_t k = 0; k < TICKS; ++k) {
+                commands(c, w, k);
+                if (k % 2 == 0) c.tick();
+                else c.begin_tick(), c.end_tick();
+            }
+            c.begin_tick();
+            CHECK(c.read_field(w.town, "pop", 0, 1).size() == 1);  // collects it
+            c.move_to_device(d.index);
+            c.tick(), c.tick();
+            CHECK(c.ticks() == TICKS + 3 && state_hash(c) == state_hash(b));
+        }
     }
     CHECK(!hashes.empty());
     for (uint64_t h : hashes) CHECK(h == hashes.front());
