@@ -113,7 +113,9 @@ Convert to whole units (`agg` fields, `to_agg`) before adding, list the field in
 Work that happens once a month belongs in a stage with a schedule
 (`every = 30 offset = 29` in `stages.txt`) rather than in an `if` on `terni.tick`: on the
 other days the stage is not dispatched at all. Fields it lists in `clear` are zeroed
-only when it runs, so last month's total stays readable all month.
+only when it runs, so last month's total stays readable all month. To zero a field on a
+schedule without a stage (a month's total that daily rules add to), give it a `clear` line
+of its own in `stages.txt` ([Data format](data-format.md#stagestxt)).
 
 When thousands of threads add to a few rows, `terni/slot_table.glsl` pre-sums them
 per workgroup in shared memory first. Define `TABLE_SLOTS` and `VALUES` and include it

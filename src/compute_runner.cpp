@@ -90,6 +90,7 @@ struct ComputeRunner::Impl {
     std::string shader_dir;
     VkBool32 shared_reduction = VK_FALSE;
     std::vector<uint32_t> zero_each_tick;
+    std::vector<std::vector<uint32_t>> clears;
     std::vector<ComputeSpecConstant> constants;
     // order check (tick_checked), made on first use
     std::vector<VkPipeline> check_pipelines;  // TERNI_ORDER_CHECK = 1
@@ -142,6 +143,8 @@ struct ComputeRunner::Impl {
         std::vector<uint32_t> out = zero_each_tick;
         for (size_t s = 0; s < stages.size(); ++s)
             if (run[s]) out.insert(out.end(), stages[s].zero.begin(), stages[s].zero.end());
+        for (size_t c = 0; c < clears.size(); ++c)
+            if (run[stages.size() + c]) out.insert(out.end(), clears[c].begin(), clears[c].end());
         std::sort(out.begin(), out.end());
         out.erase(std::unique(out.begin(), out.end()), out.end());
         return out;
@@ -185,8 +188,9 @@ struct ComputeRunner::Impl {
     }
 
     std::vector<bool> run_mask(const std::vector<bool>& run) const {
-        if (run.empty()) return std::vector<bool>(stages.size(), true);
-        if (run.size() != stages.size()) throw std::invalid_argument("tick: one run entry per stage");
+        const size_t n = stages.size() + clears.size();
+        if (run.empty()) return std::vector<bool>(n, true);
+        if (run.size() != n) throw std::invalid_argument("tick: one run entry per stage and list of clears");
         return run;
     }
 
@@ -310,7 +314,8 @@ struct ComputeRunner::Impl {
 ComputeRunner::ComputeRunner(uint32_t device_index, bool validation, const std::string& shader_dir,
                              const std::vector<ComputeBufferSpec>& specs, const std::vector<ComputeStageSpec>& stages,
                              const std::vector<uint32_t>& zero_each_tick, bool shared_reduction,
-                             const std::vector<ComputeSpecConstant>& constants)
+                             const std::vector<ComputeSpecConstant>& constants,
+                             const std::vector<std::vector<uint32_t>>& clears)
     : impl_(std::make_unique<Impl>(device_index, validation)) {
     Impl& m = *impl_;
     VulkanContext& ctx = m.ctx;
@@ -320,6 +325,7 @@ ComputeRunner::ComputeRunner(uint32_t device_index, bool validation, const std::
     m.shader_dir = shader_dir;
     m.shared_reduction = shared_reduction ? VK_TRUE : VK_FALSE;
     m.zero_each_tick = zero_each_tick;
+    m.clears = clears;
     for (const auto& c : constants)
         if (c.id < 2) throw std::invalid_argument("ComputeRunner: specialization constants 0 and 1 are the runner's own");
     m.constants = constants;
@@ -417,7 +423,7 @@ ComputeRunner::ComputeRunner(uint32_t device_index, bool validation, const std::
     m.timings.assign(S, {});
     m.stage_ns.assign(S, 0.0);
 
-    m.tick_cmd(std::vector<bool>(S, true));  // the usual tick, recorded up front
+    m.tick_cmd(m.run_mask({}));  // the usual tick, recorded up front
 }
 
 ComputeRunner::~ComputeRunner() {

@@ -1064,6 +1064,14 @@ struct GameSim::Impl {
     std::unique_ptr<ComputeRunner> runner;
     explicit Impl(const Game& g) : game(g), mods(g) {}
 
+    std::vector<uint32_t> bindings_of(const std::vector<std::string>& fields) const {
+        std::vector<uint32_t> out;
+        for (const auto& f : fields)
+            for (size_t k = 0; k < column_names.size(); ++k)
+                if (column_names[k] == f) out.push_back(static_cast<uint32_t>(k + 2));
+        return out;
+    }
+
     // A runner on `device` that starts from `defines`, `state`, the columns and the modifier
     // totals given (the store's own if null). It uploads them before it returns.
     std::unique_ptr<ComputeRunner> make_runner(uint32_t device, const std::vector<std::span<const int32_t>>& columns,
@@ -1085,11 +1093,8 @@ struct GameSim::Impl {
             const uint32_t capacity = game.entity(s.for_each)->capacity;
             // workgroup dispatch: one 256-thread group per entity (FOR_EACH_GROUP strides past 65535)
             const uint32_t elements = s.dispatch == Dispatch::Workgroup ? std::min(capacity, 65535u) * 256u : capacity;
-            std::vector<uint32_t> zero;  // cleared only in the ticks the stage runs, so a total lasts until its next run
-            for (const auto& c : s.clear)
-                for (size_t k = 0; k < column_names.size(); ++k)
-                    if (column_names[k] == c) zero.push_back(static_cast<uint32_t>(k + 2));
-            stages.push_back({s.name, elements, spirv[i], std::move(zero)});
+            // cleared only in the ticks the stage runs, so a total lasts until its next run
+            stages.push_back({s.name, elements, spirv[i], bindings_of(s.clear)});
         }
         const auto built_in = spawn_stage_sources(game);  // after the rules, as in rule_sources
         std::vector<uint32_t> scratch;  // zeroed when a tick starts
@@ -1101,11 +1106,14 @@ struct GameSim::Impl {
         }
         stages.push_back({"terni_tick", 1, spirv.back(), {}});  // built-in last stage (rule_sources)
 
+        std::vector<std::vector<uint32_t>> clears;
+        for (const auto& c : game.clears) clears.push_back(bindings_of(c.fields));
+
         std::vector<ComputeSpecConstant> capacities;
         for (size_t e = 0; e < game.entities.size(); ++e)
             capacities.push_back({CAPACITY_CONSTANT0 + uint32_t(e), game.entities[e].capacity});
         auto made = std::make_unique<ComputeRunner>(device, validation, "", buffers, stages, std::vector<uint32_t>{},
-                                                    true, capacities);
+                                                    true, capacities, clears);
         made->set_tick_spin(spin_us);
         return made;
     }
@@ -1149,7 +1157,8 @@ struct GameSim::Impl {
         std::memcpy(p.rows.data(), runner->tick_readback(p.read.readback), runner->tick_readback_bytes(p.read.readback));
         p.stale = false;
     }
-    // Which stages run in the coming tick (the built-in last one always does).
+    // Which stages run in the coming tick (the built-in last one always does), and after
+    // them which of the game's clears.
     std::vector<bool> stages_now() const {
         std::vector<bool> run(spirv.size(), true);
         for (size_t s = 0; s < game.stages.size(); ++s) run[s] = game.stages[s].runs_in(now);
@@ -1159,6 +1168,7 @@ struct GameSim::Impl {
             for (const auto& line : e.spawns) lines |= line.runs_in(now);
         for (size_t s = game.stages.size(); s < stage_names.size(); ++s)
             if (stage_names[s].starts_with("terni_spawn_") && stage_names[s] != "terni_spawn_bits") run[s] = lines;
+        for (const auto& c : game.clears) run.push_back(c.runs_in(now));
         return run;
     }
     void read_column(size_t c, std::vector<int32_t>& words) {
@@ -1762,6 +1772,10 @@ uint64_t game_checksum(const Game& game) {
         for (const auto& c : s.clear) w.str(c);
         if (s.dispatch == Dispatch::Workgroup) w.str("dispatch=workgroup");  // absent for the default
         if (s.every != 1) w.str("schedule"), w.u32(s.every), w.u32(s.offset);  // absent for every tick
+    }
+    for (const auto& c : game.clears) {  // nothing for a game without them
+        w.str("clear"), w.u32(c.every), w.u32(c.offset), w.u32(static_cast<uint32_t>(c.fields.size()));
+        for (const auto& f : c.fields) w.str(f);
     }
     return fnv64(w.buf.data(), w.buf.size());
 }

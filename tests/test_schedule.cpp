@@ -3,8 +3,10 @@
 // Stage schedules (`every`, `offset`): a scheduled stage runs only in its ticks, its
 // `clear` fields are zeroed only then (so a total lasts until the next run), saves
 // continue on the same schedule, tick_checked() follows it, stage_times() says which
-// stages ran and what they cost, and every device agrees.
+// stages ran and what they cost, and every device agrees. Clears without a stage follow
+// their own schedules.
 // The data-folder syntax and its errors, and the checksum, are checked too.
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
@@ -69,6 +71,27 @@ std::unique_ptr<Game> make_world(bool scheduled) {
     b.create(realm);
     for (uint32_t t = 0; t < TOWNS; ++t) b.create(town);
     return b.finish();
+}
+
+// A week's and a pair of counts, zeroed by clears without a stage.
+std::unique_ptr<Game> make_clear_world() {
+    WorldBuilder b;
+    const uint32_t town = b.entity("town", 64);
+    b.field(town, "days", FieldType::Int);
+    b.field(town, "pair", FieldType::Int, "", 2);
+    b.stage("count", "town",
+            "void main() {\n    FOR_EACH_TOWN(t) {\n        town_days[t] += 1;\n"
+            "        town_pair[t * 2u] += 2;\n        town_pair[t * 2u + 1u] += 1;\n    }\n}\n");
+    b.clear({"town.days", "town.pair"}, 7, 3);
+    b.clear({"town.pair"}, 4);
+    b.create_rows(town, TOWNS);
+    return b.finish();
+}
+// Ticks from the last one a schedule named, up to tick k, both included; from the start if none.
+int32_t ticks_since(uint64_t k, uint64_t every, uint64_t offset) {
+    for (uint64_t j = k + 1; j-- > 0;)
+        if (j % every == offset) return int32_t(k - j + 1);
+    return int32_t(k + 1);
 }
 
 // Host model of the world after `ticks` ticks.
@@ -154,6 +177,40 @@ int main() {
         e = load_errors("negative", "grow = { for_each = town  every = 5  offset = -1 }\n");
         CHECK(e.find("offset must be a whole number of ticks") != std::string::npos);
     }
+    // ---- clears without a stage
+    {
+        std::unique_ptr<Game> g;
+        const std::string grow = "grow = { for_each = town }\n";
+        CHECK(load_errors("clear", grow + "new_month = { clear = { town.days } every = 30 offset = 3 }\n", &g).empty());
+        CHECK(g->stages.size() == 1 && g->clears.size() == 1 && g->clears[0].fields == std::vector<std::string>{"town.days"});
+        CHECK(g->clears[0].every == 30 && g->clears[0].offset == 3 && g->clears[0].runs_in(33) && !g->clears[0].runs_in(30));
+        CHECK(load_errors("clear_daily", grow + "start = { clear = { town.days } }\n", &g).empty());
+        CHECK(g->clears.size() == 1 && g->clears[0].every == 1 && g->clears[0].runs_in(0));
+
+        std::string e = load_errors("clear_field", grow + "a = { clear = { town.nights } }\n");
+        CHECK(e.find("stages.txt:2: clear: unknown field 'town.nights'") != std::string::npos);
+        e = load_errors("clear_offset", grow + "a = { clear = { town.days } every = 5 offset = 5 }\n");
+        CHECK(e.find("stages.txt:2: clear: offset 5 must be less than every (5)") != std::string::npos);
+        e = load_errors("clear_every", grow + "a = { clear = { town.days } every = 0 }\n");
+        CHECK(e.find("every must be a whole number of ticks") != std::string::npos);
+        e = load_errors("clear_empty", grow + "a = { clear = { } }\n");
+        CHECK(e.find("clear: no fields given") != std::string::npos);
+        // a line with a rule, a for_each or a dispatch is a stage, and must be a whole one
+        e = load_errors("clear_rule", "grow = { clear = { town.days } }\n");
+        CHECK(e.find("stage 'grow': unknown for_each entity ''") != std::string::npos);
+        e = load_errors("clear_for_each", grow + "a = { for_each = town clear = { town.days } }\n");
+        CHECK(e.find("missing rule source rules/a.glsl") != std::string::npos);
+        e = load_errors("no_clear", grow + "a = { every = 2 }\n");
+        CHECK(e.find("missing rule source rules/a.glsl") != std::string::npos);
+
+        WorldBuilder b;
+        b.entity("town", 4);
+        b.clear({"town.days"});
+        b.clear({}, 2);
+        b.clear({"town.days"}, 0);
+        b.clear({"town.days"}, 3, 3);
+        CHECK(b.game().errors.size() == 4);
+    }
     {
         auto plain = make_world(false), scheduled = make_world(true);
         WorldBuilder b;  // every = 1 is the default: the same checksum as no schedule
@@ -170,6 +227,14 @@ int main() {
         auto other_offset = make_world(true);
         other_offset->stages[1].offset = OFFSET + 1;
         CHECK(game_checksum(*scheduled) != game_checksum(*other_offset));
+        auto cleared = make_world(true);
+        cleared->clears.push_back({{"town.seen"}, 3, 1, {}});
+        const uint64_t with = game_checksum(*cleared);
+        CHECK(with != game_checksum(*scheduled));
+        cleared->clears[0].offset = 2;
+        CHECK(game_checksum(*cleared) != with);
+        cleared->clears[0] = {{"town.days"}, 3, 1, {}};
+        CHECK(game_checksum(*cleared) != with);
     }
 
     // ---- simulation on every device
@@ -179,8 +244,11 @@ int main() {
     if (!world->ok()) return 1;
     CHECK(world->warnings.empty());
 
+    auto clear_world = make_clear_world();
+    CHECK(clear_world->ok() && clear_world->warnings.empty());
+
     constexpr uint64_t TICKS = 23, SAVE_AT = 9;
-    std::vector<uint64_t> hashes;
+    std::vector<uint64_t> hashes, clear_hashes;
     for (const auto& d : VulkanContext::list_devices()) {
         if (!d.usable) continue;
         std::printf("device %u: %s\n", d.index, d.name.c_str());
@@ -238,8 +306,35 @@ int main() {
             for (const auto& t : times) same &= t.last_ms == 0 && t.runs == 0 && t.total_ms == 0;
         }
         CHECK(same);
+
+        // clears without a stage: each on its own schedule, before the first stage; the same in
+        // checked ticks, after a save and on another runner
+        GameSim clears(*clear_world, o);
+        const uint32_t town = uint32_t(clear_world->entity_index("town"));
+        const uint32_t days = clears.read_each_tick(town, "days"), pair = clears.read_each_tick(town, "pair");
+        bool zeroed = true;
+        auto follow = [&](uint64_t from, uint64_t to) {
+            for (uint64_t k = from; k < to; ++k) {
+                if (k % 5 == 4) CHECK(clears.tick_checked().empty());
+                else clears.tick();
+                const int32_t since_week = ticks_since(k, 7, 3), since_pair = std::min(since_week, ticks_since(k, 4, 0));
+                const auto r = clears.tick_result(days), q = clears.tick_result(pair);
+                for (uint32_t t = 0; t < TOWNS; ++t)
+                    zeroed &= r[t] == since_week && q[2 * t] == 2 * since_pair && q[2 * t + 1] == since_pair;
+            }
+        };
+        follow(0, 11);
+        const std::vector<uint8_t> at_11 = clears.save();
+        follow(11, 20);
+        clears.load(at_11);
+        follow(11, 16);
+        clears.move_to_device(d.index);
+        follow(16, 24);
+        CHECK(zeroed && clears.stage_times().size() == 2);  // a clear is no stage
+        clear_hashes.push_back(state_hash(clears));
     }
-    CHECK(!hashes.empty());
+    CHECK(!hashes.empty() && hashes.size() == clear_hashes.size());
+    for (uint64_t h : clear_hashes) CHECK(h == clear_hashes.front());
     for (uint64_t h : hashes) CHECK(h == hashes.front());
 
     if (failures) std::printf("%d failure(s)\n", failures);

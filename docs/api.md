@@ -40,6 +40,7 @@ Describes a world in code. Every call validates; problems are collected in
 | `void stage(name, for_each, glsl, clear = {})` | Adds a stage at the end of the tick |
 | `void stage_dispatch(stage, Dispatch::Workgroup)` | One 256-thread workgroup per row |
 | `void stage_schedule(stage, every, offset = 0)` | Run the stage only in the ticks where `terni.tick % every == offset` |
+| `void clear(fields, every = 1, offset = 0)` | Zeroes fields (`"entity.field"`) at the start of the ticks where `terni.tick % every == offset`, without a stage |
 | `uint32_t create(entity, id = "")` | Adds a starting row; returns the row |
 | `void set(entity, row, field, raw, index = 0)` | Sets a starting value (`index` within a sized field) |
 | `uint32_t create_rows(entity, count)` | Adds `count` starting rows without ids; returns the first |
@@ -66,7 +67,7 @@ their world can fill the starting state before creating a `GameSim`.
 
 | Member | Holds |
 | --- | --- |
-| `entities`, `defines`, `define_values`, `modifier_keys`, `bundles`, `stages` | The description |
+| `entities`, `defines`, `define_values`, `modifier_keys`, `bundles`, `stages`, `clears` | The description |
 | `tables` | Per entity: `count` (rows in use), `columns` (raw words per field), `ids` |
 | `initial_modifiers`, `modifier_capacity` | Modifiers at the start |
 | `errors`, `warnings` | `GameDiagnostic`s; `text()` gives `file:line: message` |

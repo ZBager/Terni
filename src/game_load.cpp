@@ -431,11 +431,30 @@ private:
             std::vector<std::string> clear;
             if (const auto* cl = it.block->find("clear"); cl && cl->is_block())
                 for (const auto& c : cl->block->items) clear.push_back(str(c.scalar));
-            std::string source;
+            int64_t every = 1, offset = 0;
+            bool schedule = true;
+            const auto* ev = it.block->find("every");
+            const auto* of = it.block->find("offset");
+            if (ev && (!parse_value(str(ev->scalar), FieldType::Count, every) || every < 1)) {
+                error(at(d, *ev), "every must be a whole number of ticks, at least 1, not '" + str(ev->scalar) + "'");
+                schedule = false;
+            }
+            if (of && (!parse_value(str(of->scalar), FieldType::Count, offset) || offset < 0)) {
+                error(at(d, *of), "offset must be a whole number of ticks, not '" + str(of->scalar) + "'");
+                schedule = false;
+            }
+            const Location scheduled = at(d, of ? *of : ev ? *ev : it);
             fs::path src = detail::utf8_path(roots_.front()) / "rules" / (name + ".glsl");
+            bool found = false;
             for (const auto& root : roots_)  // the last folder that has it
                 if (fs::is_regular_file(detail::utf8_path(root) / "rules" / (name + ".glsl")))
-                    src = detail::utf8_path(root) / "rules" / (name + ".glsl");
+                    src = detail::utf8_path(root) / "rules" / (name + ".glsl"), found = true;
+            const auto* dp = it.block->find("dispatch");
+            if (!fe && !found && !dp && it.block->find("clear")) {  // no stage: only fields to zero
+                if (schedule) b_.clear(clear, static_cast<uint32_t>(every), static_cast<uint32_t>(offset), scheduled);
+                continue;
+            }
+            std::string source;
             std::ifstream f(src, std::ios::binary);
             if (!f) {
                 error(at(d, it), "missing rule source rules/" + name + ".glsl");
@@ -447,28 +466,13 @@ private:
             b_.stage(name, fe ? str(fe->scalar) : "", source, clear, at(d, it));
             for (auto& st : g().stages)
                 if (st.name == name && st.source_file.empty()) st.source_file = rel(detail::utf8_string(src));
-            if (const auto* dp = it.block->find("dispatch")) {
+            if (dp) {
                 const std::string v = str(dp->scalar);
                 if (v == "workgroup") b_.stage_dispatch(name, Dispatch::Workgroup, at(d, *dp));
                 else if (v != "thread") error(at(d, *dp), "dispatch must be `thread` or `workgroup`, not '" + v + "'");
             }
-            const auto* ev = it.block->find("every");
-            const auto* of = it.block->find("offset");
-            if (ev || of) {
-                int64_t every = 1, offset = 0;
-                bool good = true;
-                if (ev && (!parse_value(str(ev->scalar), FieldType::Count, every) || every < 1)) {
-                    error(at(d, *ev), "every must be a whole number of ticks, at least 1, not '" + str(ev->scalar) + "'");
-                    good = false;
-                }
-                if (of && (!parse_value(str(of->scalar), FieldType::Count, offset) || offset < 0)) {
-                    error(at(d, *of), "offset must be a whole number of ticks, not '" + str(of->scalar) + "'");
-                    good = false;
-                }
-                if (good)
-                    b_.stage_schedule(name, static_cast<uint32_t>(every), static_cast<uint32_t>(offset),
-                                      at(d, of ? *of : *ev));
-            }
+            if ((ev || of) && schedule)
+                b_.stage_schedule(name, static_cast<uint32_t>(every), static_cast<uint32_t>(offset), scheduled);
         }
     }
 

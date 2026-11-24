@@ -158,6 +158,9 @@ The first public version.
   divide plainly, since only software devices gain much. Hosts recompile their rules once.
 - **Cheaper per-tick readbacks**: the copies are recorded once and reused until what is
   read back changes, which saves about 1.2 microseconds of CPU time a tick.
+- **Clearing on a schedule**: a `clear` line of its own in `stages.txt`
+  (`new_month = { clear = { realm.spent } every = 30 }`) or `WorldBuilder::clear()` zeroes
+  fields at the start of some ticks without a stage. `ComputeRunner` takes such lists.
 - **Less host memory**: a running `GameSim` no longer keeps a copy of every field, so it
   needs about as much less host memory as its state has (a world with 305 MiB of fields:
   330 MiB in all instead of 635, where the game's own starting state is the rest), and

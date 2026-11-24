@@ -42,17 +42,20 @@ struct ComputeStageSpec {
 class ComputeRunner {
 public:
     // shared_reduction is passed to every shader as specialization constant 0, and
-    // `constants` (ids from 2 up) as given.
+    // `constants` (ids from 2 up) as given. `clears`: lists of buffers zeroed at the start
+    // of the ticks their list is in (`run`, below).
     ComputeRunner(uint32_t device_index, bool validation, const std::string& shader_dir,
                   const std::vector<ComputeBufferSpec>& buffers, const std::vector<ComputeStageSpec>& stages,
                   const std::vector<uint32_t>& zero_each_tick, bool shared_reduction,
-                  const std::vector<ComputeSpecConstant>& constants = {});
+                  const std::vector<ComputeSpecConstant>& constants = {},
+                  const std::vector<std::vector<uint32_t>>& clears = {});
     ~ComputeRunner();
     ComputeRunner(const ComputeRunner&) = delete;
     ComputeRunner& operator=(const ComputeRunner&) = delete;
 
-    // Submit one tick and wait. `run` has one entry per stage: false skips the stage (and
-    // its `zero` buffers) in this tick; empty runs every stage.
+    // Submit one tick and wait. `run` has one entry per stage, then one per list of
+    // `clears`: false skips the stage (and its `zero` buffers) or the list in this tick;
+    // empty runs every stage and list.
     void tick(const std::vector<bool>& run = {});
     // ---- a tick that does not block ----
     // tick() is tick_submit() then tick_wait(). Between the two the host may keep working:

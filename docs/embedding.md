@@ -187,8 +187,8 @@ copy_into_your_view_model(owners, pops);
   ```
 
   GPU times leave out the uploads before the stages and the readbacks after them, which
-  `last_tick_ms()` includes. The first stage's time includes zeroing the `clear` fields of
-  every stage in the tick.
+  `last_tick_ms()` includes. The first stage's time includes zeroing all `clear` fields
+  of the tick.
   A stage with a schedule shows `ran = false` in the ticks it skips, and its average
   counts only the ticks it ran in. Stages named `terni_...` are Terni's own: the
   `terni_spawn_...` stages give out rows of dynamic entity types (`terni_spawn_bits`

@@ -257,13 +257,34 @@ void WorldBuilder::stage(const std::string& name, const std::string& for_each, c
     s.where = where;
     if (!valid_identifier(name)) error(where, "invalid stage name '" + name + "'");
     if (!g.entity(for_each)) error(where, "stage '" + name + "': unknown for_each entity '" + for_each + "'");
+    s.clear = known_fields(clear, where);
+    g.stages.push_back(std::move(s));
+}
+
+// The fields of a `clear` list that exist; an error for each other one.
+std::vector<std::string> WorldBuilder::known_fields(const std::vector<std::string>& clear, const Location& where) {
+    std::vector<std::string> out;
     for (const auto& c : clear) {
         const size_t dot = c.find('.');
-        const EntityDef* e = dot == std::string::npos ? nullptr : g.entity(c.substr(0, dot));
+        const EntityDef* e = dot == std::string::npos ? nullptr : game_->entity(c.substr(0, dot));
         if (!e || !e->field(c.substr(dot + 1))) error(where, "clear: unknown field '" + c + "'");
-        else s.clear.push_back(c);
+        else out.push_back(c);
     }
-    g.stages.push_back(std::move(s));
+    return out;
+}
+
+void WorldBuilder::clear(const std::vector<std::string>& fields, uint32_t every, uint32_t offset, Location where) {
+    if (every == 0) return error(where, "clear: every must be at least 1");
+    if (offset >= every)
+        return error(where, "clear: offset " + std::to_string(offset) + " must be less than every (" +
+                                std::to_string(every) + ")");
+    if (fields.empty()) return error(where, "clear: no fields given");
+    ClearDef c;
+    c.fields = known_fields(fields, where);
+    c.every = every;
+    c.offset = offset;
+    c.where = std::move(where);
+    game_->clears.push_back(std::move(c));
 }
 
 void WorldBuilder::stage_dispatch(const std::string& stage, Dispatch dispatch, Location where) {

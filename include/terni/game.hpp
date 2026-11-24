@@ -21,6 +21,7 @@
 //                                                                     add_modifier = { name = good_harvest duration = 12 } }
 //   rules/stages.txt     tick order                       planet_growth = { for_each = planet }
 //                        one workgroup per entity         province_sums = { for_each = province dispatch = workgroup }
+//                        fields zeroed on a schedule      new_month = { clear = { realm.tax } every = 30 }
 //                        only some ticks                  monthly_taxes = { for_each = province every = 30 offset = 29 }
 //   rules/<stage>.glsl   body of each stage
 //
@@ -169,6 +170,15 @@ struct StageDef {
     bool runs_in(uint64_t tick) const { return tick % every == offset; }  // tick = completed ticks before it
 };
 
+// Fields zeroed at the start of the ticks a schedule names, without a stage.
+struct ClearDef {
+    std::vector<std::string> fields;  // "entity.field"
+    uint32_t every = 1, offset = 0;   // the ticks where terni.tick % every == offset
+    Location where;
+
+    bool runs_in(uint64_t tick) const { return tick % every == offset; }  // tick = completed ticks before it
+};
+
 // Host-side world: one column (int32 words) per field, capacity rows each.
 struct EntityTable {
     const EntityDef* def = nullptr;
@@ -195,6 +205,7 @@ struct Game {
     uint32_t modifier_capacity = 65536;
     std::vector<InitialModifier> initial_modifiers;
     std::vector<StageDef> stages;
+    std::vector<ClearDef> clears;
     std::vector<EntityTable> tables;             // same order as entities
     std::vector<GameDiagnostic> errors, warnings;
 
@@ -259,6 +270,10 @@ public:
     // e.g. every = 30 for a monthly stage. Skipped ticks do not dispatch it at all.
     void stage_schedule(const std::string& stage, uint32_t every, uint32_t offset = 0, Location where = {});
 
+    // Zero fields ("entity.field") at the start of the ticks where terni.tick % every ==
+    // offset, before the first stage, as a stage's `clear` does but without a stage.
+    void clear(const std::vector<std::string>& fields, uint32_t every = 1, uint32_t offset = 0, Location where = {});
+
     // starting state
     uint32_t create(uint32_t entity, const std::string& id = "", Location where = {});  // new row; returns row
     void set(uint32_t entity, uint32_t row, const std::string& field, int64_t raw, uint32_t index = 0,
@@ -283,6 +298,7 @@ public:
 
 private:
     void error(const Location& where, std::string message);
+    std::vector<std::string> known_fields(const std::vector<std::string>& clear, const Location& where);
     std::unique_ptr<Game> game_;
     std::vector<bool> define_given_;  // per define: set_define() was called for it
 };

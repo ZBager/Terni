@@ -192,6 +192,17 @@ other ticks it is not dispatched at all, so it costs nothing. Its `clear` fields
 zeroed only in the ticks it runs, so a monthly total stays readable, by the host and by
 other stages, until the next month replaces it.
 
+A line with only `clear` (and a schedule) is not a stage and needs no rule source. Its
+fields are zeroed at the start of the ticks it names, before the first stage, wherever the
+line stands in the file:
+
+```
+new_month = { clear = { realm.spent  province.raised }  every = 30 }
+```
+
+It costs no dispatch. Use it when the rules that add to a field run every day and the
+total should start again each month.
+
 ### &lt;stage&gt;.glsl
 
 The body of the stage: GLSL 4.60 with a `void main()`, using the names Terni
@@ -231,8 +242,8 @@ state), and ends with `ready` or `NOT READY` and the game checksum with the mod.
 
 `game_checksum()` covers the schema (with capacities, including those changed with
 `Game::set_capacity`), the define values, modifier keys and bundles, the modifier
-capacity, and the stages with their sources, `clear` lists, dispatch mode and schedule
-(`every`, `offset`). It does not cover `history/`. Two peers with different rule files
+capacity, the stages with their sources, `clear` lists, dispatch mode and schedule
+(`every`, `offset`), and the `clear` lines that are no stage. It does not cover `history/`. Two peers with different rule files
 are refused, and so is a save made with different rules, unless the game loads it by
 name (`SaveMatch::ByName`, see [Embedding](embedding.md#saves-from-an-earlier-version-of-your-game)).
 
