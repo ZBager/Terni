@@ -278,6 +278,22 @@ confirms them at run time. A line that is safe by design (each thread writes a
 different row of another entity, say) can be marked `// terni: order ok`. See
 [Determinism](determinism.md).
 
+## Making rules fast
+
+Measure before and after with `stage_times()`; what helps depends on the GPU. The numbers
+here are from a laptop RTX 4050 and an integrated Radeon 760M.
+
+- **Write what the host reads in the order the host wants it.** In a grid simulation,
+  rules that put the results into the host's order, so that the host no longer had to
+  reorder them, took a tick from 0.124 to 0.104 ms (RTX) and from 0.513 to 0.497 ms (Radeon).
+- **On integrated GPUs, keep rows that are used together close together.** Giving buildings
+  on a map of 2048 x 2048 cells row numbers in Morton order (neighbours on the map are
+  neighbours in memory), not random ones, took a tick from 2.7 to 1.5 ms on the Radeon. It
+  made no difference on the RTX.
+- **Do not merge two different loops into one stage to save a dispatch.** A loop over 24,576
+  rows with many live values and one over 1.5 million rows with few took 0.134 ms in one stage
+  and 0.120 ms in two on the RTX, and the same on the Radeon.
+
 ## When a rule goes wrong
 
 Rules from mods run in every player's game, so Terni keeps the damage a broken rule can

@@ -136,7 +136,7 @@ Runs a `Game` on one device. The `Game` must outlive it. Not thread-safe.
 | `StateSnapshot snapshot()` | Every field and modifier total, read back now |
 | `std::string device_name()`, `std::string report()` | The device; upload time, memory, GPU time per stage |
 | `CompileStats compile_stats()` | Stages compiled vs loaded from the cache, time spent |
-| `double last_tick_ms()`, `double last_tick_gpu_ms()` | Wall time incl. transfers; GPU time of the stages |
+| `double last_tick_ms()`, `double last_tick_gpu_ms()` | Wall time incl. transfers; GPU time of the stages, with their clears but without uploads and readbacks |
 | `std::vector<FieldHash> field_hashes()` | One hash per field, computed on the device: the same as `field_hashes(snapshot())`, at a small part of its cost. Collects a tick in flight |
 | `std::vector<StageTime> stage_times()` | Per stage, in the order they run (the rules', then Terni's own, named `terni_...`): GPU time in the last tick and since the start. Never blocks |
 | `uint64_t sync_reads()` | Reads so far that waited for the GPU |

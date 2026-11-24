@@ -446,7 +446,7 @@ typedef struct terni_device_health {
 TERNI_API terni_status terni_health(const terni_world* world, terni_device_health* health);
 TERNI_API terni_status terni_compile_stats_of(const terni_world* world, terni_compile_stats* stats);
 TERNI_API double terni_last_tick_ms(const terni_world* world);     /* wall time, transfers included */
-TERNI_API double terni_last_tick_gpu_ms(const terni_world* world); /* the stages alone */
+TERNI_API double terni_last_tick_gpu_ms(const terni_world* world); /* the stages and their clears alone */
 /* Valid until the next call on this world. "" if not running. */
 TERNI_API const char* terni_device_name(terni_world* world);
 TERNI_API const char* terni_report(terni_world* world);

@@ -564,7 +564,8 @@ public:
     CompileStats compile_stats() const;
     double last_tick_ms() const;      // wall time of the last tick, uploads and per-tick readbacks included
                                       // (begun to seen done: by tick_ready() or end_tick())
-    double last_tick_gpu_ms() const;  // GPU time of the last tick's stages alone (timestamps)
+    double last_tick_gpu_ms() const;  // GPU time of the last tick's stages alone (timestamps), with their clears
+                                      // (counted to the first stage) but without uploads and readbacks
     // One hash per field, as hash_fields() of snapshot() would name them, but computed on the
     // device: only two words per field come back, so it costs little enough to compare
     // every few ticks in a lockstep game. The same values as field_hashes(snapshot()) on
