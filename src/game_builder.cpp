@@ -85,6 +85,15 @@ void set_raw(std::vector<int32_t>& col, const FieldDef& f, size_t index, int64_t
     }
 }
 
+// Gives a column `values` values in all; the new ones are the field's default.
+void grow(std::vector<int32_t>& col, const FieldDef& f, size_t values) {
+    const int32_t low = static_cast<int32_t>(static_cast<uint32_t>(static_cast<uint64_t>(f.default_raw)));
+    const size_t old = col.size() / f.words();
+    col.resize(values * f.words(), low);  // what set_raw() gives a one-word value, and both words of 0
+    if (f.words() == 2 && f.default_raw != 0)
+        for (size_t v = old; v < values; ++v) set_raw(col, f, v, f.default_raw);
+}
+
 constexpr uint32_t SKIPPED_ROW = 0xFFFFFFFFu;
 
 // Names the prelude generates for a dynamic entity type: <entity>_alive(), ...
@@ -103,10 +112,7 @@ void Game::set_capacity(uint32_t entity, uint32_t rows) {
                                 " rows in use, and at least one");
     for (size_t f = 0; f < e.fields.size(); ++f) {
         const FieldDef& fd = e.fields[f];
-        auto& col = t.columns.at(f);
-        const size_t old_values = size_t(e.capacity) * fd.size, values = size_t(rows) * fd.size;
-        col.resize(values * fd.words());
-        for (size_t v = old_values; v < values; ++v) set_raw(col, fd, v, fd.default_raw);
+        grow(t.columns.at(f), fd, size_t(rows) * fd.size);
     }
     e.capacity = rows;
 }
@@ -146,8 +152,8 @@ void WorldBuilder::field(uint32_t entity, const std::string& name, FieldType typ
     f.size = size ? size : 1;
     f.default_raw = default_raw;
     f.where = std::move(where);
-    std::vector<int32_t> col(size_t(e.capacity) * f.size * f.words());
-    for (size_t r = 0; r < size_t(e.capacity) * f.size; ++r) set_raw(col, f, r, f.default_raw);
+    std::vector<int32_t> col;
+    grow(col, f, size_t(e.capacity) * f.size);
     e.fields.push_back(std::move(f));
     g.tables[entity].columns.push_back(std::move(col));
 }

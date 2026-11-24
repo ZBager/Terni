@@ -158,6 +158,10 @@ The first public version.
   divide plainly, since only software devices gain much. Hosts recompile their rules once.
 - **Cheaper per-tick readbacks**: the copies are recorded once and reused until what is
   read back changes, which saves about 1.2 microseconds of CPU time a tick.
+- **Less host memory**: a running `GameSim` no longer keeps a copy of every field, so it
+  needs about as much less host memory as its state has (a world with 305 MiB of fields:
+  330 MiB in all instead of 635, where the game's own starting state is the rest), and
+  starts 10-17% faster.
 - **A starting state in bulk**: `WorldBuilder::create_rows()` and `set_rows()` add rows and
   set whole columns in one call.
 - **Faster compiling**: one shader compiler serves all the rules of a world, instead of one

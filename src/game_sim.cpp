@@ -982,7 +982,9 @@ struct GameSim::Impl {
     const Game& game;
     std::vector<int32_t> defines;
     std::vector<uint32_t> state;                     // tick, counts
-    std::vector<std::vector<int32_t>> columns;       // per field, in binding order (initial upload / readback)
+    // The columns in binding order: the values live on the device only (and the starting
+    // ones in the game's tables), the host keeps their sizes.
+    std::vector<size_t> column_words;
     std::vector<std::string> column_names;
     // What each column is: a field of an entity type, or one of Terni's own columns of a
     // dynamic type (`own`: alive_bits, generation, terni_prev, ...).
@@ -1062,9 +1064,10 @@ struct GameSim::Impl {
     std::unique_ptr<ComputeRunner> runner;
     explicit Impl(const Game& g) : game(g), mods(g) {}
 
-    // A runner on `device` that starts from the host's copies: `defines`, `state`,
-    // `columns` and the modifier totals given (the store's own if null).
-    std::unique_ptr<ComputeRunner> make_runner(uint32_t device, const std::vector<std::vector<int32_t>>* totals) const {
+    // A runner on `device` that starts from `defines`, `state`, the columns and the modifier
+    // totals given (the store's own if null). It uploads them before it returns.
+    std::unique_ptr<ComputeRunner> make_runner(uint32_t device, const std::vector<std::span<const int32_t>>& columns,
+                                               const std::vector<std::vector<int32_t>>* totals) const {
         std::vector<ComputeBufferSpec> buffers;
         buffers.push_back({"defines", defines.data(), defines.size() * 4});
         buffers.push_back({"state", state.data(), state.size() * 4});
@@ -1158,13 +1161,17 @@ struct GameSim::Impl {
             if (stage_names[s].starts_with("terni_spawn_") && stage_names[s] != "terni_spawn_bits") run[s] = lines;
         return run;
     }
+    void read_column(size_t c, std::vector<int32_t>& words) {
+        words.resize(column_words[c]);
+        runner->read(static_cast<uint32_t>(c + 2), words.data(), words.size() * 4);
+    }
     // Column `c` as the game starts it: a field as the game's tables hold it (history
     // values, defaults elsewhere), the rows of a dynamic type alive up to the starting count.
     std::vector<int32_t> starting_column(size_t c) const {
         const ColumnInfo& info = column_info[c];
         const EntityTable& t = game.tables[info.entity];
         if (info.field >= 0) return t.columns[size_t(info.field)];
-        std::vector<int32_t> words(columns[c].size(), 0);
+        std::vector<int32_t> words(column_words[c], 0);
         if (info.own == "alive_bits" || info.own == "terni_prev")
             for (uint32_t row = 0; row < t.count; ++row) words[row / 32] |= int32_t(1u << (row % 32));
         else if (info.own == "generation")
@@ -1176,7 +1183,7 @@ struct GameSim::Impl {
     std::vector<int32_t> default_column(size_t c) const {
         const ColumnInfo& info = column_info[c];
         const FieldDef& f = game.entities[info.entity].fields[size_t(info.field)];
-        std::vector<int32_t> words(columns[c].size());
+        std::vector<int32_t> words(column_words[c]);
         for (size_t v = 0; v < words.size() / f.words(); ++v) {
             words[v * f.words()] = static_cast<int32_t>(static_cast<uint64_t>(f.default_raw));
             if (f.words() == 2) words[v * 2 + 1] = static_cast<int32_t>(static_cast<uint64_t>(f.default_raw) >> 32);
@@ -1352,12 +1359,15 @@ GameSim::GameSim(const Game& game, const GameSimOptions& options) : impl_(std::m
     for (const auto& t : game.tables) m.state.push_back(t.count), m.counts.push_back(t.count);
     for (const auto& im : game.initial_modifiers) m.mods.add(im.bundle, im.entity, im.row, im.scale, im.duration, 0);
 
+    std::vector<std::span<const int32_t>> start;  // the starting columns: fields straight from the game's tables,
+    std::vector<std::vector<int32_t>> own_start;  // Terni's own from here (moving a vector keeps its words in place)
     m.field_binding.resize(game.entities.size());
     for (size_t e = 0; e < game.tables.size(); ++e) {
         const auto& t = game.tables[e];
         for (size_t f = 0; f < t.def->fields.size(); ++f) {
-            m.field_binding[e].push_back(static_cast<uint32_t>(2 + m.columns.size()));
-            m.columns.push_back(t.columns[f]);
+            m.field_binding[e].push_back(static_cast<uint32_t>(2 + m.column_words.size()));
+            m.column_words.push_back(t.columns[f].size());
+            start.push_back(t.columns[f]);
             m.column_names.push_back(t.def->name + "." + t.def->fields[f].name);
             m.column_info.push_back({uint32_t(e), int(f), ""});
         }
@@ -1374,10 +1384,12 @@ GameSim::GameSim(const Game& game, const GameSimOptions& options) : impl_(std::m
         d.alive_count = game.tables[e].count;
         d.prev = d.alive;  // the starting rows count as alive before the first tick
         d.cool.assign(d.alive.size(), 0);
-        d.alive_binding = static_cast<uint32_t>(2 + m.columns.size());
+        d.alive_binding = static_cast<uint32_t>(2 + m.column_words.size());
         const std::vector<int32_t> bits(d.alive.begin(), d.alive.end()), none(d.alive.size(), 0);
         auto column = [&](const std::string& name, std::vector<int32_t> words) {
-            m.columns.push_back(std::move(words));
+            m.column_words.push_back(words.size());
+            own_start.push_back(std::move(words));
+            start.push_back(own_start.back());
             m.column_names.push_back(def.name + "." + name);
             m.column_info.push_back({e, -1, name});
         };
@@ -1401,7 +1413,7 @@ GameSim::GameSim(const Game& game, const GameSimOptions& options) : impl_(std::m
         m.dynamic_of[e] = int(m.dynamics.size());
         m.dynamics.push_back(std::move(d));
     }
-    m.mod_binding0 = static_cast<uint32_t>(2 + m.columns.size());
+    m.mod_binding0 = static_cast<uint32_t>(2 + m.column_words.size());
     for (auto& c : m.mods.columns) {
         c.dirty_lo = UINT32_MAX;  // initial modifiers are part of the upload
         c.dirty_hi = 0;
@@ -1411,7 +1423,7 @@ GameSim::GameSim(const Game& game, const GameSimOptions& options) : impl_(std::m
         for (const auto& f : e.fields) m.row_words.push_back(uint64_t(f.size) * f.words());
     m.row_words.resize(m.mod_binding0 + m.mods.columns.size(), 1);  // modifier totals
     m.hash_binding = m.mod_binding0 + static_cast<uint32_t>(m.mods.columns.size());
-    m.hash_zero.assign(2 * (1 + m.columns.size() + m.mods.columns.size()), 0);
+    m.hash_zero.assign(2 * (1 + m.column_words.size() + m.mods.columns.size()), 0);
     m.row_words.push_back(1);  // the hashes
     for (const auto& k : game.modifier_keys) {
         std::vector<uint32_t> indices;
@@ -1429,7 +1441,7 @@ GameSim::GameSim(const Game& game, const GameSimOptions& options) : impl_(std::m
     m.spirv = std::move(spirv);
     m.validation = options.validation;
     m.spin_us = options.spin_us;
-    m.runner = m.make_runner(static_cast<uint32_t>(device), nullptr);
+    m.runner = m.make_runner(static_cast<uint32_t>(device), start, nullptr);
     for (const auto& st : game.stages) m.stage_names.push_back(st.name);
     for (const auto& st : spawn_stage_sources(game)) m.stage_names.push_back(st.name);
     m.stage_names.push_back("terni_tick");
@@ -1448,14 +1460,14 @@ void GameSim::move_to_device(uint32_t device) {
     // tick), and reach the new device at the next tick as they would have reached this
     // one. So do the host writes queued for that tick.
     m.runner->read(1, m.state.data(), m.state.size() * 4);
-    for (size_t c = 0; c < m.columns.size(); ++c)
-        m.runner->read(static_cast<uint32_t>(c + 2), m.columns[c].data(), m.columns[c].size() * 4);
+    std::vector<std::vector<int32_t>> columns(m.column_words.size());
+    for (size_t c = 0; c < columns.size(); ++c) m.read_column(c, columns[c]);
     std::vector<std::vector<int32_t>> totals;
     for (size_t c = 0; c < m.mods.columns.size(); ++c) {
         totals.emplace_back(m.mods.columns[c].totals.size());
         m.runner->read(m.mod_binding0 + uint32_t(c), totals[c].data(), totals[c].size() * 4);
     }
-    std::unique_ptr<ComputeRunner> next = m.make_runner(device, &totals);
+    std::unique_ptr<ComputeRunner> next = m.make_runner(device, {columns.begin(), columns.end()}, &totals);
 
     // per-tick readbacks: the same ranges, holding the last tick's results
     auto carry = [&](Impl::TickRead& r) {
@@ -1883,9 +1895,10 @@ std::vector<uint8_t> GameSim::save() {
         const EntityDef& def = m.game.entities[e];
         w.str(def.name), w.u32(def.capacity), w.u8(def.dynamic ? 1 : 0), w.u32(m.state[1 + e]);
     }
-    w.u32(static_cast<uint32_t>(m.columns.size()));
-    for (size_t c = 0; c < m.columns.size(); ++c) {
-        m.runner->read(static_cast<uint32_t>(c + 2), m.columns[c].data(), m.columns[c].size() * 4);
+    w.u32(static_cast<uint32_t>(m.column_words.size()));
+    std::vector<int32_t> words;
+    for (size_t c = 0; c < m.column_words.size(); ++c) {
+        m.read_column(c, words);
         const Impl::ColumnInfo& info = m.column_info[c];
         w.str(m.column_names[c]);
         if (info.field >= 0) {
@@ -1894,7 +1907,7 @@ std::vector<uint8_t> GameSim::save() {
         } else {
             w.u8(255), w.u32(0), w.str("");
         }
-        w.words(m.columns[c]);
+        w.words(words);
     }
     w.u32(static_cast<uint32_t>(m.game.bundles.size()));
     for (const auto& bundle : m.game.bundles) w.str(bundle.name);
@@ -1921,8 +1934,8 @@ std::vector<std::string> GameSim::load(const std::vector<uint8_t>& data, SaveMat
         saved.device_tick = saved.state_words[0];
         for (size_t e = 0; e < g.entities.size(); ++e)
             saved.entities.push_back({g.entities[e].name, g.entities[e].capacity, saved.state_words[1 + e], g.entities[e].dynamic});
-        if (saved.columns.size() != m.columns.size()) throw std::runtime_error("save: field count mismatch");
-        for (size_t c = 0; c < m.columns.size(); ++c) {
+        if (saved.columns.size() != m.column_words.size()) throw std::runtime_error("save: field count mismatch");
+        for (size_t c = 0; c < m.column_words.size(); ++c) {
             SavedState::Column& col = saved.columns[c];
             if (col.name != m.column_names[c]) throw std::runtime_error("save: field " + m.column_names[c] + " missing");
             if (const auto& info = m.column_info[c]; info.field >= 0) {
@@ -1974,7 +1987,7 @@ std::vector<std::string> GameSim::load(const std::vector<uint8_t>& data, SaveMat
         if (!kept) note("entity type '" + e.name + "' is gone: its rows and their modifiers are dropped");
     }
 
-    std::vector<std::vector<int32_t>> columns(m.columns.size());
+    std::vector<std::vector<int32_t>> columns(m.column_words.size());
     std::vector<bool> used(saved.columns.size(), false);
     for (size_t c = 0; c < columns.size(); ++c) {
         const Impl::ColumnInfo& info = m.column_info[c];
@@ -2000,9 +2013,9 @@ std::vector<std::string> GameSim::load(const std::vector<uint8_t>& data, SaveMat
             // other Terni versions; only the four that carry state must fit exactly.
             const bool carries_state = info.own == "alive_bits" || info.own == "generation" ||
                                        info.own == "terni_prev" || info.own == "terni_cool";
-            if (same_game && carries_state && col->words.size() != m.columns[c].size())
+            if (same_game && carries_state && col->words.size() != m.column_words[c])
                 throw std::runtime_error("save: '" + m.column_names[c] + "' has the wrong size");
-            columns[c].assign(m.columns[c].size(), 0);
+            columns[c].assign(m.column_words[c], 0);
             std::copy_n(col->words.begin(), std::min(col->words.size(), columns[c].size()), columns[c].begin());
             continue;
         }
@@ -2065,19 +2078,17 @@ std::vector<std::string> GameSim::load(const std::vector<uint8_t>& data, SaveMat
     m.runner->write(1, m.state.data(), m.state.size() * 4);
     m.counts.assign(m.state.begin() + 1, m.state.end());
     m.size_tick_reads();  // per-tick readbacks follow the restored counts
-    for (size_t c = 0; c < columns.size(); ++c) {
-        m.columns[c] = std::move(columns[c]);
-        m.runner->write(static_cast<uint32_t>(c + 2), m.columns[c].data(), m.columns[c].size() * 4);
-    }
+    for (size_t c = 0; c < columns.size(); ++c)
+        m.runner->write(static_cast<uint32_t>(c + 2), columns[c].data(), columns[c].size() * 4);
     for (auto& p : m.parents)
         if (p.active) {
-            const auto& col = m.columns[p.binding - 2];
+            const auto& col = columns[p.binding - 2];
             std::memcpy(p.rows.data(), col.data(), p.rows.size() * 4);
             p.stale = false;
         }
     for (auto& d : m.dynamics) {  // who is alive is in the save, like every field
         auto words = [&](uint32_t binding, std::vector<uint32_t>& to) {
-            to.assign(m.columns[binding - 2].begin(), m.columns[binding - 2].end());
+            to.assign(columns[binding - 2].begin(), columns[binding - 2].end());
         };
         words(d.alive_binding, d.alive);
         words(d.generation_binding(), d.generation);
@@ -2105,15 +2116,16 @@ StateSnapshot GameSim::snapshot() {
     m.runner->read(1, m.state.data(), m.state.size() * 4);
     StateSnapshot s;
     s.add("terni.state", m.state);
-    for (size_t c = 0; c < m.columns.size(); ++c) {
-        m.runner->read(static_cast<uint32_t>(c + 2), m.columns[c].data(), m.columns[c].size() * 4);
+    std::vector<int32_t> words;
+    for (size_t c = 0; c < m.column_words.size(); ++c) {
+        m.read_column(c, words);
         const Impl::ColumnInfo& info = m.column_info[c];
         uint32_t per_row = 1;
         if (info.field >= 0) {
             const FieldDef& f = m.game.entities[info.entity].fields[size_t(info.field)];
             per_row = f.size * f.words();
         }
-        s.add(m.column_names[c], m.columns[c], per_row);
+        s.add(m.column_names[c], words, per_row);
     }
     for (size_t c = 0; c < m.mods.columns.size(); ++c) {
         auto& col = m.mods.columns[c];
@@ -2142,7 +2154,7 @@ std::vector<FieldHash> GameSim::field_hashes() {
         out.push_back({std::move(name), hash_finish(sums[2 * k], sums[2 * k + 1], words)});
     };
     field("terni.state", m.state.size());
-    for (size_t c = 0; c < m.columns.size(); ++c) field(m.column_names[c], m.columns[c].size());
+    for (size_t c = 0; c < m.column_words.size(); ++c) field(m.column_names[c], m.column_words[c]);
     for (const auto& col : m.mods.columns)
         field("mod." + m.game.entities[col.entity].name + "." + m.game.modifier_keys[col.key].name, col.totals.size());
     return out;
