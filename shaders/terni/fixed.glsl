@@ -36,6 +36,24 @@ int fx_div(int a, int b) {
     return int((q << uint(RF)) | frac);
 }
 
+// n / d without dividing, exact for every n: the host computes the multiplier and shifts of
+// each define's magnitude when the world starts (Granlund and Montgomery, "Division by
+// invariant integers using multiplication"; define_reciprocal in src/game_sim.cpp).
+uint terni_div(uint n, int d, uint mul, uint shift1, uint shift2) {
+    uint high, low;
+    umulExtended(n, mul, high, low);
+    return (((n - high) >> shift1) + high) >> shift2;
+}
+int terni_div(int a, int d, uint mul, uint shift1, uint shift2) {  // truncates, like a / d
+    uint sign_a = uint(a >> 31), sign = uint((a ^ d) >> 31);
+    return int((terni_div((uint(a) ^ sign_a) - sign_a, d, mul, shift1, shift2) ^ sign) - sign);
+}
+
+// DIV_DEFINE(a, name): a / D.name for an int `a`, a / uint(D.name) for a uint. Legacy: it
+// keeps working, but new rules should divide plainly; GPUs gain little from it.
+#define DIV_DEFINE(a, name) \
+    terni_div((a), D.name, D.terni_mul_##name, D.terni_shift1_##name, D.terni_shift2_##name)
+
 int fx_clamp(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
 int fx_min(int a, int b) { return a < b ? a : b; }
 int fx_max(int a, int b) { return a > b ? a : b; }

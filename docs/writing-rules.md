@@ -47,6 +47,7 @@ Add and subtract them normally; multiply and divide with the library:
 | --- | --- |
 | `fx_mul(x, r)` | `x × r` where `r` is a rate; keeps the format of `x` |
 | `fx_div(a, b)` | `a / b` as a rate, exactly; `a ≥ 0`, `b > 0`, both in the same format |
+| `DIV_DEFINE(a, name)` | Exactly `a / D.name` for an `int` (or `a / uint(D.name)` for a `uint`), without dividing. Legacy, see below |
 | `fx_min`, `fx_max`, `fx_clamp` | As named |
 | `to_agg(q)` | A quantity in whole units (rounded down), for sums |
 | `qty_from_count(n)` | A count as a quantity |
@@ -57,6 +58,12 @@ Rules of thumb:
 - Never multiply two quantities together; scale a quantity by a rate.
 - `fx_mul(pop, FX_ONE + bonus)` applies a percentage bonus.
 - Keep intermediate values in range: a quantity holds about ±8.4 million.
+- `DIV_DEFINE(a, name)` is legacy: it keeps working, but write `a / D.name` in new rules.
+  It multiplies by a reciprocal that Terni works out when the world starts. With one
+  division per row GPUs gain little or nothing; a stage of four divisions per row took
+  13% less time with `int` values and 30% less with `uint` on a laptop RTX 4050, 5% and 13%
+  less on a Radeon 760M, and about a third of the time on a software device. The define must
+  not be 0, and for `uint` values it must be above 0.
 
 ## 64- and 128-bit integers
 

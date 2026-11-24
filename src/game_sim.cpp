@@ -854,6 +854,21 @@ std::vector<std::vector<uint32_t>> rules_spirv(const std::vector<RuleSource>& ru
 
 }  // namespace
 
+namespace {
+
+// What DIV_DEFINE (shaders/terni/fixed.glsl) needs to divide by a define's magnitude d:
+// with l = ceil(log2 d), the multiplier floor(2^32 * (2^l - d) / d) + 1 and the shifts
+// min(l, 1) and max(l - 1, 0). Zeros for a define of 0, which rules must not divide by.
+std::array<uint32_t, 3> define_reciprocal(int32_t define) {
+    const uint32_t d = define < 0 ? 0u - static_cast<uint32_t>(define) : static_cast<uint32_t>(define);
+    if (d == 0) return {0, 0, 0};
+    const uint32_t l = static_cast<uint32_t>(std::bit_width(d - 1));
+    const uint64_t excess = (uint64_t(1) << l) - d;  // under d, so the quotient has 32 bits
+    return {static_cast<uint32_t>((excess << 32) / d + 1), std::min(l, 1u), l > 0 ? l - 1 : 0};
+}
+
+}  // namespace
+
 std::string generate_prelude(const Game& game) {
     std::ostringstream o;
     o.imbue(std::locale::classic());  // never "16,384u": the host may have set a global locale with digit grouping
@@ -864,6 +879,8 @@ std::string generate_prelude(const Game& game) {
          "#include \"terni/wide.glsl\"\n\n";
     o << "layout(std430, binding = 0) readonly buffer TerniDefines {\n";
     for (const auto& d : game.defines) o << "    int " << d.name << ";\n";
+    for (const auto& d : game.defines)  // for DIV_DEFINE, in define_reciprocal()'s order
+        o << "    uint terni_mul_" << d.name << ", terni_shift1_" << d.name << ", terni_shift2_" << d.name << ";\n";
     if (game.defines.empty()) o << "    int _terni_no_defines;\n";
     o << "} D;\n\n";
     o << "layout(std430, binding = 1) buffer TerniState {\n    uint tick;\n";
@@ -1328,6 +1345,8 @@ GameSim::GameSim(const Game& game, const GameSimOptions& options) : impl_(std::m
         if (device < 0) throw std::runtime_error("no usable Vulkan device (Vulkan 1.3 with synchronization2 required)");
     }
     m.defines = game.define_values;
+    for (const int32_t d : game.define_values)
+        for (const uint32_t word : define_reciprocal(d)) m.defines.push_back(static_cast<int32_t>(word));
     if (m.defines.empty()) m.defines.push_back(0);
     m.state.push_back(0);  // tick
     for (const auto& t : game.tables) m.state.push_back(t.count), m.counts.push_back(t.count);
