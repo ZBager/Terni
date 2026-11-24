@@ -386,6 +386,34 @@ static void compiled_ahead(void) {
     terni_world_destroy(w);
 }
 
+// The options are filled in up to the caller's size and no further.
+static void options_of_any_size(void) {
+    union {
+        terni_start_options o;
+        unsigned char bytes[sizeof(terni_start_options) + 64];
+    } u;
+    const size_t full = sizeof u.o, first = offsetof(terni_start_options, shader_library_dir) + sizeof(const char*);
+    const size_t older = offsetof(terni_start_options, has_uuid), newer = full + 32;
+    const size_t sizes[] = {full, older, newer, first, 0, 3};
+    for (size_t i = 0; i < sizeof sizes / sizeof sizes[0]; ++i) {
+        memset(&u, 0xAB, sizeof u);
+        size_t written = sizes[i];
+        if (i == 0) terni_start_options_init(&u.o);
+        else if (i == 3) (terni_start_options_init)(&u.o);  // the function: callers of the first header
+        else terni_start_options_init_sized(&u.o, (uint32_t)sizes[i]);
+        if (written < sizeof u.o.struct_size) written = 0;
+        for (size_t k = written; k < sizeof u; ++k) CHECK(u.bytes[k] == 0xAB);
+        if (!written) continue;
+        CHECK(u.o.struct_size == (written < full ? written : full));
+        CHECK(u.o.device == -1 && u.o.preference == TERNI_PREFER_DISCRETE);
+        for (size_t k = older; k < written; ++k) CHECK(u.bytes[k] == 0);
+        terni_world* w = loaded(galaxy);
+        OK(terni_start(w, &u.o));
+        terni_world_destroy(w);
+    }
+    terni_start_options_init(NULL);
+}
+
 // A renderer's GPU, from its own Vulkan objects, is the device of the same UUID; by
 // vendor and name when the renderer's instance gives no IDs.
 static void renderer_gpu(void) {
@@ -521,6 +549,7 @@ int main(int argc, char** argv) {
     state_and_modifiers();
     generated_start();
     compiled_ahead();
+    options_of_any_size();
     dynamic_entities();
     printf("test_c_api: %s\n", failures == 0 ? "PASS" : "FAIL");
     return failures == 0 ? 0 : 1;

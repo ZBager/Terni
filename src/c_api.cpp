@@ -584,12 +584,21 @@ terni_status terni_compile_rules(const terni_world* world, const char* cache_dir
 
 // ---- starting and stopping ----
 
-void terni_start_options_init(terni_start_options* options) {
-    if (!options) return;
-    *options = terni_start_options{};
-    options->struct_size = sizeof(terni_start_options);
-    options->device = -1;
-    options->preference = TERNI_PREFER_DISCRETE;
+void terni_start_options_init_sized(terni_start_options* options, uint32_t struct_size) {
+    if (!options || struct_size < sizeof(uint32_t)) return;
+    terni_start_options defaults{};
+    // a caller newer than this library: the fields it does not know are zero and do not count
+    defaults.struct_size = std::min(struct_size, uint32_t(sizeof defaults));
+    defaults.device = -1;
+    defaults.preference = TERNI_PREFER_DISCRETE;
+    std::memset(static_cast<void*>(options), 0, struct_size);
+    std::memcpy(static_cast<void*>(options), &defaults, defaults.struct_size);
+}
+
+// What callers have whose header had no terni_start_options_init_sized(): never more than this.
+void (terni_start_options_init)(terni_start_options* options) {
+    constexpr size_t FIRST_SIZE = offsetof(terni_start_options, shader_library_dir) + sizeof(const char*);
+    terni_start_options_init_sized(options, uint32_t(FIRST_SIZE));
 }
 
 terni_status terni_start(terni_world* world, const terni_start_options* options) {

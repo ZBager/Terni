@@ -456,8 +456,7 @@ namespace Terni
         public void Start(StartOptions? options = null)
         {
             options ??= new StartOptions();
-            Native.terni_start_options_init(out Native.StartOptions o);
-            o.struct_size = (uint)sizeof(Native.StartOptions);
+            Native.terni_start_options_init_sized(out Native.StartOptions o, (uint)sizeof(Native.StartOptions));
             o.device = options.Device;
             o.preference = (int)options.Preference;
             if (options.RendererUuid != null)

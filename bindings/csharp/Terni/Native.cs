@@ -172,7 +172,7 @@ namespace Terni
         [DllImport(Library)] internal static extern int terni_compile_rules(IntPtr world, byte[] cache_dir, out CompileStats stats);
 
         // ---- starting and stopping ----
-        [DllImport(Library)] internal static extern void terni_start_options_init(out StartOptions options);
+        [DllImport(Library)] internal static extern void terni_start_options_init_sized(out StartOptions options, uint struct_size);
         [DllImport(Library)] internal static extern int terni_set_tick_spin(IntPtr world, uint microseconds);
         [DllImport(Library)] internal static extern int terni_start(IntPtr world, in StartOptions options);
         [DllImport(Library)] internal static extern void terni_stop(IntPtr world);

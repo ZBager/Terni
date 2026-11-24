@@ -256,7 +256,7 @@ TERNI_API terni_status terni_compile_rules(const terni_world* world, const char*
 /* ---- starting and stopping ---- */
 
 typedef struct terni_start_options {
-    uint32_t struct_size;     /* sizeof(terni_start_options); set by terni_start_options_init() */
+    uint32_t struct_size;     /* the bytes that count; set by terni_start_options_init() */
     int32_t device;           /* a device index; -1: choose (renderer IDs, then preference) */
     int32_t preference;       /* TERNI_PREFER_DISCRETE, ... */
     int32_t has_uuid;         /* share the renderer's GPU: its Vulkan physical device UUID */
@@ -269,7 +269,16 @@ typedef struct terni_start_options {
     const char* shader_library_dir; /* NULL or "": the GLSL library inside Terni */
 } terni_start_options;
 
+/* Fills in the defaults. Call it first, then change what you need. The struct may grow at
+ * its end in later versions, so the call carries the size the caller was built with: a
+ * newer library never writes past an older caller's struct. Languages that call by name
+ * call terni_start_options_init_sized() with the size of their own struct; the function
+ * terni_start_options_init() fills the struct as ABI version 1 began, up to
+ * `shader_library_dir`, and always will. */
+TERNI_API void terni_start_options_init_sized(terni_start_options* options, uint32_t struct_size);
 TERNI_API void terni_start_options_init(terni_start_options* options);
+#define terni_start_options_init(options) \
+    terni_start_options_init_sized((options), (uint32_t)sizeof(terni_start_options))
 /* Starts the simulation on a device (stops a running one first). Options may be NULL for
  * the defaults. */
 TERNI_API terni_status terni_start(terni_world* world, const terni_start_options* options);
