@@ -138,11 +138,16 @@ int main() {
         stage("mixed", "        atomicAdd(world_total[0], 1);\n        cell_m[i * 4u] = world_total[0];");
         stage("member", "        cell_money[(i + 1u) % terni.cell_count].x = 1u;");
         stage("sums", "        atomicAdd(world_total[0], cell_m[(i + 5u) % terni.cell_count]);");
+        // several declarators in one declaration
+        stage("comma", "        const uint n = 4u, base = i * n;\n        uint k, q = i, r = min(1u, 2u), b2 = q * n;\n"
+                       "        cell_m[base + 1u] = cell_m[b2 + r];");
+        stage("comma_other", "        const uint base = i * 4u, other = (i + 1u) * 4u;\n"
+                             "        cell_m[base] = cell_m[other];");
         b.create(world);
         auto g = b.finish();
         for (const auto& w : g->warnings) std::printf("  warning: %s\n", w.text().c_str());
         CHECK(g->ok());
-        CHECK((warned(*g) == std::vector<std::string>{"neighbour", "mixed", "member"}));
+        CHECK((warned(*g) == std::vector<std::string>{"neighbour", "mixed", "member", "comma_other"}));
         CHECK(!g->warnings.empty() && g->warnings[0].where.file == "neighbour.glsl" && g->warnings[0].where.line == 3);
     }
     for (const auto& d : VulkanContext::list_devices()) {

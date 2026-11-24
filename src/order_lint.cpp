@@ -172,26 +172,31 @@ private:
     }
 
     // Loop variables (FOR_EACH... (v)), copies of them (`uint q = v;`) and row bases
-    // (`uint base = v * n;`), in source order.
+    // (`uint base = v * n;`, `const uint n = 4u, base = v * n;`), in source order.
     void find_rows() {
         for (size_t t = 0; t + 2 < t_.size(); ++t) {
             if (t_[t].text.rfind("FOR_EACH", 0) == 0 && t_[t + 1].text == "(" && id_start(t_[t + 2].text[0])) {
                 ids_.insert(t_[t + 2].text);
                 continue;
             }
-            if ((t_[t].text != "uint" && t_[t].text != "int") || !id_start(t_[t + 1].text[0]) || t_[t + 2].text != "=")
-                continue;
-            size_t e = t + 3;  // the initializer ends at a top-level ',' or ';'
-            int depth = 0;
-            for (; e < t_.size(); ++e) {
-                const std::string& x = t_[e].text;
-                if (x == "(" || x == "[") ++depth;
-                else if (x == ")" || x == "]") --depth;
-                else if (depth == 0 && (x == "," || x == ";")) break;
+            if (t_[t].text != "uint" && t_[t].text != "int") continue;
+            for (size_t d = t + 1; d < t_.size() && id_start(t_[d].text[0]);) {  // each declarator in the list
+                size_t e = d + 1;  // it ends at a top-level ',' or ';'
+                int depth = 0;
+                for (; e < t_.size(); ++e) {
+                    const std::string& x = t_[e].text;
+                    if (x == "(" || x == "[" || x == "{") ++depth;
+                    else if (x == ")" || x == "]" || x == "}") --depth;
+                    if (depth < 0 || (depth == 0 && (x == "," || x == ";"))) break;
+                }
+                if (e > d + 2 && t_[d + 1].text == "=" && own(d + 2, e)) {
+                    if (e == d + 3 && ids_.count(t_[d + 2].text)) ids_.insert(t_[d].text);
+                    else bases_.insert(t_[d].text);
+                }
+                // a parameter list or a function ends in something other than a declarator
+                if (e >= t_.size() || t_[e].text != "," || t_[d + 1].text == "(") break;
+                d = e + 1;
             }
-            if (!own(t + 3, e)) continue;
-            if (e == t + 4 && ids_.count(t_[t + 3].text)) ids_.insert(t_[t + 1].text);
-            else bases_.insert(t_[t + 1].text);
         }
     }
 
