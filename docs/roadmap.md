@@ -2,8 +2,8 @@
 
 Terni is pre-1.0. What larger games needed first is done, and so are a reproducible
 benchmark and what games need before they ship.
-What remains is ongoing work, integrations for game engines, and the preparation of
-stable public releases. The order is a priority, not a promise.
+What remains is ongoing work, integrations for game engines, smaller fields, and the
+preparation of stable public releases. The order is a priority, not a promise.
 
 ## Ongoing
 
@@ -130,6 +130,31 @@ invalid, not as a time. See [Benchmark](benchmark.md).
    Windows, and a Steam Deck): how to run it, what it measures, how to read the results,
    and an issue template for sending them in.
 
+## Smaller fields
+
+Field types of 8 and 16 bits, chosen field by field; 32 bits stay the default. Every field
+takes at least 32 bits today, so a job, a percentage or a reference to one of 10,000
+provinces reads up to four times the memory it needs, and large worlds are limited by
+memory, not arithmetic. GPUs store such values natively. Measured with four of the
+benchmark's eight pop fields small, the GPU time of a tick falls by 31% (medium) and 19%
+(large) on a laptop RTX 4050 and by 12% and 14% on a Radeon 760M, and does not change on
+lavapipe at medium. With only two small it falls by 13-16% and 8-9%. Packing values into
+32-bit words in the rules gains little on large worlds. Worlds made mostly of small
+values gain more on GPUs, but a world of that kind ran 10% slower on lavapipe.
+
+To settle in the design, before any code:
+
+- What a value that does not fit becomes: the same on every device, and an error the
+  order check or a validating run can name.
+- Devices without 8 and 16-bit storage: whether they are refused, or store 32 bits and
+  give the same results.
+- Two threads write neighbouring values that share a 32-bit word: a parity test on every
+  device must show that neither is lost.
+- What changes with it: host reads and writes, readbacks, saves, hashes, the order check,
+  data folders, the C API and the plugins. Sums (`agg`) stay 32 bits.
+
+To measure: Windows drivers, discrete GPUs, and how much smaller saves and readbacks get.
+
 ## Public releases
 
 1. **Versioned releases** with a changelog and a stable API from 1.0. Done: the policy
@@ -141,6 +166,18 @@ invalid, not as a time. See [Benchmark](benchmark.md).
    (`load_game({game, mod, ...})`), and `terni_check` is the one command a modder runs
    before publishing: files, errors and warnings with `file:line`, compile errors, order
    problems at run time and the same state on every device.
+
+## Parked
+
+Possible, but low priority: each waits for a game that shows it needs it.
+
+- **Indirect dispatch.** A stage launches enough threads for every row its entity type has
+  room for (its capacity), fixed when the world starts, however few rows have work to do.
+  Dispatches sized on the GPU, from a count or a list of rows that an earlier stage writes,
+  would skip the rest. The saving is small: looking at 400,000 idle rows takes about 5
+  microseconds on a laptop RTX 4050 and 22 on a Radeon 760M. The cost is more machinery in
+  every tick, and lists whose order must not depend on the device. It becomes worth it for
+  a game with many large entity types whose stages are mostly idle.
 
 Not planned: DirectX or Metal back ends, and consoles.
 
