@@ -56,10 +56,14 @@ struct ComputeRunner::Impl {
     // tick's results stay readable while the next tick writes the other one.
     GpuBuffer tick_rb[2];
     int rb_done = 0;  // which one holds the last finished tick
+    // The copies into each of them, recorded when first needed after `tick_reads` or the
+    // destinations change (readbacks_changed) and resubmitted until then.
+    VkCommandBuffer readback_cmds[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+    bool readbacks_changed = false;
     // The submitted tick (tick_submit), until finish() accounts for it.
     struct Flight {
         bool active = false, seen_done = false;
-        VkCommandBuffer pre = VK_NULL_HANDLE, post = VK_NULL_HANDLE;
+        VkCommandBuffer pre = VK_NULL_HANDLE;
         std::vector<bool> run;  // the stages it runs
         bool ends_late = false;  // its last timestamp is at the end of its readbacks (query S + 1), not of its stages
         uint64_t clock = 0;      // the device clock when it was submitted; 0 if unknown
@@ -224,7 +228,6 @@ struct ComputeRunner::Impl {
         ctx.wait_submitted(spin_us);
         if (!flight.seen_done) flight.done = std::chrono::steady_clock::now();
         if (flight.pre) ctx.free_command_buffer(flight.pre);
-        if (flight.post) ctx.free_command_buffer(flight.post);
         last_tick_ms = std::chrono::duration<double, std::milli>(flight.done - flight.submitted).count();
         ++ticks;
         // What the device did, whenever the host looked: from the device clock at submission
@@ -267,6 +270,24 @@ struct ComputeRunner::Impl {
             vkCmdCopyBuffer(cmd, buffers[r.binding].buffer, tick_rb[rb_done ^ 1].buffer, 1, &region);
         }
         barrier(cmd, TRANSFER, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_2_HOST_BIT, VK_ACCESS_2_HOST_READ_BIT);
+    }
+    // The copies of the tick about to be submitted (none is in flight).
+    VkCommandBuffer readback_cmd() {
+        if (readbacks_changed) {
+            for (VkCommandBuffer& c : readback_cmds)
+                if (c) ctx.free_command_buffer(c), c = VK_NULL_HANDLE;
+            readbacks_changed = false;
+        }
+        VkCommandBuffer& cmd = readback_cmds[rb_done ^ 1];
+        if (cmd) return cmd;
+        cmd = ctx.allocate_command_buffer();
+        VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+        VK_CHECK(vkBeginCommandBuffer(cmd, &bi));
+        record_readbacks(cmd);
+        if (queries)  // the tick ends when its results are back
+            vkCmdWriteTimestamp2(cmd, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, queries, static_cast<uint32_t>(stages.size() + 1));
+        VK_CHECK(vkEndCommandBuffer(cmd));
+        return cmd;
     }
     bool any_readback() const {
         return std::any_of(tick_reads.begin(), tick_reads.end(), [](const auto& r) { return r.size > 0; });
@@ -404,7 +425,8 @@ ComputeRunner::~ComputeRunner() {
     VkDevice d = m.ctx.device();
     vkDeviceWaitIdle(d);
     if (m.flight.pre) m.ctx.free_command_buffer(m.flight.pre);
-    if (m.flight.post) m.ctx.free_command_buffer(m.flight.post);
+    for (VkCommandBuffer c : m.readback_cmds)
+        if (c) m.ctx.free_command_buffer(c);
     for (VkPipeline p : m.pipelines) vkDestroyPipeline(d, p, nullptr);
     for (VkPipeline p : m.check_pipelines) vkDestroyPipeline(d, p, nullptr);
     for (VkPipeline p : m.extras) vkDestroyPipeline(d, p, nullptr);
@@ -436,9 +458,9 @@ void ComputeRunner::tick_submit(const std::vector<bool>& run) {
     f.run = m.run_mask(run);
     VkCommandBuffer tick_cmd = m.tick_cmd(f.run);
     std::vector<VkCommandBuffer> cmds;
-    VkCommandBufferBeginInfo once{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-    once.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     if (!m.staged_copies.empty()) {
+        VkCommandBufferBeginInfo once{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+        once.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
         f.pre = m.ctx.allocate_command_buffer();
         VK_CHECK(vkBeginCommandBuffer(f.pre, &once));
         barrier(f.pre, COMPUTE, SHADER_RW, TRANSFER, VK_ACCESS_2_TRANSFER_WRITE_BIT);
@@ -450,16 +472,8 @@ void ComputeRunner::tick_submit(const std::vector<bool>& run) {
     }
     cmds.push_back(tick_cmd);
     if (m.any_readback()) {
-        f.post = m.ctx.allocate_command_buffer();
-        VK_CHECK(vkBeginCommandBuffer(f.post, &once));
-        m.record_readbacks(f.post);
-        if (m.queries) {  // the tick ends when its results are back
-            vkCmdWriteTimestamp2(f.post, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, m.queries,
-                                 static_cast<uint32_t>(m.stages.size() + 1));
-            f.ends_late = true;
-        }
-        VK_CHECK(vkEndCommandBuffer(f.post));
-        cmds.push_back(f.post);
+        cmds.push_back(m.readback_cmd());
+        f.ends_late = m.queries != VK_NULL_HANDLE;
     }
     if (m.queries && !m.ctx.device_clock(f.clock)) f.clock = 0;
     f.submitted = std::chrono::steady_clock::now();
@@ -594,6 +608,7 @@ uint32_t ComputeRunner::add_tick_readback(uint32_t binding, uint64_t bytes, uint
     m.finish();  // the buffers below may be replaced
     const uint64_t at = m.tick_reads.empty() ? 0 : (m.tick_reads.back().at + m.tick_reads.back().bytes + 15) & ~uint64_t(15);
     m.tick_reads.push_back({binding, offset, bytes, at, bytes});
+    m.readbacks_changed = true;
     const uint64_t total = at + bytes;
     for (auto& rb : m.tick_rb)
         if (total > rb.size) {  // grow, keeping the last tick's results
@@ -627,7 +642,9 @@ void ComputeRunner::set_tick_readback(uint32_t id, const void* src, uint64_t byt
 void ComputeRunner::set_tick_readback_bytes(uint32_t id, uint64_t bytes) {
     auto& r = impl_->tick_reads.at(id);
     if (bytes > r.bytes) throw std::out_of_range("set_tick_readback_bytes: more than the registered range");
+    if (r.size == bytes) return;
     r.size = bytes;
+    impl_->readbacks_changed = true;
 }
 
 uint64_t ComputeRunner::tick_readback_bytes(uint32_t id) const { return impl_->tick_reads.at(id).size; }

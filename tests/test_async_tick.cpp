@@ -159,6 +159,29 @@ int main() {
         CHECK(state_hash(a) == state_hash(b));
         hashes.push_back(state_hash(b));
 
+        // ---- readbacks added and resized between ticks: each tick copies what is registered then
+        {
+            GameSim c(*w.game, o);
+            std::vector<std::pair<uint32_t, const char*>> reads;
+            auto matches = [&] {
+                for (const auto& [id, field] : reads)
+                    if (result(c, id) != c.read_field(w.town, field, 0, TOWNS)) return false;
+                return true;
+            };
+            bool same = true;
+            for (uint32_t k = 0; k < 14; ++k) {
+                commands(c, w, k);
+                if (k == 2) reads.push_back({c.read_each_tick(w.town, "pop"), "pop"});  // after ticks without any
+                if (k == 5) reads.push_back({c.read_each_tick(w.town, "seen"), "seen"});  // one destination written
+                c.begin_tick();
+                if (k == 8) reads.push_back({c.read_each_tick(w.town, "owner"), "owner"});  // collects it first
+                c.end_tick();
+                if (k == 11) c.load(c.save());  // sizes the readbacks again
+                if (k != 8 && k != 11) same &= matches();  // a new one has no results before its first tick
+            }
+            CHECK(same && reads.size() == 3);
+        }
+
         // ---- waits that spin first: the same ticks, whether the spin sees them done or gives up
         for (uint32_t us : {1u, 1000000u}) {
             o.spin_us = us;

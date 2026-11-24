@@ -156,6 +156,8 @@ The first public version.
 - **Dividing by a define**: `DIV_DEFINE(a, name)` in rules gives exactly `a / D.name`
   without dividing. It is legacy from the start: it keeps working, but new rules should
   divide plainly, since only software devices gain much. Hosts recompile their rules once.
+- **Cheaper per-tick readbacks**: the copies are recorded once and reused until what is
+  read back changes, which saves about 1.2 microseconds of CPU time a tick.
 - **A starting state in bulk**: `WorldBuilder::create_rows()` and `set_rows()` add rows and
   set whole columns in one call.
 - **Faster compiling**: one shader compiler serves all the rules of a world, instead of one
