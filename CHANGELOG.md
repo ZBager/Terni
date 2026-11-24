@@ -164,7 +164,8 @@ The first public version.
 - **Less host memory**: a running `GameSim` no longer keeps a copy of every field, so it
   needs about as much less host memory as its state has (a world with 305 MiB of fields:
   330 MiB in all instead of 635, where the game's own starting state is the rest), and
-  starts 10-17% faster.
+  starts 10-17% faster. Reads, saves and loads move 8 MiB at a time, through buffers of that
+  size instead of up to 256 MiB.
 - **A starting state in bulk**: `WorldBuilder::create_rows()` and `set_rows()` add rows and
   set whole columns in one call.
 - **Faster compiling**: one shader compiler serves all the rules of a world, instead of one

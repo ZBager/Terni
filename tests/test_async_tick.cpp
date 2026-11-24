@@ -182,6 +182,41 @@ int main() {
             CHECK(same && reads.size() == 3);
         }
 
+        // ---- reads, writes, saves and loads larger than the pieces they are moved in (8 MiB)
+        {
+            constexpr uint32_t ROWS = 2500000;
+            WorldBuilder big;
+            const uint32_t cell = big.entity("cell", ROWS);
+            big.field(cell, "v", FieldType::Int);
+            big.field(cell, "pair", FieldType::Int, "", 2);
+            big.stage("add", "cell", "void main() { FOR_EACH_CELL(i) { cell_v[i] += 1; cell_pair[i * 2u] += 1; } }\n");
+            std::vector<int32_t> v(ROWS), pair(2 * ROWS), other(ROWS);
+            for (uint32_t i = 0; i < ROWS; ++i) v[i] = int32_t(i * 7), other[i] = int32_t(i ^ 0x5555u);
+            for (uint32_t i = 0; i < 2 * ROWS; ++i) pair[i] = int32_t(i * 5);
+            big.create_rows(cell, ROWS);
+            big.set_rows(cell, 0, "v", v);
+            big.set_rows(cell, 0, "pair", pair);
+            const auto g = big.finish();
+            CHECK(g->ok());
+            GameSim c(*g, o);
+            c.begin_tick();
+            c.write_field(cell, "v", 0, other);  // for the tick after this one
+            c.end_tick();
+            for (int32_t& x : v) ++x;
+            for (uint32_t i = 0; i < ROWS; ++i) ++pair[2 * i];
+            CHECK(c.read_field(cell, "v") == v && c.read_field(cell, "pair") == pair);
+            const auto some = c.read_field(cell, "pair", 100001, 2000000);
+            CHECK(some == std::vector<int32_t>(pair.begin() + 2 * 100001, pair.begin() + 2 * 2100001));
+            c.tick();
+            for (int32_t& x : other) ++x;
+            for (uint32_t i = 0; i < ROWS; ++i) ++pair[2 * i];
+            CHECK(c.read_field(cell, "v") == other);
+            const std::vector<uint8_t> bytes = c.save();
+            c.tick();
+            c.load(bytes);
+            CHECK(c.read_field(cell, "v") == other && c.read_field(cell, "pair") == pair && c.save() == bytes);
+        }
+
         // ---- waits that spin first: the same ticks, whether the spin sees them done or gives up
         for (uint32_t us : {1u, 1000000u}) {
             o.spin_us = us;

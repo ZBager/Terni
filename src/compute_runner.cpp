@@ -17,7 +17,8 @@ namespace terni {
 namespace {
 
 constexpr uint32_t WORKGROUP_SIZE = 256;  // local_size_x in shaders/terni/compute.glsl
-constexpr uint64_t STAGING_CHUNK = 256ull << 20;  // host staging is reused in 256 MiB pieces
+constexpr uint64_t STAGING_CHUNK = 256ull << 20;  // the first upload, and the most queue_write() stages, are in 256 MiB pieces
+constexpr uint64_t TRANSFER_CHUNK = 8ull << 20;   // read() and write() in pieces that stay in the CPU's cache
 
 constexpr VkPipelineStageFlags2 COMPUTE = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
 constexpr VkPipelineStageFlags2 TRANSFER = VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
@@ -48,7 +49,7 @@ struct ComputeRunner::Impl {
     // batched transfers
     GpuBuffer staging;                                         // queued writes, grows on demand
     GpuBuffer staging_busy;  // the staging of the tick in flight; the two swap at every submission
-    uint64_t staged = 0;
+    uint64_t staged = 0, staging_limit = 0;  // bytes queued, and the most that may be
     std::vector<std::pair<uint32_t, VkBufferCopy>> staged_copies;  // (binding, staging -> buffer)
     struct TickReadback { uint32_t binding; uint64_t offset, bytes, at, size; };  // size: bytes copied (<= bytes)
     std::vector<TickReadback> tick_reads;
@@ -367,7 +368,8 @@ ComputeRunner::ComputeRunner(uint32_t device_index, bool validation, const std::
         }
     }
     ctx.destroy_buffer(staging);
-    m.readback = ctx.create_buffer(chunk, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+    m.staging_limit = chunk;
+    m.readback = ctx.create_buffer(std::min(total, TRANSFER_CHUNK), VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                                    VK_MEMORY_PROPERTY_HOST_CACHED_BIT);
     m.upload_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
@@ -557,7 +559,7 @@ void ComputeRunner::write(uint32_t binding, const void* src, uint64_t bytes, uin
 void ComputeRunner::queue_write(uint32_t binding, const void* src, uint64_t bytes, uint64_t offset) {
     Impl& m = *impl_;
     if (bytes == 0) return;
-    const uint64_t limit = m.readback.size;  // largest staging allocation (the transfer chunk size)
+    const uint64_t limit = m.staging_limit;
     if (bytes > limit) {                      // too big to stage: apply directly
         flush_queued();
         write(binding, src, bytes, offset);
