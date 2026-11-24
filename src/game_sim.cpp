@@ -761,8 +761,18 @@ std::filesystem::path cache_file(const std::string& dir, uint64_t key) {
 }
 
 bool cache_load(const std::string& dir, uint64_t key, std::vector<uint32_t>& spirv) {
-    std::ifstream f(cache_file(dir, key), std::ios::binary);
-    if (!f) return false;
+    const std::filesystem::path file = cache_file(dir, key);
+    std::ifstream f(file, std::ios::binary);
+    // On Windows a file that another writer is replacing right now can be there and still
+    // refuse to open, for a moment.
+    for (int tries = 0; !f.is_open() && tries < 20; ++tries) {
+        std::error_code ec;
+        if (std::filesystem::status(file, ec).type() == std::filesystem::file_type::not_found) return false;
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        f.clear();
+        f.open(file, std::ios::binary);
+    }
+    if (!f.is_open()) return false;
     const std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
     if (bytes.size() < CACHE_HEADER || std::memcmp(bytes.data(), "TSPV", 4) != 0) return false;
     Reader r{bytes.data(), bytes.size(), 4};
@@ -969,12 +979,20 @@ CompileStats compile_rules(const Game& game, const std::string& cache_dir, const
     const ShaderLibrary library(shader_library_dir);
     const auto rules = rule_sources(game);
     CompileStats stats;
-    rules_spirv(rules, library, cache_dir, true, stats);
-    // the cache is the product here: make sure every shader can be loaded back from it
+    const auto compiled = rules_spirv(rules, library, cache_dir, true, stats);
+    // the cache is the product here: make sure every shader can be loaded back from it (on
+    // Windows, writers that replace one file at the same moment can all fail: try again)
     std::vector<uint32_t> spirv;
-    for (const auto& r : rules)
-        if (!cache_load(cache_dir, cache_key(r.source, library), spirv))
-            throw std::runtime_error("compile_rules: could not write the SPIR-V cache in '" + cache_dir + "'");
+    for (size_t i = 0; i < rules.size(); ++i) {
+        const uint64_t key = cache_key(rules[i].source, library);
+        bool there = cache_load(cache_dir, key, spirv);
+        for (int tries = 0; !there && tries < 25; ++tries) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            cache_store(cache_dir, key, compiled[i]);
+            there = cache_load(cache_dir, key, spirv);
+        }
+        if (!there) throw std::runtime_error("compile_rules: could not write the SPIR-V cache in '" + cache_dir + "'");
+    }
     return stats;
 }
 
