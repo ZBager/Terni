@@ -13,13 +13,15 @@
 // A field the stage writes is reported when the stage also reads it at another row,
 // writes another row without an atomic, or mixes atomic and plain accesses.
 //
-// It reads text, not a compiled program: accesses hidden in macros are missed, and a
-// helper function's parameters count as other rows. GameSim::tick_checked() confirms
-// (or rules out) a warning at run time. A line containing the comment
-// `terni: order ok` is left out.
+// Functions that main() never reaches are left out. It reads text, not a compiled
+// program: accesses hidden in macros are missed, and a helper function's parameters
+// count as other rows. GameSim::tick_checked() confirms (or rules out) a warning at run
+// time. A line containing the comment `terni: order ok` is left out.
 
 #include "order_lint.hpp"
 
+#include <algorithm>
+#include <cstddef>
 #include <cstring>
 #include <map>
 #include <set>
@@ -40,8 +42,8 @@ bool id_start(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') 
 bool id_char(char c) { return id_start(c) || (c >= '0' && c <= '9'); }
 
 // GLSL tokens without comments and preprocessor lines; `quiet` gets the lines whose
-// comments say `terni: order ok`.
-std::vector<Token> lex(const std::string& s, std::set<uint32_t>& quiet) {
+// comments say `terni: order ok`, `macro_names` every name in a preprocessor line.
+std::vector<Token> lex(const std::string& s, std::set<uint32_t>& quiet, std::set<std::string>& macro_names) {
     static const char* const OPS[] = {"<<=", ">>=", "++", "--", "+=", "-=", "*=", "/=", "%=", "&=",
                                       "|=",  "^=",  "==", "!=", "<=", ">=", "&&", "||", "<<", ">>"};
     std::vector<Token> out;
@@ -80,7 +82,10 @@ std::vector<Token> lex(const std::string& s, std::set<uint32_t>& quiet) {
         if (c == '#' && line_start) {  // preprocessor line, with continuations
             while (i < n && s[i] != '\n') {
                 if (s[i] == '\\' && i + 1 < n && s[i + 1] == '\n') ++line, ++i;
-                ++i;
+                size_t j = i;
+                while (id_start(s[i]) && j < n && id_char(s[j])) ++j;
+                if (j > i) macro_names.insert(s.substr(i, j - i));
+                i = std::max(i + 1, j);
             }
             continue;
         }
@@ -115,7 +120,9 @@ struct Access {
 class StageScan {
 public:
     StageScan(const std::string& source, const std::map<std::string, std::string>& buffers) : src_(source) {
-        t_ = lex(source, quiet_);
+        std::set<std::string> macro_names;
+        t_ = lex(source, quiet_, macro_names);
+        drop_unreached(macro_names);
         find_rows();
         for (size_t t = 0; t + 1 < t_.size(); ++t) {
             const auto b = buffers.find(t_[t].text);
@@ -169,6 +176,69 @@ private:
             return m + 1 < e && t_[m + 1].text == "*" && own(b + 1, m);
         }
         return false;
+    }
+
+    // Removes the functions main() never reaches. Reached: main, every name outside
+    // functions (other than prototypes) or in a preprocessor line, and what a reached
+    // function names, whichever overload. Text it cannot follow is kept whole.
+    void drop_unreached(const std::set<std::string>& macro_names) {
+        struct Function {
+            std::string name;
+            size_t begin, end;  // from its name to past its closing brace
+            bool reached;
+        };
+        std::vector<Function> functions;
+        std::set<std::string> outside = macro_names;
+        int nested = 0;  // inside braces that are no function's: a struct, or a macro that makes a function
+        for (size_t t = 0; t < t_.size(); ++t) {
+            const bool declarator = nested == 0 && t > 0 && (id_char(t_[t - 1].text[0]) || t_[t - 1].text == "]") &&
+                                    id_start(t_[t].text[0]) && t + 1 < t_.size() && t_[t + 1].text == "(";
+            const size_t close = declarator ? match(t + 1) : t_.size();
+            const std::string after = close + 1 < t_.size() ? t_[close + 1].text : "";
+            if (after == ";") {  // a prototype
+                t = close + 1;
+                continue;
+            }
+            if (after == "{") {
+                size_t e = close + 1;
+                int depth = 0;
+                do {
+                    if (t_[e].text == "{") ++depth;
+                    else if (t_[e].text == "}") --depth;
+                } while (++e < t_.size() && depth > 0);
+                if (depth != 0) return;  // braces that depend on #if
+                functions.push_back({t_[t].text, t, e, false});
+                t = e - 1;
+                continue;
+            }
+            if (t_[t].text == "{") ++nested;
+            else if (t_[t].text == "}" && --nested < 0) return;  // the same
+            if (id_start(t_[t].text[0])) outside.insert(t_[t].text);
+        }
+        std::vector<std::string> todo(outside.begin(), outside.end());
+        todo.push_back("main");
+        bool has_main = false;
+        while (!todo.empty()) {
+            const std::string name = std::move(todo.back());
+            todo.pop_back();
+            for (auto& f : functions) {
+                if (f.reached || f.name != name) continue;
+                f.reached = true;
+                has_main |= name == "main";
+                for (size_t t = f.begin + 1; t < f.end; ++t)
+                    if (id_start(t_[t].text[0])) todo.push_back(t_[t].text);
+            }
+        }
+        if (!has_main) return;
+        std::vector<Token> kept;
+        size_t from = 0;
+        for (const auto& f : functions) {
+            if (f.reached) continue;
+            kept.insert(kept.end(), t_.begin() + std::ptrdiff_t(from), t_.begin() + std::ptrdiff_t(f.begin));
+            from = f.end;
+        }
+        kept.insert(kept.end(), t_.begin() + std::ptrdiff_t(from), t_.end());
+        t_ = std::move(kept);
     }
 
     // Loop variables (FOR_EACH... (v)), copies of them (`uint q = v;`) and row bases

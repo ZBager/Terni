@@ -143,11 +143,33 @@ int main() {
                        "        cell_m[base + 1u] = cell_m[b2 + r];");
         stage("comma_other", "        const uint base = i * 4u, other = (i + 1u) * 4u;\n"
                              "        cell_m[base] = cell_m[other];");
+        // helpers: only those main() reaches, directly or not, count
+        const std::string own = "void main() {\n    FOR_EACH_CELL(i) { cell_m[i * 4u] = 1; }\n}\n";
+        const std::string helper = "uint far(uint j) { return cell_m[j] > 0 ? 1u : 0u; }\n";
+        auto raw = [&](const std::string& name, const std::string& glsl) { b.stage(name, "cell", glsl); };
+        raw("unused", helper + own);
+        raw("unused_pair", "uint far(uint j);\nuint near(uint j) { return far(j); }\n" + helper + own);
+        raw("unused_after", own + helper);
+        raw("unused_row", "void f(uint j) { uint base = j; FOR_EACH_CELL(j) { cell_m[j] = 2; } }\n"
+                          "void main() {\n    FOR_EACH_CELL(i) { uint j = i + 1u; cell_m[j] = 1; }\n}\n");
+        raw("used", helper + "void main() {\n    FOR_EACH_CELL(i) { cell_m[i * 4u] = int(far(i)); }\n}\n");
+        raw("used_chain", "uint far(uint j);\nuint near(uint j) { return far(j); }\n"
+                          "void main() {\n    FOR_EACH_CELL(i) { cell_m[i * 4u] = int(near(i)); }\n}\n" + helper);
+        raw("used_overload", "uint far(int j) { return 0u; }\n" + helper +
+                             "void main() {\n    FOR_EACH_CELL(i) { cell_m[i * 4u] = int(far(i)); }\n}\n");
+        raw("used_by_macro", helper + "#define FAR(j) \\\n    int(far(j))\n"
+                             "void main() {\n    FOR_EACH_CELL(i) { cell_m[i * 4u] = FAR(i); }\n}\n");
+        raw("made_by_macro", helper + "#define RULE(name) void name()\nRULE(body) { FOR_EACH_CELL(i) { if (i > 3u) return;"
+                             " else far(i); cell_m[i * 4u] = 1; } }\nvoid main() { body(); }\n");
+        raw("if_braces", "#if 1\nuint far(uint j) {\n#else\nuint far(int j) {\n#endif\n    return cell_m[j] > 0 ? 1u : 0u;\n}\n" + own);
+        raw("macro_main", "#define RULE void main()\n" + helper + "RULE {\n    FOR_EACH_CELL(i) { cell_m[i * 4u] = int(far(i)); }\n}\n");
         b.create(world);
         auto g = b.finish();
         for (const auto& w : g->warnings) std::printf("  warning: %s\n", w.text().c_str());
         CHECK(g->ok());
-        CHECK((warned(*g) == std::vector<std::string>{"neighbour", "mixed", "member", "comma_other"}));
+        CHECK((warned(*g) == std::vector<std::string>{"neighbour", "mixed", "member", "comma_other", "unused_row", "used",
+                                                      "used_chain", "used_overload", "used_by_macro", "made_by_macro",
+                                                      "if_braces", "macro_main"}));
         CHECK(!g->warnings.empty() && g->warnings[0].where.file == "neighbour.glsl" && g->warnings[0].where.line == 3);
     }
     for (const auto& d : VulkanContext::list_devices()) {
