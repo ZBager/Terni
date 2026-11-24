@@ -11,7 +11,12 @@ namespace terni::detail {
 
 bool have_rule_compiler() { return false; }
 
-std::vector<uint32_t> compile_glsl(const std::string& name, const std::string&, const IncludeResolver&) {
+struct RuleCompiler::Impl {};
+
+RuleCompiler::RuleCompiler() = default;
+RuleCompiler::~RuleCompiler() = default;
+
+std::vector<uint32_t> RuleCompiler::compile(const std::string& name, const std::string&, const IncludeResolver&) {
     throw std::runtime_error("rule '" + name + "' cannot be compiled: this build of Terni has no rule compiler "
                              "(Terni::runtime)");
 }

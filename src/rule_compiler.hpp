@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -25,8 +26,25 @@ using IncludeResolver = std::function<bool(const char* requested, std::string& c
 // Whether this build contains the compiler.
 bool have_rule_compiler();
 
-// Compiles one complete compute shader. Throws std::runtime_error with the compiler's
-// messages if it fails, or if this build has no compiler.
-std::vector<uint32_t> compile_glsl(const std::string& name, const std::string& source, const IncludeResolver& include);
+// Compiles compute shaders, one after another. Make one for a batch and drop it after:
+// glslang builds its built-in tables (about 100 ms) when the first compiler in the
+// process is made and drops them with the last, so a compiler per shader pays for them
+// every time. Made on first use: a start that finds every rule in the cache never
+// touches shaderc. One thread at a time; a batch on another thread has its own.
+class RuleCompiler {
+public:
+    RuleCompiler();
+    ~RuleCompiler();
+    RuleCompiler(const RuleCompiler&) = delete;
+    RuleCompiler& operator=(const RuleCompiler&) = delete;
+
+    // One complete compute shader. Throws std::runtime_error with the compiler's messages
+    // if it fails, or if this build has no compiler.
+    std::vector<uint32_t> compile(const std::string& name, const std::string& source, const IncludeResolver& include);
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
+};
 
 }  // namespace terni::detail

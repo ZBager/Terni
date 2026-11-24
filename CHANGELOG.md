@@ -145,6 +145,8 @@ The first public version.
   argument to `pick_device()`) runs the simulation on the GPU with a given adapter LUID,
   the ID a DirectX renderer has for its GPU on Windows. `DeviceInfo` gives each device's
   `luid` and `luid_valid`.
+- **Faster compiling**: one shader compiler serves all the rules of a world, instead of one
+  per rule: 12 rules compile in 0.16 s instead of 1.5 s. The compiled rules are the same.
 - **Licence**: LGPL 2.1 with the Terni Linking Exception (static linking, no relinking or
   reverse-engineering terms for games, compiled shaders belong to the game). Version
   1.1 of the exception adds that Terni may be combined and shipped with libraries

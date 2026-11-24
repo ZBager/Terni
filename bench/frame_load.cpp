@@ -11,7 +11,7 @@
 #include <stdexcept>
 #include <vector>
 
-#include "rule_compiler.hpp"  // detail::compile_glsl: the benchmark is built with the compiler
+#include "rule_compiler.hpp"  // detail::RuleCompiler: the benchmark is built with the compiler
 
 namespace terni::bench {
 namespace {
@@ -206,7 +206,7 @@ FrameLoad::FrameLoad(const std::array<uint8_t, 16>& device_uuid, double percent)
     plci.pushConstantRangeCount = 1;
     plci.pPushConstantRanges = &range;
     check(vkCreatePipelineLayout(v.device, &plci, nullptr, &v.layout), "vkCreatePipelineLayout");
-    const std::vector<uint32_t> spirv = detail::compile_glsl("frame_load.comp", PASS, [](const char*, std::string&, std::string&) {
+    const std::vector<uint32_t> spirv = detail::RuleCompiler().compile("frame_load.comp", PASS, [](const char*, std::string&, std::string&) {
         return false;
     });
     VkShaderModuleCreateInfo smci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};

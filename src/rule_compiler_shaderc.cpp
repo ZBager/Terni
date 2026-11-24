@@ -47,14 +47,22 @@ private:
 
 bool have_rule_compiler() { return true; }
 
-std::vector<uint32_t> compile_glsl(const std::string& name, const std::string& source, const IncludeResolver& include) {
-    // these settings are described by kCompileSettings (part of every cache key)
+struct RuleCompiler::Impl {
     shaderc::Compiler compiler;
+};
+
+RuleCompiler::RuleCompiler() = default;
+RuleCompiler::~RuleCompiler() = default;
+
+std::vector<uint32_t> RuleCompiler::compile(const std::string& name, const std::string& source,
+                                            const IncludeResolver& include) {
+    if (!impl_) impl_ = std::make_unique<Impl>();
+    // these settings are described by kCompileSettings (part of every cache key)
     shaderc::CompileOptions options;
     options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_3);
     options.SetOptimizationLevel(shaderc_optimization_level_performance);
     options.SetIncluder(std::make_unique<Includer>(include));
-    const auto result = compiler.CompileGlslToSpv(source, shaderc_compute_shader, name.c_str(), options);
+    const auto result = impl_->compiler.CompileGlslToSpv(source, shaderc_compute_shader, name.c_str(), options);
     if (result.GetCompilationStatus() != shaderc_compilation_status_success)
         throw std::runtime_error("rule '" + name + "' failed to compile:\n" + result.GetErrorMessage());
     return {result.cbegin(), result.cend()};

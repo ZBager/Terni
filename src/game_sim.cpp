@@ -819,6 +819,7 @@ std::vector<std::vector<uint32_t>> rules_spirv(const std::vector<RuleSource>& ru
         shown = library.describe(requested);
         return true;
     };
+    detail::RuleCompiler compiler;  // one for all of them
     std::vector<std::vector<uint32_t>> out(rules.size());
     std::string missing;
     size_t missing_count = 0;
@@ -828,7 +829,7 @@ std::vector<std::vector<uint32_t>> rules_spirv(const std::vector<RuleSource>& ru
         if (!cache_dir.empty() && cache_load(cache_dir, key, out[i])) {
             ++stats.cached;
         } else if (may_compile) {
-            out[i] = detail::compile_glsl(rules[i].name, rules[i].source, include);
+            out[i] = compiler.compile(rules[i].name, rules[i].source, include);
             if (!cache_dir.empty()) cache_store(cache_dir, key, out[i]);
             ++stats.compiled;
         } else {
