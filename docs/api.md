@@ -42,6 +42,8 @@ Describes a world in code. Every call validates; problems are collected in
 | `void stage_schedule(stage, every, offset = 0)` | Run the stage only in the ticks where `terni.tick % every == offset` |
 | `uint32_t create(entity, id = "")` | Adds a starting row; returns the row |
 | `void set(entity, row, field, raw, index = 0)` | Sets a starting value (`index` within a sized field) |
+| `uint32_t create_rows(entity, count)` | Adds `count` starting rows without ids; returns the first |
+| `void set_rows(entity, first_row, field, words)` | Sets whole starting rows of a field from raw words (a span), as `GameSim::write_field` takes them: `size` values per row, two words per money64 value |
 | `void add_modifier(bundle, entity, row, scale = fx::ONE, duration = 0)` | A modifier at the start |
 | `std::unique_ptr<Game> finish()` | Final validation, plus warnings (defines never given a value, order-dependent stages); check `ok()` |
 

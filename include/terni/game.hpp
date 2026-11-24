@@ -263,6 +263,13 @@ public:
     uint32_t create(uint32_t entity, const std::string& id = "", Location where = {});  // new row; returns row
     void set(uint32_t entity, uint32_t row, const std::string& field, int64_t raw, uint32_t index = 0,
              Location where = {});
+    // The same in bulk. create_rows() adds `count` rows without ids and returns the first
+    // (none, with an error, if they do not all fit); set_rows() sets whole rows of a field
+    // from `first_row` on to `words`, raw as in GameSim::write_field() (`size` values per
+    // row, two words per money64 value, low word first).
+    uint32_t create_rows(uint32_t entity, uint32_t count, Location where = {});
+    void set_rows(uint32_t entity, uint32_t first_row, const std::string& field, std::span<const int32_t> words,
+                  Location where = {});
     void add_modifier(uint32_t bundle, uint32_t entity, uint32_t row, int32_t scale = 1 << 16, uint32_t duration = 0);
 
     Game& game() { return *game_; }

@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -266,6 +267,63 @@ int main() {
             thrown = true;
         }
         CHECK(thrown);
+    }
+
+    // a starting state in bulk: the same tables as value by value
+    {
+        auto world = [](WorldBuilder& b) {
+            const uint32_t town = b.entity("town", 100);
+            b.field(town, "pop", FieldType::Quantity, "", 1, 256);
+            b.field(town, "stock", FieldType::Int, "", 3, -1);
+            b.field(town, "money", FieldType::Money64, "", 2, -5);
+            b.create(town, "first");
+            return town;
+        };
+        WorldBuilder one, bulk;
+        const uint32_t town = world(one);
+        CHECK(world(bulk) == town);
+        std::vector<int32_t> pop, stock, money;
+        for (uint32_t i = 0; i < 40; ++i) {
+            const uint32_t row = one.create(town);
+            one.set(town, row, "pop", i * 256);
+            pop.push_back(int32_t(i * 256));
+            for (uint32_t k = 0; k < 3; ++k) {
+                one.set(town, row, "stock", int64_t(i) - k, k);
+                stock.push_back(int32_t(i) - int32_t(k));
+            }
+            for (uint32_t k = 0; k < 2; ++k) {
+                const int64_t v = -(int64_t(i + k) << 33) + 7;
+                one.set(town, row, "money", v, k);
+                money.push_back(int32_t(uint32_t(uint64_t(v))));
+                money.push_back(int32_t(uint32_t(uint64_t(v) >> 32)));
+            }
+        }
+        const uint32_t first = bulk.create_rows(town, 40);
+        CHECK(first == 1);
+        bulk.set_rows(town, first, "pop", pop);
+        bulk.set_rows(town, first, "stock", stock);
+        bulk.set_rows(town, first, "money", std::span<const int32_t>(money).first(80));
+        bulk.set_rows(town, first + 20, "money", std::span<const int32_t>(money).subspan(80));
+        CHECK(one.game().tables[town].columns == bulk.game().tables[town].columns);
+        CHECK(one.game().tables[town].count == bulk.game().tables[town].count);
+        // up to the capacity, and nothing at all
+        CHECK(bulk.create_rows(town, 0) == 41 && bulk.create_rows(town, 59) == 41 && bulk.game().tables[town].count == 100);
+        bulk.set_rows(town, 99, "pop", std::vector<int32_t>{1});
+        bulk.set_rows(town, 100, "pop", {});
+        CHECK(bulk.game().ok());
+        // what does not fit is an error and changes nothing
+        const auto before = bulk.game().tables[town].columns;
+        bulk.set_rows(town, bulk.create_rows(town, 1), "pop", pop);  // the failed rows are skipped
+        CHECK(bulk.game().errors.size() == 1 && has_error(bulk.game(), "more 'town' entities than capacity 100"));
+        CHECK(bulk.create_rows(town, 0xFFFFFFFFu) == 0xFFFFFFFFu);
+        bulk.set_rows(town, 0, "size", pop);
+        CHECK(has_error(bulk.game(), "'town' has no field 'size'"));
+        bulk.set_rows(town, 0, "stock", std::span<const int32_t>(stock).first(4));
+        CHECK(has_error(bulk.game(), "4 words are not whole rows of field 'stock' (3 words per row)"));
+        bulk.set_rows(town, 61, "pop", pop);
+        bulk.set_rows(town, 0xFFFFFFFEu, "pop", pop);
+        CHECK(has_error(bulk.game(), "rows out of range for field 'pop'") && bulk.game().errors.size() == 6);
+        CHECK(bulk.game().tables[town].columns == before && bulk.game().tables[town].count == 100);
     }
 
     std::printf("test_game: %s\n", failures == 0 ? "PASS" : "FAIL");

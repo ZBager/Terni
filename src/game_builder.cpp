@@ -4,6 +4,7 @@
 // built in code and worlds loaded from data folders get the same checks.
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <stdexcept>
 
@@ -311,6 +312,37 @@ void WorldBuilder::set(uint32_t entity, uint32_t row, const std::string& field, 
         return;
     }
     set_raw(g.tables[entity].columns[size_t(f)], fd, size_t(row) * fd.size + index, raw);
+}
+
+uint32_t WorldBuilder::create_rows(uint32_t entity, uint32_t count, Location where) {
+    Game& g = *game_;
+    EntityTable& t = g.tables.at(entity);
+    const EntityDef& e = g.entities[entity];
+    if (count > e.capacity - t.count) {
+        error(where, "more '" + e.name + "' entities than capacity " + std::to_string(e.capacity));
+        return SKIPPED_ROW;
+    }
+    const uint32_t first = t.count;
+    t.count += count;
+    return first;
+}
+
+void WorldBuilder::set_rows(uint32_t entity, uint32_t first_row, const std::string& field,
+                            std::span<const int32_t> words, Location where) {
+    Game& g = *game_;
+    if (first_row == SKIPPED_ROW) return;
+    const EntityDef& e = g.entities.at(entity);
+    const int f = e.field_index(field);
+    if (f < 0) return error(where, "'" + e.name + "' has no field '" + field + "'");
+    const FieldDef& fd = e.fields[size_t(f)];
+    const size_t per_row = size_t(fd.size) * fd.words();
+    if (words.size() % per_row != 0)
+        return error(where, std::to_string(words.size()) + " words are not whole rows of field '" + field + "' (" +
+                                std::to_string(per_row) + " words per row)");
+    if (first_row > e.capacity || words.size() / per_row > e.capacity - first_row)
+        return error(where, "rows out of range for field '" + field + "'");
+    std::copy(words.begin(), words.end(),
+              g.tables[entity].columns[size_t(f)].begin() + std::ptrdiff_t(size_t(first_row) * per_row));
 }
 
 void WorldBuilder::add_modifier(uint32_t bundle, uint32_t entity, uint32_t row, int32_t scale, uint32_t duration) {

@@ -70,6 +70,22 @@ terni::GameSim sim(*game, options);                           // `game` must out
 log("simulating on " + sim.device_name());
 ```
 
+### A starting state from your code
+
+A world described with `WorldBuilder` can set its starting state a whole column at a time,
+which for large generated maps is much faster than `create` and `set` for each value:
+
+```cpp
+const uint32_t first = b.create_rows(province, count);
+b.set_rows(province, first, "pop", pops);         // std::vector<int32_t>, raw values
+b.set_rows(province, first, "stock", stocks);     // a field of size 8: 8 values per row
+```
+
+A game loaded with `load_game` holds its starting state in `game->tables`, which you may
+change before the `GameSim` starts: `tables[entity].count` is the rows in use, and
+`tables[entity].columns[field]` the raw words, for every row up to the capacity. The
+starting state is not part of `game_checksum()`: lockstep peers must generate the same one.
+
 ### Choosing a device
 
 - `DevicePreference::Discrete` (default): a dedicated GPU first, then integrated, then a
