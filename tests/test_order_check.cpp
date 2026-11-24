@@ -143,6 +143,17 @@ int main() {
                        "        cell_m[base + 1u] = cell_m[b2 + r];");
         stage("comma_other", "        const uint base = i * 4u, other = (i + 1u) * 4u;\n"
                              "        cell_m[base] = cell_m[other];");
+        // the own row's term anywhere in the sum
+        stage("sum_last", "        uint k = 3u, base = i * 4u, t = k + i * 4u;\n"
+                          "        cell_m[t] = cell_m[k + base] + cell_m[1u + 4u * i] + cell_m[1u + (i) * 4u] +"
+                          " cell_m[min(k, 2u) + base + 1u];");
+        stage("sum_other", "        cell_m[i * 4u] = cell_m[4u + i];");
+        stage("sum_product", "        uint j = i + 1u;\n        cell_m[i * 4u] = cell_m[1u + j * 4u];");
+        stage("sum_wrapped", "        cell_m[i * 4u] = cell_m[(1u + i * 4u) % 64u];");
+        stage("sum_wrapped2", "        cell_m[i * 4u] = cell_m[4u + i * 4u % 64u];");
+        stage("sum_rows", "        uint j = 2u;\n        cell_m[i * 4u] = cell_m[j * 4u + i * 4u];");
+        stage("sum_minus", "        cell_m[i * 4u] = cell_m[64u - i * 4u + i * 4u];");
+        stage("sum_inside", "        cell_m[i * 4u] = cell_m[4u * (1u + i * 4u)];");
         // helpers: only those main() reaches, directly or not, count
         const std::string own = "void main() {\n    FOR_EACH_CELL(i) { cell_m[i * 4u] = 1; }\n}\n";
         const std::string helper = "uint far(uint j) { return cell_m[j] > 0 ? 1u : 0u; }\n";
@@ -167,7 +178,9 @@ int main() {
         auto g = b.finish();
         for (const auto& w : g->warnings) std::printf("  warning: %s\n", w.text().c_str());
         CHECK(g->ok());
-        CHECK((warned(*g) == std::vector<std::string>{"neighbour", "mixed", "member", "comma_other", "unused_row", "used",
+        CHECK((warned(*g) == std::vector<std::string>{"neighbour", "mixed", "member", "comma_other", "sum_other",
+                                                      "sum_product", "sum_wrapped", "sum_wrapped2", "sum_rows", "sum_minus",
+                                                      "sum_inside", "unused_row", "used",
                                                       "used_chain", "used_overload", "used_by_macro", "made_by_macro",
                                                       "if_braces", "macro_main"}));
         CHECK(!g->warnings.empty() && g->warnings[0].where.file == "neighbour.glsl" && g->warnings[0].where.line == 3);

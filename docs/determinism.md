@@ -47,8 +47,8 @@ depend on the order the GPU runs the threads in, and differ between devices
 (confirm with GameSim::tick_checked)
 ```
 
-The thread's own row is the `FOR_EACH` variable, `v * size + k`, or a local value set
-from those (`uint base = p * N;` then `field[base + k]`). Helper functions that `main()`
+The thread's own row is the `FOR_EACH` variable, `v * size + k` (or `k + v * size`), or a
+local value set from those (`uint base = p * N;` then `field[base + k]`). Helper functions that `main()`
 never reaches are left out. The scan reads the text, so it misses accesses hidden in
 macros and treats a helper function's parameters as other rows. A line that is safe by design can be marked with the comment `terni: order ok`.
 

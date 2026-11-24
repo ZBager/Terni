@@ -32,7 +32,7 @@ The first public version.
 - **Determinism checks**: load-time warnings for stages whose result can depend on thread
   order; `GameSim::tick_checked()` to confirm at run time. Functions a stage never calls
   cause no warnings, and a row index may come from a declaration with several names
-  (`const uint n = 4u, base = i * n;`).
+  (`const uint n = 4u, base = i * n;`) and be a sum in either order (`k + i * n`).
 - **Platforms**: Linux, and Windows with Visual Studio 2022 and 2026 (MSVC) or MinGW-w64,
   with the same checksums, SPIR-V cache keys and results on all of them; rule files
   read the same whatever their line endings. `CMakePresets.json` for each platform, and

@@ -161,7 +161,7 @@ private:
     }
 
     // Is [b, e) an index into the thread's own row? `v`, `v * n + k`, `n * v + k`,
-    // `base`, `base + k`, `(own) * n + k`.
+    // `base`, `base + k`, `(own) * n + k`, and the sums the other way round (`k + v * n`).
     bool own(size_t b, size_t e) const {
         while (b < e && t_[b].text == "(" && match(b) == e - 1) ++b, --e;
         if (b >= e) return false;
@@ -173,9 +173,33 @@ private:
         if (e - b >= 3 && second == "*" && ids_.count(t_[b + 2].text)) return true;
         if (first == "(") {
             const size_t m = match(b);
-            return m + 1 < e && t_[m + 1].text == "*" && own(b + 1, m);
+            if (m + 1 < e && t_[m + 1].text == "*" && own(b + 1, m)) return true;
         }
-        return false;
+        return own_later_term(b, e);
+    }
+    // `k + v * n`, `k + base`: a sum with a term after the first that is the own row's.
+    // Not if another term is a product (`j * n + v * n` is row v + j), nor with any other
+    // operator (`(k + v * n) % m`), nor for `k + v`, the row k further on.
+    bool own_later_term(size_t b, size_t e) const {
+        bool found = false;
+        size_t from = b;
+        bool product = false;
+        for (size_t t = b; t <= e; ++t) {
+            if (t == e || t_[t].text == "+") {  // [from, t) is a term
+                const bool row = t == from + 1 && ids_.count(t_[from].text) > 0;
+                const bool own_row = from != b && from < t && !row && own(from, t);
+                if (product && !own_row) return false;
+                found |= own_row;
+                from = t + 1;
+                product = false;
+                continue;
+            }
+            const std::string& x = t_[t].text;
+            if (x == "(" || x == "[") t = match(t);
+            else if (x == "*") product = true;
+            else if (x != "." && !id_char(x[0])) return false;
+        }
+        return found;
     }
 
     // Removes the functions main() never reaches. Reached: main, every name outside
