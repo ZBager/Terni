@@ -95,11 +95,22 @@ void main() {
 - Changing a field between 32 bits and a small type means changing every rule that uses it,
   those in mods too.
 
-What they gain depends on how much of the memory a stage touches becomes smaller. In the
-benchmark's `medium` world, with two of the eight pop fields small (a `ref16` and a
-`count8`), the GPU time of a tick was 17% lower on a laptop RTX 4050 and 7% on a Radeon
-760M; with four small, 34% and 10%. On a software device (lavapipe) it did not change, and
-a world made mostly of small values ran 10% slower there.
+What they gain depends on the GPU and on how much of the memory a stage touches becomes
+smaller. The GPU time of a tick of the benchmark's world, with two of its eight pop fields
+small (a `ref16` and a `count8`) and with four, against 32-bit ones:
+
+| | `medium`, two | `medium`, four | `large`, two | `large`, four |
+| --- | ---: | ---: | ---: | ---: |
+| RTX 4050 Laptop | -16% | -27% | -13% | -19% |
+| RTX 4070 Ti | 0% | 0% | -11% | -19% |
+| Radeon 760M | -6% | -10% | -8% | -13% |
+| 7800X3D integrated Radeon | -2% | -2% | -2% | -2% |
+
+A tick with every pop read back gains more, since there is less to copy: with four small
+fields it took 23 to 30% less time on the RTX GPUs, 9 to 18% less on the Radeon 760M and 8%
+less on the 7800X3D's. On a software device (lavapipe) it did not change, and a world made
+mostly of small values ran 10% slower there. Devices that widen small fields take as long as
+with 32-bit ones.
 
 ## 64- and 128-bit integers
 

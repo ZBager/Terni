@@ -30,24 +30,24 @@ device and on a multithreaded C++ implementation of the same rules, which must g
 same bits. Its baseline is the `medium` world, with 1 million pops. On a laptop with a
 Ryzen 5 7640HS (6 cores, 12 threads), an RTX 4050 and a Radeon 760M:
 
-- **The GPU computes far faster.** With 1 million pops, the stages take 0.58 ms on the
-  RTX 4050 against 31.5 ms on one CPU thread and 4.9 ms on twelve: 54 and 8 times
+- **The GPU computes far faster.** With 1 million pops, the stages take 0.50 ms on the
+  RTX 4050 against 29.7 ms on one CPU thread and 4.5 ms on twelve: 60 and 9 times
   faster. A desktop RTX 4070 Ti takes 0.16 ms. From a million pops up the lead stays about
   the same: with 100 million pops the RTX 4050 computes a tick in 52 ms, against 3.0 s
-  and 462 ms. In smaller worlds it shrinks, and in the smallest (1,024 pops) the CPU
+  and 446 ms. In smaller worlds it shrinks, and in the smallest (1,024 pops) the CPU
   wins, 0.03 ms against 0.06 ms: a GPU tick costs a submission and a wait, however
   little work it has.
 - **Keep the state on the GPU.** The benchmark copies every pop back to system memory
-  each tick (31 MiB for 1 million pops). That takes the RTX 4050's tick from 0.58 ms to
-  3.4 ms in all, still 1.4 times faster than twelve CPU threads; the RTX 4070 Ti, with
-  twice the PCIe bandwidth, takes 1.5 ms, 2.6 times faster than sixteen. Reading back
+  each tick (31 MiB for 1 million pops). That takes the RTX 4050's tick from 0.50 ms to
+  3.8 ms in all, still 1.2 times faster than twelve CPU threads; the RTX 4070 Ti, with
+  twice the PCIe bandwidth, takes 1.6 ms, twice as fast as sixteen. Reading back
   only what an interface shows costs almost nothing (0.65 ms on the RTX 4050).
 - **Integrated GPUs pay too.** The Radeon 760M computes the 1-million-pop world in
-  1.8 ms, 17 times faster than one CPU thread. It shares the system's memory, so
-  reading every pop back costs it little: 2.8 ms in all, less than the RTX 4050.
+  1.7 ms, 18 times faster than one CPU thread. It shares the system's memory, so
+  reading every pop back costs it little: 2.7 ms in all, less than the RTX 4050.
 - **A software driver is a fallback, not a replacement.** lavapipe computes the
-  1-million-pop world in 38 ms on twelve threads: 8 times slower than the C++ on the
-  same threads, and 66 times slower than the RTX 4050.
+  1-million-pop world in 36 ms on twelve threads: 8 times slower than the C++ on the
+  same threads, and 72 times slower than the RTX 4050.
 - **Exact everywhere.** Every run, on every device and thread count, ends with the same
   state hash, on five machines with NVIDIA, AMD and Intel GPUs, a Steam Deck among them,
   and with Windows as with Linux.

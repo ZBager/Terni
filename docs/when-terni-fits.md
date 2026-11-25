@@ -35,15 +35,15 @@ threads), total time per tick with every pop read back:
 
 | Pops | RTX 4050 | CPU, 1 thread | CPU, 12 threads |
 | ---: | ---: | ---: | ---: |
-| 1,024 | 0.065 ms | 0.030 ms | 0.030 ms |
-| 50,000 | 0.25 ms | 1.5 ms | 0.24 ms |
-| 1,000,000 | 3.4 ms | 32 ms | 4.9 ms |
-| 10,000,000 | 31 ms | 329 ms | 52 ms |
+| 1,024 | 0.065 ms | 0.029 ms | 0.030 ms |
+| 50,000 | 0.23 ms | 1.5 ms | 0.24 ms |
+| 1,000,000 | 3.8 ms | 30 ms | 4.5 ms |
+| 10,000,000 | 31 ms | 311 ms | 47 ms |
 
 With a thousand pops the CPU is twice as fast. At 50,000 the GPU and all 12 CPU threads
 are even. From a million on, the GPU leads, and by far more when only what the
 interface shows is read back (below). On the desktop's RTX 4070 Ti the GPU already
-leads at 50,000 pops (0.14 ms against 0.26 ms on 16 threads).
+leads at 50,000 pops (0.13 ms against 0.23 ms on 16 threads).
 
 These numbers are for rules like the benchmark's: a few stages of arithmetic per row.
 Measure your own with `terni_bench`, or by writing one subsystem in Terni and timing it.
@@ -68,8 +68,8 @@ traffic often costs more than the computing:
 
 | `medium` (1,000,000 pops), RTX 4050 laptop | Per tick |
 | --- | ---: |
-| The rules alone | 0.58 ms |
-| Every pop read back (31 MiB) | 3.4 ms |
+| The rules alone | 0.50 to 0.58 ms |
+| Every pop read back (31 MiB) | 3.8 ms |
 | Only what the map and interface show | 0.65 ms |
 
 A discrete GPU reads back over PCIe; an integrated one shares the system's memory and

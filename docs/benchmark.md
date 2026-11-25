@@ -181,19 +181,18 @@ more room. On lavapipe the stand-in runs on the CPU as well, and competes with t
 for cores. A device added with `--driver` is not visible to the stand-in and is skipped.
 
 On two of the machines below (see [Reference results](#reference-results)), `medium`,
-`--frame-load 60`, alone and then beside the frames. On the desktop a chat program and a
-remote-desktop program were open; its times alone match its reference results.
+`--frame-load 60`, alone and then beside the frames.
 
 | Machine, device, read back | Total ms | p90 | p99 | Compute ms | Frame's GPU time | Frames late |
 | --- | --- | --- | --- | --- | --- | --- |
-| Laptop, Radeon 760M, every pop | 2.70 → 2.99 | 3.11 → 13.11 | 3.60 → 13.93 | 1.72 → 1.87 | 10.1 → 10.5 ms | 0 of 67 |
-| Laptop, RTX 4050, every pop | 3.49 → 8.02 | 3.95 → 8.60 | 4.66 → 9.03 | 0.50 → 0.57 | 9.7 → 15.4 ms | 53 of 69 |
-| Laptop, Radeon 760M, `ui` | 1.87 → 1.97 | 2.26 → 11.99 | 2.56 → 12.73 | 1.76 → 1.70 | 10.5 → 10.8 ms | 0 of 52 |
-| Laptop, RTX 4050, `ui` | 0.66 → 1.77 | 0.67 → 1.79 | 0.71 → 1.83 | 0.58 → 0.57 | 10.1 → 12.7 ms | 5 of 28 |
-| Desktop, 7800X3D integrated Radeon, every pop | 4.85 → 14.61 | 4.93 → 14.72 | 5.02 → 15.04 | 3.84 → 13.63 | 10.6 → 10.5 ms | 0 of 100 |
-| Desktop, RTX 4070 Ti, every pop | 1.55 → 3.98 | 1.75 → 4.37 | 1.78 → 4.81 | 0.16 → 0.19 | 11.0 → 15.9 ms | 23 of 39 |
-| Desktop, 7800X3D integrated Radeon, `ui` | 3.91 → 13.59 | 3.93 → 13.81 | 3.95 → 14.12 | 3.83 → 13.49 | 10.7 → 10.4 ms | 0 of 84 |
-| Desktop, RTX 4070 Ti, `ui` | 0.18 → 0.26 | 0.19 → 1.43 | 0.29 → 1.59 | 0.14 → 0.13 | 10.0 → 11.8 ms | 0 of 21 |
+| Laptop, Radeon 760M, every pop | 2.66 → 3.15 | 2.94 → 12.98 | 3.16 → 13.22 | 1.66 → 1.66 | 10.3 → 10.5 ms | 0 of 69 |
+| Laptop, RTX 4050, every pop | 3.85 → 7.98 | 4.20 → 8.62 | 4.46 → 9.24 | 0.58 → 0.57 | 10.0 → 15.8 ms | 51 of 67 |
+| Laptop, Radeon 760M, `ui` | 1.85 → 2.22 | 2.26 → 12.11 | 2.44 → 12.59 | 1.71 → 1.64 | 10.3 → 10.5 ms | 0 of 56 |
+| Laptop, RTX 4050, `ui` | 0.66 → 1.78 | 0.67 → 2.21 | 0.69 → 2.38 | 0.58 → 0.57 | 10.0 → 12.6 ms | 6 of 29 |
+| Desktop, 7800X3D integrated Radeon, every pop | 4.72 → 14.58 | 4.74 → 14.83 | 4.81 → 15.08 | 3.77 → 13.53 | 10.6 → 10.5 ms | 0 of 100 |
+| Desktop, RTX 4070 Ti, every pop | 1.55 → 3.84 | 1.56 → 4.12 | 1.57 → 4.26 | 0.16 → 0.19 | 9.8 → 15.0 ms | 24 of 40 |
+| Desktop, 7800X3D integrated Radeon, `ui` | 3.85 → 13.56 | 3.88 → 13.78 | 3.94 → 13.80 | 3.76 → 13.41 | 10.5 → 10.4 ms | 0 of 84 |
+| Desktop, RTX 4070 Ti, `ui` | 0.18 → 0.17 | 0.18 → 1.36 | 0.19 → 1.37 | 0.14 → 0.13 | 10.0 → 10.9 ms | 0 of 20 |
 
 - **On an integrated GPU, a tick that meets a frame waits for it, and the frames hardly
   change.** The Radeon 760M's ticks are short, so most of them miss the frames and only
@@ -203,8 +202,8 @@ remote-desktop program were open; its times alone match its reference results.
 - **On a discrete GPU, the stages take about as long as alone, but every tick takes
   longer, and so do the frames.** With every pop read back (31 MiB a tick), ticks back to
   back push half or more of the frames past 16.7 ms on both machines. With only what the
-  interface shows read back, the RTX 4070 Ti still ticks in 0.26 ms (ticks that meet a
-  frame take about 1.5 ms) and no frame is late.
+  interface shows read back, the RTX 4070 Ti still ticks in 0.17 ms (ticks that meet a
+  frame take about 1.4 ms) and no frame is late.
 - So read back only what your interface needs, and tick as often as the game needs, not
   as fast as the GPU allows. On a slow integrated GPU, expect a tick to take as long as
   a frame and a tick together. `GameSim::stage_times()` and `device_health()` measure the
@@ -224,17 +223,17 @@ them. Where a machine has no result for a device or a size, the chart says N/A.
 
 Only in the smallest world is the CPU reference faster than every GPU: a GPU tick costs a
 submission and a wait, however little work it has. From a million pops up, the RTX 4050
-computes a tick 54 to 58 times faster than one CPU thread, and every line rises about as
-steeply as the world grows. Reading every pop back costs it about five times its
-compute, yet it stays ahead of all twelve threads at every size from `medium` up.
+computes a tick 55 to 60 times faster than one CPU thread, and every line rises about as
+steeply as the world grows. Reading every pop back makes a tick five to eight times as
+long as its compute, yet it stays ahead of all twelve threads at every size from `medium` up.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/benchmark/tiers-speedup-dark.svg">
-  <img alt="Columns showing how many times faster than all 12 CPU threads each approach is at every tier on the RTX 4050 laptop. RTX 4050 compute rises from 1.1x at tiny to 8 to 9x from medium up; with every pop read back it stays between 1.4x and 1.7x; the Radeon 760M reaches about 2x; lavapipe stays below 1x and is N/A at giant and colossal." src="images/benchmark/tiers-speedup-light.svg">
+  <img alt="Columns showing how many times faster than all 12 CPU threads each approach is at every tier on the RTX 4050 laptop. RTX 4050 compute rises from 1.1x at tiny to 8 to 9x from medium up; with every pop read back it stays between 1.2x and 1.5x; the Radeon 760M reaches about 2x; lavapipe stays below 1x and is N/A at giant and colossal." src="images/benchmark/tiers-speedup-light.svg">
 </picture>
 
 Against all twelve CPU threads, the GPU's lead stops growing at about a million pops:
-the RTX 4050 computes 8 to 9 times faster from there on, and 1.4 to 1.7 times faster with
+the RTX 4050 computes 8 to 9 times faster from there on, and 1.2 to 1.5 times faster with
 every pop read back. The integrated Radeon 760M, which reads back from the memory it
 shares with the CPU, is faster than the RTX 4050 from `medium` up once everything comes
 back.
@@ -249,7 +248,7 @@ back.
 Each GPU against the CPU reference on all threads of its own machine. The RTX 4050
 laptop and the desktop have results at every tier; the other three machines were
 measured at `medium` only. The discrete GPUs compute faster from 50,000 pops up;
-reading every pop back narrows their lead to 1.3 to 2.6 times from `medium` up. The
+reading every pop back narrows their lead on Linux to 1.2 to 2.1 times from `medium` up. The
 7800X3D's two-compute-unit integrated GPU is at best about as fast as its own CPU.
 
 ### The baseline on every machine
@@ -269,14 +268,18 @@ that table.
 
 ## Reference results
 
-`terni_bench 1`, with each size's default ticks, on five machines with Linux, GCC 16,
-NVIDIA driver 620.70 and Mesa 26.2 (RADV, the Intel driver and lavapipe):
+`terni_bench 1`, with each size's default ticks, on five machines with Linux and GCC 16.
+The first two were measured on 25 November 2026, with NVIDIA driver 620.73 and Mesa 26.3;
+the others on 18 and 19 November with an earlier Terni, NVIDIA driver 620.70 and Mesa 26.2
+(RADV, the Intel driver and lavapipe).
 
 - **RTX 4050 laptop**: Ryzen 5 7640HS (6 cores, 12 threads), Radeon 760M integrated GPU,
-  RTX 4050 Laptop GPU. Every size.
+  RTX 4050 Laptop GPU. Every size, with Terni e7b100b. Its GPUs' times with every pop read
+  back are medians of five runs; the rest are single runs.
 - **Desktop**: Ryzen 7 7800X3D (8 cores, 16 threads), its integrated Radeon GPU (2
-  compute units), RTX 4070 Ti. Every size; a web browser and a chat program were open
-  during these runs, so its times may be a little high.
+  compute units), RTX 4070 Ti. Every size, with Terni b51a1c9 (the two commits differ only in
+  small fields, which this world does not use), each a single run; the RTX 4070 Ti's
+  times with every pop read back vary by up to about 3% between runs.
 - **RTX 3070 laptop**: Ryzen 5 5600H (6 cores, 12 threads), RTX 3070 Laptop GPU.
 - **Intel laptop**: Core i5-7200U (2 cores, 4 threads, from 2016), Intel HD Graphics 620
   integrated GPU.
@@ -296,25 +299,25 @@ Every pop read back each tick (the default):
 
 | RTX 4050 laptop | Total ms | Compute ms | vs 1 CPU thread |
 | --- | ---: | ---: | ---: |
-| RTX 4050 Laptop | 3.41 | 0.58 | 9.2x |
-| Radeon 760M | 2.80 | 1.83 | 11x |
-| lavapipe, 12 threads | 41.1 | 38.4 | 0.8x |
-| CPU reference, 1 thread | 31.5 | | 1x |
-| CPU reference, 2 threads | 16.0 | | 2.0x |
-| CPU reference, 4 threads | 8.55 | | 3.7x |
-| CPU reference, 8 threads | 6.40 | | 4.9x |
-| CPU reference, 12 threads | 4.87 | | 6.5x |
+| RTX 4050 Laptop | 3.83 | 0.50 | 7.8x |
+| Radeon 760M | 2.68 | 1.66 | 11x |
+| lavapipe, 12 threads | 38.0 | 36.0 | 0.8x |
+| CPU reference, 1 thread | 29.7 | | 1x |
+| CPU reference, 2 threads | 15.2 | | 2.0x |
+| CPU reference, 4 threads | 8.06 | | 3.7x |
+| CPU reference, 8 threads | 6.26 | | 4.7x |
+| CPU reference, 12 threads | 4.52 | | 6.6x |
 
 | Desktop | Total ms | Compute ms | vs 1 CPU thread |
 | --- | ---: | ---: | ---: |
-| RTX 4070 Ti | 1.55 | 0.16 | 19x |
-| Ryzen 7800X3D integrated Radeon | 4.82 | 3.84 | 6.1x |
-| lavapipe, 16 threads | 25.5 | 24.4 | 1.1x |
-| CPU reference, 1 thread | 29.3 | | 1x |
-| CPU reference, 2 threads | 15.0 | | 2.0x |
-| CPU reference, 4 threads | 7.85 | | 3.7x |
-| CPU reference, 8 threads | 5.42 | | 5.4x |
-| CPU reference, 16 threads | 3.97 | | 7.4x |
+| RTX 4070 Ti | 1.56 | 0.16 | 18x |
+| Ryzen 7800X3D integrated Radeon | 4.80 | 3.77 | 5.8x |
+| lavapipe, 16 threads | 24.9 | 24.1 | 1.1x |
+| CPU reference, 1 thread | 27.8 | | 1x |
+| CPU reference, 2 threads | 13.9 | | 2.0x |
+| CPU reference, 4 threads | 7.09 | | 3.9x |
+| CPU reference, 8 threads | 3.69 | | 7.5x |
+| CPU reference, 16 threads | 3.06 | | 9.1x |
 
 | Desktop, Windows | Total ms | Compute ms | vs 1 CPU thread |
 | --- | ---: | ---: | ---: |
@@ -356,22 +359,24 @@ Every pop read back each tick (the default):
 What they show:
 
 - **The time to read every pop back depends on the PCIe link.** The RTX 4070 Ti
-  computes a tick 25 times faster than all 16 threads of the 7800X3D, and reads back at
-  about 23 GB/s: with every pop read back it is still 2.6 times faster. The RTX 4050
-  reads back at about 11 GB/s, 1.4 times faster than its 12 CPU threads in all. The RTX
-  3070 Laptop computes faster than the RTX 4050 (0.39 ms against 0.58 ms) but reads
+  computes a tick 19 times faster than all 16 threads of the 7800X3D, and reads back at
+  about 23 GB/s: with every pop read back it is still twice as fast. The RTX 4050
+  reads back at about 10 GB/s, 1.2 times faster than its 12 CPU threads in all. Its compute
+  alternates between 0.50 and 0.58 ms from run to run. The RTX
+  3070 Laptop computes faster than the RTX 4050 (0.39 ms) but reads
   back at about 5.5 GB/s, so in all it takes 6.2 ms, still 1.3 times faster than its 12
   CPU threads.
 - **Integrated GPUs differ widely.** The Radeon 760M (8 compute units) shares the
   system's memory, reads back cheaply, and is 1.7 times as fast as its 12 CPU threads.
-  The 7800X3D's 2-compute-unit Radeon only matches its CPU. The 2016 HD Graphics 620
+  The 7800X3D's 2-compute-unit Radeon stays behind its CPU's 16 threads (4.80 against 3.06 ms
+  with every pop read back). The 2016 HD Graphics 620
   computes a tick 1.3 times faster than all four CPU threads, and with every pop read
   back the two are even. The Steam Deck's GPU is 2.7 times faster than its 8 CPU threads
   with every pop read back, the largest lead of an integrated GPU here: its CPU is small,
   and reading back from shared memory costs it about 1 ms.
 - **lavapipe** computes 6 to 11 times slower than the C++ on the same threads.
 - **SMT helps unevenly.** From 8 to 12 threads the 5600H gains almost nothing, the
-  7640HS about 30 %.
+  7640HS about 40 %.
 
 With `--readback ui` (only province unrest and empire treasuries come back), total ms
 against compute ms:
@@ -381,10 +386,22 @@ against compute ms:
 | RTX 4070 Ti | 0.18 | 0.14 |
 | RTX 3070 Laptop | 0.57 | 0.42 |
 | RTX 4050 Laptop | 0.65 | 0.58 |
-| Radeon 760M | 1.87 | 1.75 |
-| Ryzen 7800X3D integrated Radeon | 3.90 | 3.83 |
+| Radeon 760M | 1.81 | 1.70 |
+| Ryzen 7800X3D integrated Radeon | 3.86 | 3.76 |
 | Intel HD Graphics 620 | 17.6 | 17.2 |
 | Steam Deck GPU | 2.86 | 2.59 |
+
+The same with `--readback ui` at every size, on the two machines measured at every size:
+
+| Total ms, every size | RTX 4070 Ti | 7800X3D integrated Radeon | RTX 4050 Laptop | Radeon 760M |
+| --- | ---: | ---: | ---: | ---: |
+| `tiny` | 0.052 | 0.112 | 0.063 | 0.196 |
+| `small` | 0.062 | 0.391 | 0.099 | 0.441 |
+| `medium` | 0.179 | 3.86 | 0.650 | 1.81 |
+| `large` | 1.38 | 17.7 | 4.19 | 9.11 |
+| `huge` | 2.33 | 29.3 | 6.72 | 14.8 |
+| `giant` | 10.8 | 146 | 27.5 | 64.7 |
+| `colossal` | 21.0 | 288 | 53.2 | 127 |
 
 ### Every size
 
@@ -393,23 +410,23 @@ compute ms in brackets:
 
 | RTX 4050 laptop | RTX 4050 Laptop | Radeon 760M | lavapipe, 12 threads | CPU, 1 thread | CPU, 12 threads |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `tiny` | 0.065 (0.027) | 0.262 (0.136) | 0.870 | 0.030 | 0.030 |
-| `small` | 0.246 (0.057) | 0.530 (0.376) | 3.85 | 1.54 | 0.235 |
-| `medium` | 3.41 (0.580) | 2.80 (1.83) | 41.1 | 31.5 | 4.87 |
-| `large` | 19.8 (3.35) | 14.1 (8.57) | 152 | 193 | 31.3 |
-| `huge` | 30.7 (5.66) | 23.4 (14.3) | 249 | 329 | 52.0 |
-| `giant` | 150 (26.3) | 111 (67.1) | N/A | 1,518 | 231 |
-| `colossal` | 297 (52.4) | 221 (134) | N/A | 3,039 | 462 |
+| `tiny` | 0.065 (0.028) | 0.185 (0.101) | 0.865 | 0.029 | 0.030 |
+| `small` | 0.235 (0.058) | 0.463 (0.344) | 3.85 | 1.50 | 0.238 |
+| `medium` | 3.83 (0.499) | 2.68 (1.66) | 38.0 | 29.7 | 4.52 |
+| `large` | 19.9 (3.34) | 14.2 (8.49) | 143 | 182 | 27.4 |
+| `huge` | 30.8 (5.65) | 23.4 (14.2) | 236 | 311 | 47.4 |
+| `giant` | 150 (26.3) | 107 (64.2) | N/A | 1,498 | 221 |
+| `colossal` | 297 (52.4) | 212 (127) | N/A | 3,000 | 446 |
 
 | Desktop | RTX 4070 Ti | 7800X3D integrated Radeon | lavapipe, 16 threads | CPU, 1 thread | CPU, 16 threads |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `tiny` | 0.061 (0.023) | 0.100 (0.051) | 0.837 | 0.027 | 0.028 |
-| `small` | 0.141 (0.031) | 0.419 (0.328) | 3.11 | 1.44 | 0.261 |
-| `medium` | 1.55 (0.161) | 4.82 (3.84) | 25.5 | 29.3 | 3.97 |
-| `large` | 9.62 (1.33) | 23.5 (17.6) | 94.5 | 178 | 20.8 |
-| `huge` | 15.0 (2.28) | 38.8 (29.5) | 155 | 307 | 35.1 |
-| `giant` | 74.3 (11.2) | 192 (148) | N/A | 1,485 | 163 |
-| `colossal` | 152 (22.5) | 382 (292) | N/A | 2,972 | 318 |
+| `tiny` | 0.053 (0.024) | 0.115 (0.047) | 0.826 | 0.027 | 0.028 |
+| `small` | 0.134 (0.032) | 0.430 (0.320) | 2.82 | 1.40 | 0.229 |
+| `medium` | 1.56 (0.160) | 4.80 (3.77) | 24.9 | 27.8 | 3.06 |
+| `large` | 9.36 (1.27) | 23.7 (17.3) | 91.9 | 167 | 17.7 |
+| `huge` | 14.5 (2.14) | 38.4 (28.9) | 150 | 288 | 31.1 |
+| `giant` | 71.5 (10.4) | 190 (145) | N/A | 1,402 | 151 |
+| `colossal` | 143 (20.7) | 375 (287) | N/A | 2,811 | 302 |
 
 | Desktop, Windows | RTX 4070 Ti | 7800X3D integrated Radeon | CPU, 1 thread | CPU, 16 threads |
 | --- | ---: | ---: | ---: | ---: |
@@ -422,31 +439,31 @@ compute ms in brackets:
 | `colossal` | 142 (20.7) | 414 (275) | 3,357 | 455 |
 
 From `large` up, a tick costs about the same per pop. Compute alone, the RTX 4050 is
-about 58 times faster than one CPU thread and 9 times faster than twelve; the RTX 4070
-Ti about 130 times faster than one thread and 14 to 16 times faster than sixteen.
-Reading every pop back takes five to six times as long as the compute, and even so the
-RTX 4050 stays about 1.6 times faster than its twelve threads and the RTX 4070 Ti about
-2.2 times faster than its sixteen. lavapipe is N/A at `giant` and `colossal`: one pop
+55 to 57 times faster than one CPU thread and 8 times faster than twelve; the RTX 4070
+Ti 132 to 136 times faster than one thread and 14 to 15 times faster than sixteen.
+With every pop read back a tick takes five to seven times as long as its compute, and even so the
+RTX 4050 stays about 1.4 to 1.5 times faster than its twelve threads and the RTX 4070 Ti about
+twice as fast as its sixteen. lavapipe is N/A at `giant` and `colossal`: one pop
 field is larger than the 128 MiB a buffer may have there.
 
-The same desktop with Windows and with Linux, every pop read back:
+The same desktop with Windows (19 November, an earlier Terni) and with Linux, every pop read back:
 
-- The RTX 4070 Ti computes as fast on both (within 10%). Its total is the same at
-  `medium` and lower with Windows at `giant` and `colossal` (142 against 152 ms), but
-  higher at `tiny` and `small` (0.09 against 0.06 ms at `tiny`: each tick's submission
-  costs more), and at `large` it alternates between about 9.3 and 12.6 ms.
-- The integrated Radeon computes 15 to 20% faster with Mesa's RADV on Linux than with
-  AMD's own driver on Windows from `small` to `huge`, and 4 to 6% slower at `giant` and
-  `colossal`.
-- The CPU reference built with MSVC is 13 to 18% slower on one thread than with GCC on
-  Linux, and gains less from more threads (5.54 against 3.97 ms on sixteen at `medium`).
+- The RTX 4070 Ti computes as fast on both from `medium` up (within 3%). Its total is the
+  same at `medium`, `huge`, `giant` and `colossal` too (about 142 ms on both at `colossal`), but
+  higher with Windows at `tiny` and `small` (0.09 against 0.05 ms at `tiny`: each tick's
+  submission costs more), and at `large` it alternates between about 9.3 and 12.6 ms.
+- The integrated Radeon takes 15 to 17% less time with Mesa's RADV on Linux than with
+  AMD's own driver on Windows from `small` to `huge` (compute alone), and 2 to 4% more at
+  `giant` and `colossal`.
+- The CPU reference built with MSVC is 19 to 26% slower on one thread than with GCC on
+  Linux, and gains less from more threads (5.54 against 3.06 ms on sixteen at `medium`).
   That is the compiler and its standard library, not Windows: on the same machine with
   Windows, a MinGW-w64 build (GCC 16.2) takes 30.7 ms on one thread and 3.22 ms on
   sixteen at `medium`, with the GPU times unchanged.
 
 `colossal` with `--readback ui`, every pop staying on the GPU: the RTX 4070 Ti takes
-22.5 ms per tick, the RTX 3070 Laptop 25.4 ms (24.8 ms compute), the RTX 4050 53.0 ms,
-the Radeon 760M 133 ms, the Steam Deck 161 ms and the HD Graphics 620 688 ms, after a
+21.0 ms per tick, the RTX 3070 Laptop 25.4 ms (24.8 ms compute), the RTX 4050 53.2 ms,
+the Radeon 760M 127 ms, the Steam Deck 161 ms and the HD Graphics 620 688 ms, after a
 42-second start, all in the same state (hash `efd84db0206e40e3`). With every pop read
 back the HD Graphics 620 is skipped: the 3 GiB of state and two 3 GiB readback buffers do
 not fit in the memory it shares with the CPU (`vkAllocateMemory` fails).

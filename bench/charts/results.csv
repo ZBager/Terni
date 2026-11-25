@@ -1,46 +1,115 @@
 machine,kind,device,size,readback,total_ms,compute_ms
-RTX 4050 laptop,integrated,AMD Radeon 760M Graphics (RADV PHOENIX),tiny,pops,0.2619,0.1359
-RTX 4050 laptop,discrete,NVIDIA GeForce RTX 4050 Laptop GPU,tiny,pops,0.0654,0.0265
-RTX 4050 laptop,lavapipe,"llvmpipe (LLVM 23.1.4, 256 bits)",tiny,pops,0.8697,0.7926
-RTX 4050 laptop,cpu_1,"CPU reference, 1 thread",tiny,pops,0.0301,0.0301
-RTX 4050 laptop,cpu_all,"CPU reference, 12 threads",tiny,pops,0.0301,0.0301
-RTX 4050 laptop,integrated,AMD Radeon 760M Graphics (RADV PHOENIX),small,pops,0.5302,0.3758
-RTX 4050 laptop,discrete,NVIDIA GeForce RTX 4050 Laptop GPU,small,pops,0.2456,0.0569
-RTX 4050 laptop,lavapipe,"llvmpipe (LLVM 23.1.4, 256 bits)",small,pops,3.8453,3.7234
-RTX 4050 laptop,cpu_1,"CPU reference, 1 thread",small,pops,1.5407,1.5407
-RTX 4050 laptop,cpu_all,"CPU reference, 12 threads",small,pops,0.2354,0.2354
-RTX 4050 laptop,integrated,AMD Radeon 760M Graphics (RADV PHOENIX),medium,pops,2.7986,1.8306
-RTX 4050 laptop,discrete,NVIDIA GeForce RTX 4050 Laptop GPU,medium,pops,3.4076,0.5802
-RTX 4050 laptop,lavapipe,"llvmpipe (LLVM 23.1.4, 256 bits)",medium,pops,41.0974,38.3819
-RTX 4050 laptop,cpu_1,"CPU reference, 1 thread",medium,pops,31.5137,31.5137
-RTX 4050 laptop,cpu_all,"CPU reference, 12 threads",medium,pops,4.8711,4.8711
-RTX 4050 laptop,integrated,AMD Radeon 760M Graphics (RADV PHOENIX),large,pops,14.069,8.5737
-RTX 4050 laptop,discrete,NVIDIA GeForce RTX 4050 Laptop GPU,large,pops,19.7706,3.3502
-RTX 4050 laptop,lavapipe,"llvmpipe (LLVM 23.1.4, 256 bits)",large,pops,151.7957,136.1127
-RTX 4050 laptop,cpu_1,"CPU reference, 1 thread",large,pops,192.9834,192.9834
-RTX 4050 laptop,cpu_all,"CPU reference, 12 threads",large,pops,31.3115,31.3115
-RTX 4050 laptop,integrated,AMD Radeon 760M Graphics (RADV PHOENIX),huge,pops,23.3636,14.3016
-RTX 4050 laptop,discrete,NVIDIA GeForce RTX 4050 Laptop GPU,huge,pops,30.67,5.6583
-RTX 4050 laptop,lavapipe,"llvmpipe (LLVM 23.1.4, 256 bits)",huge,pops,249.3428,224.4456
-RTX 4050 laptop,cpu_1,"CPU reference, 1 thread",huge,pops,328.7738,328.7738
-RTX 4050 laptop,cpu_all,"CPU reference, 12 threads",huge,pops,51.9613,51.9613
-RTX 4050 laptop,integrated,AMD Radeon 760M Graphics (RADV PHOENIX),giant,pops,110.6622,67.0633
-RTX 4050 laptop,discrete,NVIDIA GeForce RTX 4050 Laptop GPU,giant,pops,149.601,26.2905
-RTX 4050 laptop,cpu_1,"CPU reference, 1 thread",giant,pops,1517.6896,1517.6896
-RTX 4050 laptop,cpu_all,"CPU reference, 12 threads",giant,pops,230.6452,230.6452
-RTX 4050 laptop,integrated,AMD Radeon 760M Graphics (RADV PHOENIX),colossal,pops,220.5851,133.8861
-RTX 4050 laptop,discrete,NVIDIA GeForce RTX 4050 Laptop GPU,colossal,pops,296.9079,52.3862
-RTX 4050 laptop,cpu_1,"CPU reference, 1 thread",colossal,pops,3039.2023,3039.2023
-RTX 4050 laptop,cpu_all,"CPU reference, 12 threads",colossal,pops,461.7533,461.7533
+RTX 4050 laptop,discrete,NVIDIA GeForce RTX 4050 Laptop GPU,tiny,pops,0.0649,0.0275
+RTX 4050 laptop,integrated,AMD Radeon 760M Graphics (RADV PHOENIX),tiny,pops,0.1847,0.1011
+RTX 4050 laptop,lavapipe,"llvmpipe (LLVM 23.1.5, 256 bits)",tiny,pops,0.8654,0.7955
+RTX 4050 laptop,cpu_1,"CPU reference, 1 thread",tiny,pops,0.0291,0.0291
+RTX 4050 laptop,cpu_all,"CPU reference, 12 threads",tiny,pops,0.0297,0.0297
+RTX 4050 laptop,discrete,NVIDIA GeForce RTX 4050 Laptop GPU,tiny,ui,0.0627,0.0274
+RTX 4050 laptop,integrated,AMD Radeon 760M Graphics (RADV PHOENIX),tiny,ui,0.1959,0.0999
+RTX 4050 laptop,lavapipe,"llvmpipe (LLVM 23.1.5, 256 bits)",tiny,ui,0.8606,0.7944
+RTX 4050 laptop,discrete,NVIDIA GeForce RTX 4050 Laptop GPU,small,pops,0.2349,0.0581
+RTX 4050 laptop,integrated,AMD Radeon 760M Graphics (RADV PHOENIX),small,pops,0.4631,0.3435
+RTX 4050 laptop,lavapipe,"llvmpipe (LLVM 23.1.5, 256 bits)",small,pops,3.8462,3.739
+RTX 4050 laptop,cpu_1,"CPU reference, 1 thread",small,pops,1.5018,1.5018
+RTX 4050 laptop,cpu_all,"CPU reference, 12 threads",small,pops,0.2384,0.2384
+RTX 4050 laptop,discrete,NVIDIA GeForce RTX 4050 Laptop GPU,small,ui,0.0987,0.0581
+RTX 4050 laptop,integrated,AMD Radeon 760M Graphics (RADV PHOENIX),small,ui,0.4407,0.346
+RTX 4050 laptop,lavapipe,"llvmpipe (LLVM 23.1.5, 256 bits)",small,ui,3.8088,3.7294
+RTX 4050 laptop,discrete,NVIDIA GeForce RTX 4050 Laptop GPU,medium,pops,3.8329,0.4995
+RTX 4050 laptop,integrated,AMD Radeon 760M Graphics (RADV PHOENIX),medium,pops,2.6759,1.6631
+RTX 4050 laptop,lavapipe,"llvmpipe (LLVM 23.1.5, 256 bits)",medium,pops,38.0482,36.0289
+RTX 4050 laptop,cpu_1,"CPU reference, 1 thread",medium,pops,29.7299,29.7299
+RTX 4050 laptop,cpu_all,"CPU reference, 12 threads",medium,pops,4.5213,4.5213
+RTX 4050 laptop,discrete,NVIDIA GeForce RTX 4050 Laptop GPU,medium,ui,0.6503,0.5833
+RTX 4050 laptop,integrated,AMD Radeon 760M Graphics (RADV PHOENIX),medium,ui,1.8144,1.7038
+RTX 4050 laptop,lavapipe,"llvmpipe (LLVM 23.1.5, 256 bits)",medium,ui,36.1333,36.0129
+RTX 4050 laptop,discrete,NVIDIA GeForce RTX 4050 Laptop GPU,large,pops,19.8814,3.3351
+RTX 4050 laptop,integrated,AMD Radeon 760M Graphics (RADV PHOENIX),large,pops,14.197,8.4948
+RTX 4050 laptop,lavapipe,"llvmpipe (LLVM 23.1.5, 256 bits)",large,pops,143.3258,129.8506
+RTX 4050 laptop,cpu_1,"CPU reference, 1 thread",large,pops,182.1398,182.1398
+RTX 4050 laptop,cpu_all,"CPU reference, 12 threads",large,pops,27.4405,27.4405
+RTX 4050 laptop,discrete,NVIDIA GeForce RTX 4050 Laptop GPU,large,ui,4.1861,3.3748
+RTX 4050 laptop,integrated,AMD Radeon 760M Graphics (RADV PHOENIX),large,ui,9.1113,8.4112
+RTX 4050 laptop,lavapipe,"llvmpipe (LLVM 23.1.5, 256 bits)",large,ui,129.4483,129.2636
+RTX 4050 laptop,discrete,NVIDIA GeForce RTX 4050 Laptop GPU,huge,pops,30.779,5.6465
+RTX 4050 laptop,integrated,AMD Radeon 760M Graphics (RADV PHOENIX),huge,pops,23.3537,14.1886
+RTX 4050 laptop,lavapipe,"llvmpipe (LLVM 23.1.5, 256 bits)",huge,pops,236.1973,212.2821
+RTX 4050 laptop,cpu_1,"CPU reference, 1 thread",huge,pops,310.7877,310.7877
+RTX 4050 laptop,cpu_all,"CPU reference, 12 threads",huge,pops,47.3643,47.3643
+RTX 4050 laptop,discrete,NVIDIA GeForce RTX 4050 Laptop GPU,huge,ui,6.717,5.6983
+RTX 4050 laptop,integrated,AMD Radeon 760M Graphics (RADV PHOENIX),huge,ui,14.8315,14.0588
+RTX 4050 laptop,lavapipe,"llvmpipe (LLVM 23.1.5, 256 bits)",huge,ui,211.9987,211.7945
+RTX 4050 laptop,discrete,NVIDIA GeForce RTX 4050 Laptop GPU,giant,pops,149.6354,26.3468
+RTX 4050 laptop,integrated,AMD Radeon 760M Graphics (RADV PHOENIX),giant,pops,107.1844,64.1922
+RTX 4050 laptop,cpu_1,"CPU reference, 1 thread",giant,pops,1498.2599,1498.2599
+RTX 4050 laptop,cpu_all,"CPU reference, 12 threads",giant,pops,221.4756,221.4756
+RTX 4050 laptop,discrete,NVIDIA GeForce RTX 4050 Laptop GPU,giant,ui,27.5363,26.3826
+RTX 4050 laptop,integrated,AMD Radeon 760M Graphics (RADV PHOENIX),giant,ui,64.7369,63.9596
+RTX 4050 laptop,discrete,NVIDIA GeForce RTX 4050 Laptop GPU,colossal,pops,297.3639,52.3845
+RTX 4050 laptop,integrated,AMD Radeon 760M Graphics (RADV PHOENIX),colossal,pops,211.9031,126.7009
+RTX 4050 laptop,cpu_1,"CPU reference, 1 thread",colossal,pops,2999.5266,2999.5266
+RTX 4050 laptop,cpu_all,"CPU reference, 12 threads",colossal,pops,445.9728,445.9728
+RTX 4050 laptop,discrete,NVIDIA GeForce RTX 4050 Laptop GPU,colossal,ui,53.1724,52.4302
+RTX 4050 laptop,integrated,AMD Radeon 760M Graphics (RADV PHOENIX),colossal,ui,127.3245,126.5358
 RTX 3070 laptop,discrete,NVIDIA GeForce RTX 3070 Laptop GPU,medium,pops,6.212,0.388
 RTX 3070 laptop,lavapipe,"llvmpipe (LLVM 23.1.4, 256 bits)",medium,pops,54.226,49.594
 RTX 3070 laptop,cpu_1,"CPU reference, 1 thread",medium,pops,37.597,37.597
-RTX 3070 laptop,cpu_all,"CPU reference, 12 threads",medium,pops,8.090,8.090
+RTX 3070 laptop,cpu_all,"CPU reference, 12 threads",medium,pops,8.09,8.09
 RTX 3070 laptop,discrete,NVIDIA GeForce RTX 3070 Laptop GPU,medium,ui,0.571,0.423
 RTX 3070 laptop,lavapipe,"llvmpipe (LLVM 23.1.4, 256 bits)",medium,ui,48.021,47.839
 RTX 3070 laptop,discrete,NVIDIA GeForce RTX 3070 Laptop GPU,colossal,ui,25.381,24.777
-Desktop,discrete,NVIDIA GeForce RTX 4070 Ti,colossal,ui,22.498,22.326
-Desktop,integrated,AMD Ryzen 7 7800X3D 8-Core Processor (RADV RAPHAEL_MENDOCINO),colossal,ui,292.029,291.177
+Desktop,discrete,NVIDIA GeForce RTX 4070 Ti,tiny,pops,0.0532,0.0235
+Desktop,integrated,AMD Ryzen 7 7800X3D 8-Core Processor (RADV RAPHAEL_MENDOCINO),tiny,pops,0.1146,0.0468
+Desktop,lavapipe,"llvmpipe (LLVM 23.1.5, 256 bits)",tiny,pops,0.8264,0.7609
+Desktop,cpu_1,"CPU reference, 1 thread",tiny,pops,0.0272,0.0272
+Desktop,cpu_all,"CPU reference, 16 threads",tiny,pops,0.0277,0.0277
+Desktop,discrete,NVIDIA GeForce RTX 4070 Ti,tiny,ui,0.0518,0.0234
+Desktop,integrated,AMD Ryzen 7 7800X3D 8-Core Processor (RADV RAPHAEL_MENDOCINO),tiny,ui,0.1118,0.0466
+Desktop,lavapipe,"llvmpipe (LLVM 23.1.5, 256 bits)",tiny,ui,0.8291,0.7629
+Desktop,discrete,NVIDIA GeForce RTX 4070 Ti,small,pops,0.1336,0.0322
+Desktop,integrated,AMD Ryzen 7 7800X3D 8-Core Processor (RADV RAPHAEL_MENDOCINO),small,pops,0.4298,0.3199
+Desktop,lavapipe,"llvmpipe (LLVM 23.1.5, 256 bits)",small,pops,2.8227,2.7189
+Desktop,cpu_1,"CPU reference, 1 thread",small,pops,1.3997,1.3997
+Desktop,cpu_all,"CPU reference, 16 threads",small,pops,0.229,0.229
+Desktop,discrete,NVIDIA GeForce RTX 4070 Ti,small,ui,0.0619,0.0321
+Desktop,integrated,AMD Ryzen 7 7800X3D 8-Core Processor (RADV RAPHAEL_MENDOCINO),small,ui,0.3908,0.32
+Desktop,lavapipe,"llvmpipe (LLVM 23.1.5, 256 bits)",small,ui,2.783,2.7144
+Desktop,discrete,NVIDIA GeForce RTX 4070 Ti,medium,pops,1.5596,0.1596
+Desktop,integrated,AMD Ryzen 7 7800X3D 8-Core Processor (RADV RAPHAEL_MENDOCINO),medium,pops,4.7994,3.7653
+Desktop,lavapipe,"llvmpipe (LLVM 23.1.5, 256 bits)",medium,pops,24.8758,24.1073
+Desktop,cpu_1,"CPU reference, 1 thread",medium,pops,27.7705,27.7705
+Desktop,cpu_all,"CPU reference, 16 threads",medium,pops,3.0605,3.0605
+Desktop,discrete,NVIDIA GeForce RTX 4070 Ti,medium,ui,0.1788,0.1376
+Desktop,integrated,AMD Ryzen 7 7800X3D 8-Core Processor (RADV RAPHAEL_MENDOCINO),medium,ui,3.8596,3.7574
+Desktop,lavapipe,"llvmpipe (LLVM 23.1.5, 256 bits)",medium,ui,24.6379,24.5659
+Desktop,discrete,NVIDIA GeForce RTX 4070 Ti,large,pops,9.3634,1.2661
+Desktop,integrated,AMD Ryzen 7 7800X3D 8-Core Processor (RADV RAPHAEL_MENDOCINO),large,pops,23.7266,17.3352
+Desktop,lavapipe,"llvmpipe (LLVM 23.1.5, 256 bits)",large,pops,91.9092,83.8922
+Desktop,cpu_1,"CPU reference, 1 thread",large,pops,166.784,166.784
+Desktop,cpu_all,"CPU reference, 16 threads",large,pops,17.6853,17.6853
+Desktop,discrete,NVIDIA GeForce RTX 4070 Ti,large,ui,1.379,1.3024
+Desktop,integrated,AMD Ryzen 7 7800X3D 8-Core Processor (RADV RAPHAEL_MENDOCINO),large,ui,17.6534,17.3373
+Desktop,lavapipe,"llvmpipe (LLVM 23.1.5, 256 bits)",large,ui,84.3034,84.1608
+Desktop,discrete,NVIDIA GeForce RTX 4070 Ti,huge,pops,14.5307,2.1363
+Desktop,integrated,AMD Ryzen 7 7800X3D 8-Core Processor (RADV RAPHAEL_MENDOCINO),huge,pops,38.4388,28.8887
+Desktop,lavapipe,"llvmpipe (LLVM 23.1.5, 256 bits)",huge,pops,149.8455,136.0983
+Desktop,cpu_1,"CPU reference, 1 thread",huge,pops,288.2042,288.2042
+Desktop,cpu_all,"CPU reference, 16 threads",huge,pops,31.1113,31.1113
+Desktop,discrete,NVIDIA GeForce RTX 4070 Ti,huge,ui,2.3315,2.1995
+Desktop,integrated,AMD Ryzen 7 7800X3D 8-Core Processor (RADV RAPHAEL_MENDOCINO),huge,ui,29.3384,28.8718
+Desktop,lavapipe,"llvmpipe (LLVM 23.1.5, 256 bits)",huge,ui,137.4976,137.2814
+Desktop,discrete,NVIDIA GeForce RTX 4070 Ti,giant,pops,71.4535,10.4189
+Desktop,integrated,AMD Ryzen 7 7800X3D 8-Core Processor (RADV RAPHAEL_MENDOCINO),giant,pops,190.1754,145.2666
+Desktop,cpu_1,"CPU reference, 1 thread",giant,pops,1401.9748,1401.9748
+Desktop,cpu_all,"CPU reference, 16 threads",giant,pops,151.0357,151.0357
+Desktop,discrete,NVIDIA GeForce RTX 4070 Ti,giant,ui,10.7534,10.4729
+Desktop,integrated,AMD Ryzen 7 7800X3D 8-Core Processor (RADV RAPHAEL_MENDOCINO),giant,ui,145.9996,145.3513
+Desktop,discrete,NVIDIA GeForce RTX 4070 Ti,colossal,pops,142.5059,20.6711
+Desktop,integrated,AMD Ryzen 7 7800X3D 8-Core Processor (RADV RAPHAEL_MENDOCINO),colossal,pops,375.4425,286.5586
+Desktop,cpu_1,"CPU reference, 1 thread",colossal,pops,2810.5095,2810.5095
+Desktop,cpu_all,"CPU reference, 16 threads",colossal,pops,302.3168,302.3168
+Desktop,discrete,NVIDIA GeForce RTX 4070 Ti,colossal,ui,20.9651,20.6574
+Desktop,integrated,AMD Ryzen 7 7800X3D 8-Core Processor (RADV RAPHAEL_MENDOCINO),colossal,ui,287.7225,286.8132
 Intel laptop,integrated,Intel(R) HD Graphics 620 (KBL GT2),medium,pops,22.143,17.243
 Intel laptop,lavapipe,"llvmpipe (LLVM 23.1.4, 256 bits)",medium,pops,222.898,219.667
 Intel laptop,cpu_1,"CPU reference, 1 thread",medium,pops,57.474,57.474
@@ -49,48 +118,12 @@ Intel laptop,integrated,Intel(R) HD Graphics 620 (KBL GT2),medium,ui,17.552,17.1
 Intel laptop,lavapipe,"llvmpipe (LLVM 23.1.4, 256 bits)",medium,ui,219.752,219.553
 Intel laptop,integrated,Intel(R) HD Graphics 620 (KBL GT2),colossal,ui,687.644,683.904
 Steam Deck,integrated,AMD Custom GPU 0405 (RADV VANGOGH),medium,pops,3.798,2.596
-Steam Deck,lavapipe,"llvmpipe (LLVM 23.1.4, 256 bits)",medium,pops,113.150,110.345
+Steam Deck,lavapipe,"llvmpipe (LLVM 23.1.4, 256 bits)",medium,pops,113.15,110.345
 Steam Deck,cpu_1,"CPU reference, 1 thread",medium,pops,44.854,44.854
 Steam Deck,cpu_all,"CPU reference, 8 threads",medium,pops,10.151,10.151
 Steam Deck,integrated,AMD Custom GPU 0405 (RADV VANGOGH),medium,ui,2.863,2.587
 Steam Deck,lavapipe,"llvmpipe (LLVM 23.1.4, 256 bits)",medium,ui,109.842,109.614
 Steam Deck,integrated,AMD Custom GPU 0405 (RADV VANGOGH),colossal,ui,160.624,160.061
-Desktop,discrete,NVIDIA GeForce RTX 4070 Ti,tiny,pops,0.0609,0.0227
-Desktop,integrated,AMD Ryzen 7 7800X3D 8-Core Processor (RADV RAPHAEL_MENDOCINO),tiny,pops,0.0997,0.0505
-Desktop,lavapipe,"llvmpipe (LLVM 23.1.4, 256 bits)",tiny,pops,0.8368,0.7666
-Desktop,cpu_1,"CPU reference, 1 thread",tiny,pops,0.0273,0.0273
-Desktop,cpu_all,"CPU reference, 16 threads",tiny,pops,0.0284,0.0284
-Desktop,discrete,NVIDIA GeForce RTX 4070 Ti,small,pops,0.1405,0.0312
-Desktop,integrated,AMD Ryzen 7 7800X3D 8-Core Processor (RADV RAPHAEL_MENDOCINO),small,pops,0.419,0.3278
-Desktop,lavapipe,"llvmpipe (LLVM 23.1.4, 256 bits)",small,pops,3.1073,2.9973
-Desktop,cpu_1,"CPU reference, 1 thread",small,pops,1.4429,1.4429
-Desktop,cpu_all,"CPU reference, 16 threads",small,pops,0.2613,0.2613
-Desktop,discrete,NVIDIA GeForce RTX 4070 Ti,medium,pops,1.5452,0.1606
-Desktop,integrated,AMD Ryzen 7 7800X3D 8-Core Processor (RADV RAPHAEL_MENDOCINO),medium,pops,4.8193,3.8371
-Desktop,lavapipe,"llvmpipe (LLVM 23.1.4, 256 bits)",medium,pops,25.4571,24.3747
-Desktop,cpu_1,"CPU reference, 1 thread",medium,pops,29.273,29.273
-Desktop,cpu_all,"CPU reference, 16 threads",medium,pops,3.9671,3.9671
-Desktop,discrete,NVIDIA GeForce RTX 4070 Ti,large,pops,9.6175,1.3267
-Desktop,integrated,AMD Ryzen 7 7800X3D 8-Core Processor (RADV RAPHAEL_MENDOCINO),large,pops,23.531,17.6371
-Desktop,lavapipe,"llvmpipe (LLVM 23.1.4, 256 bits)",large,pops,94.5095,86.126
-Desktop,cpu_1,"CPU reference, 1 thread",large,pops,177.9524,177.9524
-Desktop,cpu_all,"CPU reference, 16 threads",large,pops,20.8387,20.8387
-Desktop,discrete,NVIDIA GeForce RTX 4070 Ti,huge,pops,15.0182,2.2762
-Desktop,integrated,AMD Ryzen 7 7800X3D 8-Core Processor (RADV RAPHAEL_MENDOCINO),huge,pops,38.7822,29.5115
-Desktop,lavapipe,"llvmpipe (LLVM 23.1.4, 256 bits)",huge,pops,155.2838,140.5799
-Desktop,cpu_1,"CPU reference, 1 thread",huge,pops,307.2043,307.2043
-Desktop,cpu_all,"CPU reference, 16 threads",huge,pops,35.1315,35.1315
-Desktop,discrete,NVIDIA GeForce RTX 4070 Ti,giant,pops,74.2668,11.202
-Desktop,integrated,AMD Ryzen 7 7800X3D 8-Core Processor (RADV RAPHAEL_MENDOCINO),giant,pops,192.3214,147.5702
-Desktop,cpu_1,"CPU reference, 1 thread",giant,pops,1484.7485,1484.7485
-Desktop,cpu_all,"CPU reference, 16 threads",giant,pops,163.0382,163.0382
-Desktop,discrete,NVIDIA GeForce RTX 4070 Ti,colossal,pops,151.6937,22.4535
-Desktop,integrated,AMD Ryzen 7 7800X3D 8-Core Processor (RADV RAPHAEL_MENDOCINO),colossal,pops,382.467,292.369
-Desktop,cpu_1,"CPU reference, 1 thread",colossal,pops,2971.5439,2971.5439
-Desktop,cpu_all,"CPU reference, 16 threads",colossal,pops,317.5266,317.5266
-Desktop,discrete,NVIDIA GeForce RTX 4070 Ti,medium,ui,0.1836,0.1359
-Desktop,integrated,AMD Ryzen 7 7800X3D 8-Core Processor (RADV RAPHAEL_MENDOCINO),medium,ui,3.9035,3.8288
-Desktop,lavapipe,"llvmpipe (LLVM 23.1.4, 256 bits)",medium,ui,24.323,24.2179
 "Desktop, Windows",discrete,NVIDIA GeForce RTX 4070 Ti,tiny,pops,0.0879,0.0303
 "Desktop, Windows",integrated,AMD Radeon(TM) Graphics,tiny,pops,0.1531,0.0488
 "Desktop, Windows",cpu_1,"CPU reference, 1 thread",tiny,pops,0.0338,0.0338

@@ -2,13 +2,13 @@
 
 // Linux desktop rows from bench/charts/results.csv. Times are in milliseconds.
 const tiers = [
-  { pops: 1_024, compute: 0.0227, ui: null, full: 0.0609, cpu: 0.0284 },
-  { pops: 50_000, compute: 0.0312, ui: null, full: 0.1405, cpu: 0.2613 },
-  { pops: 1_000_000, compute: 0.1606, ui: 0.1836, full: 1.5452, cpu: 3.9671 },
-  { pops: 6_000_000, compute: 1.3267, ui: null, full: 9.6175, cpu: 20.8387 },
-  { pops: 10_000_000, compute: 2.2762, ui: null, full: 15.0182, cpu: 35.1315 },
-  { pops: 50_000_000, compute: 11.202, ui: null, full: 74.2668, cpu: 163.0382 },
-  { pops: 100_000_000, compute: 22.4535, ui: 22.498, full: 151.6937, cpu: 317.5266 },
+  { pops: 1_024, compute: 0.0235, ui: 0.0518, full: 0.0532, cpu: 0.0277 },
+  { pops: 50_000, compute: 0.0322, ui: 0.0619, full: 0.1336, cpu: 0.229 },
+  { pops: 1_000_000, compute: 0.1596, ui: 0.1788, full: 1.5596, cpu: 3.0605 },
+  { pops: 6_000_000, compute: 1.2661, ui: 1.379, full: 9.3634, cpu: 17.6853 },
+  { pops: 10_000_000, compute: 2.1363, ui: 2.3315, full: 14.5307, cpu: 31.1113 },
+  { pops: 50_000_000, compute: 10.4189, ui: 10.7534, full: 71.4535, cpu: 151.0357 },
+  { pops: 100_000_000, compute: 20.6711, ui: 20.9651, full: 142.5059, cpu: 302.3168 },
 ];
 
 const modes = {
@@ -51,13 +51,12 @@ const changingLabels = [
 ];
 
 function formatTime(value) {
-  if (value === null) return "N/A";
   return `${value.toFixed(value < 1 ? 3 : 2)} ms`;
 }
 
 function updateBar(row, value, maximum) {
   row.querySelector("strong").textContent = formatTime(value);
-  row.querySelector(".bar-track span").style.width = value === null ? "0%" : `${value / maximum * 100}%`;
+  row.querySelector(".bar-track span").style.width = `${value / maximum * 100}%`;
 }
 
 function renderBenchmark() {
@@ -70,11 +69,9 @@ function renderBenchmark() {
   slider.setAttribute("aria-valuetext", worldLabel);
   title.textContent = mode.title;
   detail.textContent = mode.detail;
-  note.textContent = gpu === null
-    ? "No UI timing at this size.\nMeasured at 1M and 100M."
-    : mode.note;
+  note.textContent = mode.note;
 
-  const quarter = Math.max(gpu ?? 0, tier.cpu) / 4;
+  const quarter = Math.max(gpu, tier.cpu) / 4;
   const magnitude = 10 ** Math.floor(Math.log10(quarter));
   const step = [1, 2, 2.5, 5, 10].find(candidate => candidate * magnitude >= quarter) * magnitude;
   const maximum = step * 4;
@@ -84,8 +81,7 @@ function renderBenchmark() {
   updateBar(gpuRow, gpu, maximum);
   updateBar(cpuRow, tier.cpu, maximum);
 
-  const gpuResult = gpu === null ? "RTX 4070 Ti UI readback unavailable" : `RTX 4070 Ti ${formatTime(gpu)}`;
-  summary.textContent = `${worldLabel}. ${gpuResult}. Ryzen 7 7800X3D ${formatTime(tier.cpu)}.`;
+  summary.textContent = `${worldLabel}. RTX 4070 Ti ${formatTime(gpu)}. Ryzen 7 7800X3D ${formatTime(tier.cpu)}.`;
 }
 
 function transitionBenchmark() {

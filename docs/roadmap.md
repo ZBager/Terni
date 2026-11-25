@@ -138,9 +138,9 @@ four times the memory it needs, and large worlds are limited by memory, not arit
 
 1. **Small integers and refs** (done): `int8` to `ref16`
    ([Concepts](concepts.md#small-fields)). In the benchmark's world the GPU time of a tick
-   falls by 17% (medium) and 13% (large) on a laptop RTX 4050 and by 7% and 8% on a Radeon
-   760M with two of the eight pop fields small; with four, by 34% and 19%, and by 10% and 13%. It
-   does not change on lavapipe at medium. Devices without 8 and 16-bit storage store them in
+   falls by 27% (medium) and 19% (large) on a laptop RTX 4050 with four of the eight pop fields
+   small, by 10% and 13% on a Radeon 760M, and by nothing at medium and 19% at large on an RTX
+   4070 Ti ([every device](writing-rules.md#small-fields)). It does not change on lavapipe. Devices without 8 and 16-bit storage store them in
    32 bits, with the same results.
 2. **Small rates**: a `rate16` (Q2.14, from -2 up to 2), for percentages and
    multipliers. Writes round, so changes too small to show are lost; whether that is worth
