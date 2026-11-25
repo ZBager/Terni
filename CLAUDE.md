@@ -107,7 +107,7 @@ ctest --test-dir build --output-on-failure
 | `src/small_fields.hpp` | 8 and 16-bit columns: packing, widening, what fits |
 | `src/order_lint.cpp` | Load-time warnings for order-dependent stages |
 | `src/vk_context.cpp` | The Vulkan instance and device, device choice, drivers added by the game |
-| `src/device_health.hpp` | Tick-time statistics behind `GameSim::device_health()` |
+| `src/device_health.hpp`, `src/device_clock.hpp` | Tick-time statistics behind `GameSim::device_health()`; a tick's time on the device's clock |
 | `shaders/terni/` | The GLSL library, embedded into the binary at build time |
 | `tools/` | `terni_run`, `terni_check` (mods before publishing), `terni_diff` (two saves), `terni_compile_rules` (ships with games), `terni_script_check` (Paradox script corpora) |
 | `tests/` | Test programs; `tests/data/` holds small games for loader tests, most of them broken on purpose, and `galaxy_mods/` for `terni_check` |

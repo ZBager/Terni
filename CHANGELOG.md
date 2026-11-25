@@ -187,6 +187,9 @@ The first public version.
 - **Fixed**: results from `tick_result()` could be freed too early, when the first
   `modifier_total()` or `modifier_breakdown()` of an inherited key, or `read_each_tick()`,
   needed a larger buffer. They now stay valid as documented.
+- **Cheaper ticks on integrated GPUs**: the device's clock, which `device_health()` needs, is
+  read a few times a second instead of at every tick. On a Ryzen 7800X3D's integrated GPU
+  each read took 0.04 ms, a quarter of the benchmark's `tiny` tick.
 - **Faster compiling**: one shader compiler serves all the rules of a world, instead of one
   per rule: 12 rules compile in 0.16 s instead of 1.5 s. The compiled rules are the same.
 - **Licence**: LGPL 2.1 with the Terni Linking Exception (static linking, no relinking or

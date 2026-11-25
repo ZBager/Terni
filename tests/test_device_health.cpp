@@ -13,6 +13,7 @@
 #include <thread>
 #include <vector>
 
+#include "device_clock.hpp"
 #include "device_health.hpp"
 #include "terni/fixed.hpp"
 #include "terni/game.hpp"
@@ -55,6 +56,65 @@ static void test_monitor() {
     CHECK(!m.health().slow && m.health().usual_ms == 0.02);
     window(1.5);
     CHECK(m.health().slow);
+}
+
+// The device's clock: 2 steps a nanosecond, 36 valid bits, read rarely.
+static void test_clock() {
+    using detail::DeviceClock;
+    using std::chrono::microseconds;
+    const uint64_t mask = (uint64_t(1) << 36) - 1;
+    const double period = 0.5;
+    DeviceClock::Time host{std::chrono::hours(1)};
+    uint64_t device = mask - 1000000;  // it wraps around soon
+    int reads = 0;
+    bool works = true;
+    const auto pass = [&](microseconds us, double drift = 0) {  // both clocks go on
+        host += us;
+        device = (device + uint64_t(double(us.count()) * 2000.0 * (1 + drift))) & mask;
+    };
+    const auto read = [&](uint64_t& ticks) {
+        ++reads;
+        pass(microseconds(20));
+        ticks = device;  // the device's clock is read in the middle of the call
+        pass(microseconds(20));
+        return works;
+    };
+    const auto now = [&] { return host; };
+    const auto near = [](double a, double b) { return a > b - 1e-6 && a < b + 1e-6; };
+
+    // a tick that the device finishes 0.3 ms after its submission and the host sees 5 ms after
+    DeviceClock clock;
+    const auto tick = [&](double drift = 0, double gpu_ms = 0.1) {
+        clock.update(read, now);
+        const auto submitted = host;
+        pass(microseconds(300), drift);
+        const uint64_t end = device;
+        pass(microseconds(4700), drift);
+        return clock.ms(submitted, end, mask, period, gpu_ms, 5.0);
+    };
+    CHECK(!clock.known());
+    CHECK(near(tick(), 0.3) && clock.known() && reads == 1);
+    for (int t = 0; t < 40; ++t) CHECK(near(tick(), 0.3));  // 200 ms, over the wrap: no new read
+    CHECK(reads == 1);
+    for (int t = 0; t < 100; ++t) CHECK(near(tick(), 0.3));  // 500 ms more: read every 250
+    CHECK(reads == 3);
+    for (int t = 0; t < 200; ++t) {  // drifting by 100 ppm: under 0.03 ms off
+        const double ms = tick(1e-4);
+        CHECK(ms > 0.27 && ms < 0.33);
+    }
+    CHECK(near(tick(0, 0.4), 0.4));  // never less than the stages took
+    // the device's clock behind where it should be, and started again: bounded, never a wrapped huge number
+    device = (device - 4000000) & mask;
+    CHECK(tick(0, 0.1) >= 0.1 && tick(0, 0.1) <= 5.0);
+    device = 5;
+    CHECK(tick(0, 0.1) >= 0.1 && tick(0, 0.1) <= 5.0);
+
+    // a clock that cannot be read is not tried at every tick
+    DeviceClock none;
+    works = false;
+    reads = 0;
+    for (int t = 0; t < 100; ++t) none.update(read, now), pass(microseconds(1000));
+    CHECK(!none.known() && reads == 1);
 }
 
 const char* GROW = R"(
@@ -169,6 +229,7 @@ static Seen session(const World& w, uint32_t from, int to) {
 
 int main() {
     test_monitor();
+    test_clock();
 
     const World w = build();
     if (!w.game->ok()) return 1;

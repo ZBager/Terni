@@ -11,6 +11,7 @@
 #include <stdexcept>
 
 #include "terni/vk_context.hpp"
+#include "device_clock.hpp"
 
 namespace terni {
 
@@ -78,9 +79,9 @@ struct ComputeRunner::Impl {
         VkCommandBuffer pre = VK_NULL_HANDLE;
         std::vector<bool> run;  // the stages it runs
         bool ends_late = false;  // its last timestamp is at the end of its readbacks (query S + 1), not of its stages
-        uint64_t clock = 0;      // the device clock when it was submitted; 0 if unknown
         std::chrono::steady_clock::time_point submitted, done;
     } flight;
+    detail::DeviceClock clock;
     uint32_t spin_us = 0;  // set_tick_spin()
     double last_tick_ms = 0;
     double last_gpu_ms = 0;  // stages only, from GPU timestamps
@@ -246,8 +247,8 @@ struct ComputeRunner::Impl {
         if (flight.pre) ctx.free_command_buffer(flight.pre);
         last_tick_ms = std::chrono::duration<double, std::milli>(flight.done - flight.submitted).count();
         ++ticks;
-        // What the device did, whenever the host looked: from the device clock at submission
-        // to the tick's last timestamp. Without that clock, the wall time if the host waited
+        // What the device did, whenever the host looked: from the submission, on the device's
+        // clock, to the tick's last timestamp. Without that clock, the wall time if the host waited
         // for the tick (it is seen done at once), or the stages' GPU time if it polled.
         last_device_ms = last_tick_ms;
         if (queries) {
@@ -261,8 +262,8 @@ struct ComputeRunner::Impl {
             const uint64_t mask = bits >= 64 ? ~uint64_t(0) : (uint64_t(1) << bits) - 1;
             for (size_t s = 0; s < S; ++s) stage_ns[s] = double((ts[s + 1] - ts[s]) & mask) * period;
             last_gpu_ms = double((ts[S] - ts[0]) & mask) * period / 1e6;
-            if (flight.clock != 0)
-                last_device_ms = std::max(last_gpu_ms, double((ts[n - 1] - flight.clock) & mask) * period / 1e6);
+            if (clock.known())
+                last_device_ms = clock.ms(flight.submitted, ts[n - 1], mask, period, last_gpu_ms, last_tick_ms);
             else if (flight.seen_done)
                 last_device_ms = last_gpu_ms;
         }
@@ -499,7 +500,8 @@ void ComputeRunner::tick_submit(const std::vector<bool>& run) {
         cmds.push_back(m.readback_cmd());
         f.ends_late = m.queries != VK_NULL_HANDLE;
     }
-    if (m.queries && !m.ctx.device_clock(f.clock)) f.clock = 0;
+    if (m.queries)
+        m.clock.update([&](uint64_t& ticks) { return m.ctx.device_clock(ticks); }, std::chrono::steady_clock::now);
     f.submitted = std::chrono::steady_clock::now();
     m.ctx.submit(cmds);
     f.active = true;
