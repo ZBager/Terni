@@ -119,6 +119,7 @@ namespace Terni
         [DllImport(Library)] internal static extern int terni_device_info(uint index, out Device device);
         [DllImport(Library)] internal static extern int terni_add_vulkan_driver(byte[] library_path);
         [DllImport(Library)] internal static extern int terni_pick_device(int preference, byte* uuid16, byte* luid8, out int device);
+        [DllImport(Library)] internal static extern int terni_device_small_fields(uint index, out int small_fields);
 
         // ---- the renderer's GPU, a shipped driver ----
         [DllImport(Library)] internal static extern int terni_vulkan_renderer_gpu(IntPtr instance, IntPtr get_instance_proc_addr, IntPtr physical_device, out RendererGpu gpu);
@@ -143,6 +144,7 @@ namespace Terni
         [DllImport(Library)] internal static extern int terni_find_entity(IntPtr world, byte[] name);
         [DllImport(Library)] internal static extern uint terni_capacity(IntPtr world, uint entity);
         [DllImport(Library)] internal static extern int terni_dynamic(IntPtr world, uint entity);
+        [DllImport(Library)] internal static extern int terni_small_fields(IntPtr world);
         [DllImport(Library)] internal static extern uint terni_field_count(IntPtr world, uint entity);
         [DllImport(Library)] internal static extern IntPtr terni_field_name(IntPtr world, uint entity, uint field);
         [DllImport(Library)] internal static extern int terni_find_field(IntPtr world, uint entity, byte[] name);
@@ -175,6 +177,8 @@ namespace Terni
         [DllImport(Library)] internal static extern void terni_start_options_init_sized(out StartOptions options, uint struct_size);
         [DllImport(Library)] internal static extern int terni_set_tick_spin(IntPtr world, uint microseconds);
         [DllImport(Library)] internal static extern int terni_start(IntPtr world, in StartOptions options);
+        [DllImport(Library)] internal static extern int terni_set_widen_small_fields(IntPtr world, int widen);
+        [DllImport(Library)] internal static extern int terni_widened(IntPtr world);
         [DllImport(Library)] internal static extern void terni_stop(IntPtr world);
         [DllImport(Library)] internal static extern int terni_running(IntPtr world);
         [DllImport(Library)] internal static extern int terni_device_lost(IntPtr world);
@@ -196,6 +200,7 @@ namespace Terni
         [DllImport(Library)] internal static extern int terni_write_values(IntPtr world, uint entity, byte[] field, uint row, uint index, int* words, UIntPtr word_count);
         [DllImport(Library)] internal static extern int terni_subscribe(IntPtr world, uint entity, byte[] field, uint first_row, uint rows, out uint id);
         [DllImport(Library)] internal static extern int terni_subscription(IntPtr world, uint id, out int* words, out UIntPtr word_count);
+        [DllImport(Library)] internal static extern int terni_subscription_bytes(IntPtr world, uint id, out byte* bytes, out UIntPtr byte_count);
 
         // ---- entities at run time ----
         [DllImport(Library)] internal static extern int terni_create_entity(IntPtr world, uint entity, out uint row);

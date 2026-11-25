@@ -61,7 +61,58 @@
 
 namespace terni {
 
-enum class FieldType : uint8_t { Quantity, Rate, Agg, Int, Count, Ref, Money64 };
+// The last six are small fields: a `count8` takes one byte per value on the device instead
+// of four. Hosts see one 32-bit word per value of them too; rules read and write them with
+// <entity>_<field>(i) and <entity>_<field>_set(i, v).
+enum class FieldType : uint8_t { Quantity, Rate, Agg, Int, Count, Ref, Money64, Int8, Int16, Count8, Count16, Ref8, Ref16 };
+
+// Bits a value takes on the device: 8 or 16 for small fields, else 32 (64 for money64).
+constexpr uint32_t field_bits(FieldType t) {
+    switch (t) {
+        case FieldType::Int8:
+        case FieldType::Count8:
+        case FieldType::Ref8: return 8;
+        case FieldType::Int16:
+        case FieldType::Count16:
+        case FieldType::Ref16: return 16;
+        case FieldType::Money64: return 64;
+        default: return 32;
+    }
+}
+constexpr bool is_small(FieldType t) { return field_bits(t) < 32; }
+// What a small field holds, whatever its width: Int, Count or Ref; other types are their own.
+constexpr FieldType base_type(FieldType t) {
+    switch (t) {
+        case FieldType::Int8:
+        case FieldType::Int16: return FieldType::Int;
+        case FieldType::Count8:
+        case FieldType::Count16: return FieldType::Count;
+        case FieldType::Ref8:
+        case FieldType::Ref16: return FieldType::Ref;
+        default: return t;
+    }
+}
+// A ref that refers to no row. Small refs hold it too: their largest value means it, so a
+// ref8 refers to rows 0 to 254 and a ref16 to rows 0 to 65534.
+constexpr uint32_t NO_ROW = 0xFFFFFFFFu;
+// Whether a raw value fits a type as it is. In a small field rules store the nearest value
+// that fits instead (a ref: NO_ROW); host calls refuse it.
+constexpr bool fits(FieldType t, int64_t raw) {
+    const int64_t values = int64_t(1) << (field_bits(t) < 32 ? field_bits(t) : 32);
+    switch (base_type(t)) {
+        case FieldType::Money64: return true;
+        case FieldType::Count: return raw >= 0 && raw < values;
+        case FieldType::Ref: return (raw >= 0 && raw < values - 1) || raw == -1 || raw == int64_t(NO_ROW);
+        default: return raw >= -(values / 2) && raw < values / 2;
+    }
+}
+// The same for a value as hosts pass it, one 32-bit word (not for money64, which has two).
+constexpr bool fits_word(FieldType t, int32_t word) {
+    const FieldType base = base_type(t);
+    return !is_small(t) || fits(t, base == FieldType::Int ? int64_t(word) : int64_t(static_cast<uint32_t>(word)));
+}
+// The type as data folders name it ("count8"); a ref without its entity type ("ref16").
+const char* type_name(FieldType t);
 
 struct Location {
     std::string file;
@@ -81,7 +132,8 @@ struct FieldDef {
     uint32_t size = 1;         // values per entity
     int64_t default_raw = 0;   // in the field's raw format
     Location where;
-    uint32_t words() const { return type == FieldType::Money64 ? 2 : 1; }  // 32-bit words per value
+    uint32_t words() const { return type == FieldType::Money64 ? 2 : 1; }  // 32-bit words per value, for the host
+    uint32_t row_bytes() const { return size * field_bits(type) / 8; }     // per row, on the device
 };
 
 // Rows of a dynamic entity type that rules ask for: at the end of every tick, each row of
@@ -222,8 +274,11 @@ struct Game {
     // get the fields' defaults; rows past `rows` are dropped. Call before creating a
     // GameSim. Capacities are not part of the compiled rules, so every capacity runs on the
     // same SPIR-V (one cache entry). They are part of game_checksum(): peers must agree.
-    // Throws std::out_of_range for an unknown entity, zero rows or fewer rows than in use.
+    // Throws std::out_of_range for an unknown entity, zero rows, fewer rows than in use, or
+    // more rows than a small ref field to the type can refer to.
     void set_capacity(uint32_t entity, uint32_t rows);
+    // Whether it has small fields, which devices without DeviceInfo::small_fields store in 32 bits.
+    bool small_fields() const;
     bool ok() const { return errors.empty(); }
 };
 
@@ -316,7 +371,8 @@ std::unique_ptr<Game> load_game(std::initializer_list<std::string> roots);
 
 // GLSL generated from the schema (buffers, defines, counts, loops, modifier accessors).
 // Locale-independent: the same text whatever global locale the host process has set.
-std::string generate_prelude(const Game& game);
+// `widened`: as devices run it that store small fields in 32 bits (DeviceInfo::small_fields).
+std::string generate_prelude(const Game& game, bool widened = false);
 
 // 64-bit hash of everything that defines how a world behaves: entity types and
 // fields, defines and their values, modifier keys and bundles, stage order and
@@ -373,6 +429,10 @@ struct OrderIssue {
     bool parallel = false;  // false: forwards and backwards differ; true: the normal parallel run
                             // differs from the forwards one (e.g. lost updates of a non-atomic +=)
     uint64_t first_row = 0, rows = 0;  // the first differing row, and how many rows differ
+    // No order problem, but values that did not fit a small field: the stage stored the
+    // nearest ones instead (a ref: NO_ROW). `first_row` is the first such row and `rows` the
+    // number of such writes.
+    bool misfit = false;
 };
 
 // How the simulation's device is doing, from how long its ticks take. Ticks are timed on
@@ -414,6 +474,9 @@ struct GameSimOptions {
                                                           // thread takes to wake, worth it only for ticks well
                                                           // under a millisecond, and keeps a CPU core busy
                                                           // meanwhile. No effect on software devices.
+    bool widen_small_fields = false;                      // store small fields in 32 bits, as on a device
+                                                          // without DeviceInfo::small_fields: for tests, the
+                                                          // results are the same
 };
 
 struct CompileStats {
@@ -441,7 +504,8 @@ bool can_compile_rules();
 // without a Vulkan device; rules already there are kept. This prepares the cache that a
 // cache-only GameSim or a Terni::runtime build loads from, e.g. at build time, to ship
 // with a game. The cache key does not depend on the compiler, so the cache works with
-// any build of the same Terni version. Throws on a compile error, if the cache cannot be
+// any build of the same Terni version. A game with small fields gets every rule twice: for
+// devices that store them packed and for those that widen them. Throws on a compile error, if the cache cannot be
 // written, or in a build without the compiler.
 CompileStats compile_rules(const Game& game, const std::string& cache_dir, const std::string& shader_library_dir = "");
 
@@ -507,6 +571,10 @@ public:
     // (valid until the tick after the next one begins; after load(), stale until the next
     // tick is collected).
     std::span<const int32_t> tick_result(uint32_t id) const;
+    // The same as bytes: a small field's values packed, 1 or 2 bytes each, little-endian (no
+    // copy, unless the device widens them); other fields as tick_result(). Valid as long.
+    // A small ref's largest value means NO_ROW.
+    std::span<const uint8_t> tick_result_bytes(uint32_t id) const;
 
     // ---- entities at run time (entity types marked dynamic) ----
     // A new row: the lowest free one, with every field at its default, alive from the next
@@ -600,9 +668,16 @@ public:
     // the simulation goes on exactly as it would have: handles, read_each_tick() ids and
     // their last results stay valid, and lockstep peers need not know. Collects a tick in
     // flight first, and takes about as long as starting the simulation (pipelines are
-    // made again, the state is copied over). Throws, changing nothing, if the device
+    // made again, the state is copied over; a device that stores small fields otherwise needs
+    // other SPIR-V, compiled or from the cache). Throws, changing nothing, if the device
     // cannot be used.
     void move_to_device(uint32_t device);
+    // The same, with another GameSimOptions::widen_small_fields from here on (any device, this
+    // one too): for tests.
+    void move_to_device(uint32_t device, bool widen_small_fields);
+    // Whether small fields are stored in 32 bits here: the device has no DeviceInfo::small_fields
+    // (or GameSimOptions::widen_small_fields asked for it).
+    bool widened() const;
 
 private:
     struct Impl;

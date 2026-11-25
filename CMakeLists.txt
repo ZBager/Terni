@@ -312,6 +312,12 @@ if(TERNI_BUILD_TESTS)
   add_test(NAME stage_schedule COMMAND test_schedule)
   terni_test(test_partial_write tests/test_partial_write.cpp)
   add_test(NAME partial_writes COMMAND test_partial_write)
+
+  # 8 and 16-bit fields against their 32-bit twins, on every device
+  terni_test(test_small_fields tests/test_small_fields.cpp)
+  add_test(NAME small_fields COMMAND test_small_fields)
+  add_test(NAME small_fields_game COMMAND terni_run ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/small_fields --ticks 100)
+  add_test(NAME small_fields_check COMMAND terni_check ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/small_fields --ticks 20)
   terni_test(test_capacity tests/test_capacity.cpp)
   add_test(NAME capacities COMMAND test_capacity)
   terni_test(test_async_tick tests/test_async_tick.cpp)

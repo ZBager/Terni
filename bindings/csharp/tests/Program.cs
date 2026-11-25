@@ -146,6 +146,28 @@ static class Program
             Check(w.DestroyEntity(army, row) && !w.DestroyEntity(army, row), "destroy");
         }
 
+        // small fields: a word per value here, packed on the device
+        using (var w = new World())
+        {
+            w.Load(Path.Combine(args[1], "tests", "data", "small_fields"));
+            int town = w.FindEntity("town");
+            Check(w.SmallFields && w.FieldInfo(town, "level").Type == FieldType.Count8, "small fields");
+            Check(Throws(() => w.WriteStart(town, "level", 0, new[] { 256 })) == Status.Invalid, "a value that does not fit");
+            w.WriteStart(town, "level", 0, new[] { 255 });
+            int device = Library.PickDevice();
+            w.Start(new StartOptions { Device = device, WidenSmallFields = true });
+            Check(w.Widened, "widened");
+            int wide = w.Subscribe(town, "level");
+            w.Tick();
+            Check(w.Subscription(wide)[0] == 255 && w.SubscriptionBytes(wide).Length == 2 && w.SubscriptionBytes(wide)[0] == 255, "widened bytes");
+            w.Start(new StartOptions { Device = device });
+            Check(w.Widened != Library.DeviceSmallFields(device), "packed where the device can");
+            int sub = w.Subscribe(town, "level");
+            OrderIssue[] issues = w.TickChecked();
+            Check(issues.Length == 1 && issues[0].Misfit && !issues[0].Parallel && issues[0].Field == "town.level", "a misfit");
+            Check(w.Subscription(sub)[0] == 255 && w.SubscriptionBytes(sub).Length == 2 && w.SubscriptionBytes(sub)[0] == 255, "bytes");
+        }
+
         Console.WriteLine($"Terni.Tests: {(failures == 0 ? "PASS" : "FAIL")}");
         return failures == 0 ? 0 : 1;
     }

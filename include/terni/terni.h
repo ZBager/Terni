@@ -71,6 +71,14 @@ typedef int32_t terni_status;
 #define TERNI_COUNT 4
 #define TERNI_REF 5      /* a row of another entity type */
 #define TERNI_MONEY64 6  /* 64-bit, two words per value (low word first) */
+/* Small fields: 1 or 2 bytes per value on the device, still one word per value here. A
+ * value that does not fit is refused (TERNI_INVALID). A small ref's word is -1 for no row. */
+#define TERNI_INT8 7
+#define TERNI_INT16 8
+#define TERNI_COUNT8 9
+#define TERNI_COUNT16 10
+#define TERNI_REF8 11
+#define TERNI_REF16 12
 
 /* Device preferences (terni::DevicePreference). */
 #define TERNI_PREFER_DISCRETE 0   /* dedicated GPU, then integrated, then anything, then the CPU */
@@ -111,6 +119,9 @@ typedef struct terni_device {
 TERNI_API terni_status terni_device_count(uint32_t* count);
 /* Its strings are valid until the next terni_device_count(). */
 TERNI_API terni_status terni_device_info(uint32_t index, terni_device* device);
+/* *small_fields is 1 if the device of that index can store 8 and 16-bit values, as small
+ * fields do (terni_small_fields()); without, it stores those fields in 32 bits. */
+TERNI_API terni_status terni_device_small_fields(uint32_t index, int32_t* small_fields);
 /* Adds a Vulkan driver shipped with the game (a software driver such as lavapipe:
  * vulkan_lvp.dll, libvulkan_lvp.so) to the system's, for the rest of the process. Call it
  * before listing or picking devices: their indices change. */
@@ -192,6 +203,8 @@ typedef struct terni_field_info {
     int32_t ref_entity; /* for TERNI_REF: the entity type it refers to; else -1 */
 } terni_field_info;
 
+/* 1 if the game has small fields. */
+TERNI_API int32_t terni_small_fields(const terni_world* world);
 TERNI_API uint32_t terni_field_count(const terni_world* world, uint32_t entity);
 TERNI_API const char* terni_field_name(const terni_world* world, uint32_t entity, uint32_t field);
 TERNI_API int32_t terni_find_field(const terni_world* world, uint32_t entity, const char* name);
@@ -244,7 +257,8 @@ TERNI_API terni_status terni_add_start_modifier(terni_world* world, uint32_t bun
                                                 uint32_t row, int32_t scale, uint32_t duration);
 
 /* Compiles every rule into the SPIR-V cache in `cache_dir` without a device (for a build
- * step, or before a cache-only start). TERNI_NO_COMPILER in terni_runtime. */
+ * step, or before a cache-only start), twice for a game with small fields (for devices
+ * that store them packed and in 32 bits). TERNI_NO_COMPILER in terni_runtime. */
 typedef struct terni_compile_stats {
     uint32_t compiled; /* stages compiled */
     uint32_t cached;   /* stages taken from the cache */
@@ -288,6 +302,12 @@ TERNI_API terni_status terni_start(terni_world* world, const terni_start_options
  * wake: worth it only for ticks well under a millisecond. It keeps a CPU core busy
  * meanwhile, and does nothing on software devices. */
 TERNI_API terni_status terni_set_tick_spin(terni_world* world, uint32_t microseconds);
+/* For tests: 1 stores small fields in 32 bits on any device, as devices without
+ * terni_device_small_fields() do. The results are the same. Holds from the next
+ * terni_start() on; 0, as a new world has it, does so only where needed. */
+TERNI_API terni_status terni_set_widen_small_fields(terni_world* world, int32_t widen);
+/* 1 if the running simulation stores small fields in 32 bits. */
+TERNI_API int32_t terni_widened(const terni_world* world);
 TERNI_API void terni_stop(terni_world* world);
 TERNI_API int32_t terni_running(const terni_world* world);
 /* The device was lost (a rule ran too long and the driver reset the GPU, or the GPU went
@@ -308,10 +328,13 @@ TERNI_API terni_status terni_end_tick(terni_world* world);                   /* 
 TERNI_API int32_t terni_tick_in_flight(const terni_world* world);
 TERNI_API uint64_t terni_ticks(const terni_world* world); /* completed ticks */
 
+/* As terni_order_issue.parallel: no order problem, but values that did not fit a small
+ * field; the nearest ones were stored. first_row is the first such row, rows the writes. */
+#define TERNI_ISSUE_MISFIT 2
 typedef struct terni_order_issue {
     const char* stage;
     const char* field;   /* "entity.field" that came out different */
-    int32_t parallel;    /* 0: forwards and backwards differ; 1: the parallel run differs */
+    int32_t parallel;    /* 0: forwards and backwards differ; 1: the parallel run differs; TERNI_ISSUE_MISFIT */
     uint64_t first_row;
     uint64_t rows;
 } terni_order_issue;
@@ -341,6 +364,11 @@ TERNI_API terni_status terni_subscribe(terni_world* world, uint32_t entity, cons
  * next one begins. */
 TERNI_API terni_status terni_subscription(const terni_world* world, uint32_t id, const int32_t** words,
                                           size_t* word_count);
+/* The same as bytes: a small field's values packed, 1 or 2 bytes each, little-endian, a
+ * small ref's largest value meaning no row (no copy, unless the device stores them in 32
+ * bits); other fields as terni_subscription(). Valid as long. */
+TERNI_API terni_status terni_subscription_bytes(const terni_world* world, uint32_t id, const uint8_t** bytes,
+                                                size_t* byte_count);
 
 /* ---- entities at run time (entity types marked dynamic) ---- */
 

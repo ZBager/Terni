@@ -60,7 +60,7 @@ play. Each row is then **alive** or not, and loops visit only the rows that are 
 
 ## Fields
 
-Every field is one or more 32-bit values per row, so it maps directly to GPU memory.
+A field is one or more values per row, 32 bits each unless you choose a smaller type.
 
 | Type | Stored as | Use for |
 | --- | --- | --- |
@@ -71,9 +71,33 @@ Every field is one or more 32-bit values per row, so it maps directly to GPU mem
 | `count` | `uint` | Non-negative counters |
 | `ref:<entity>` | `uint` | The row of another entity |
 | `money64` | 64-bit integer as `uvec2` (low, high) | Values past 2^31, such as a treasury |
+| `int8`, `int16` | 1 or 2 bytes | Small integers: a mood from -100 to 100 |
+| `count8`, `count16` | 1 or 2 bytes | Small counters and enumerations: a job, an age, a level |
+| `ref8:<entity>`, `ref16:<entity>` | 1 or 2 bytes | Refs to entity types of at most 255 or 65,535 rows |
 
 A field can hold several values per row (`size = 6`: six goods per province). In GLSL
 the values of row `i` are at `i * SIZE + k`.
+
+### Small fields
+
+The last three lines of the table are **small fields**. They save GPU memory and the time
+it takes to move it, which is what limits large worlds. 32 bits stay the normal choice;
+make a field small when its values surely fit and its entity type has many rows.
+
+- Rules read and write them with functions, `pop_job(i)` and `pop_job_set(i, v)`, and
+  compute in 32 bits as always ([Writing rules](writing-rules.md#small-fields)).
+- A value that does not fit becomes the nearest one that does, the same on every device;
+  `tick_checked()` names the stage and field. In a small ref it becomes "no row"
+  (`0xFFFFFFFF`, -1 for the host). In starting data it is an error, and a host write with
+  one is refused.
+- The host sees one 32-bit word per value, as for other fields. Saves and per-tick
+  readbacks move the packed bytes.
+- They cannot take atomics, so sums stay `agg`. There are no small quantities, rates or
+  defines.
+- A device that cannot store 8 and 16-bit values (`DeviceInfo::small_fields` is false; few
+  that run Vulkan 1.3) stores small fields in 32 bits, **widened**. The game runs there with
+  the same results, hashes and saves, but without the gain in memory and time. Test it on
+  any device with `GameSimOptions::widen_small_fields`.
 
 Why fixed point and not floats: floating-point results differ between GPUs, drivers
 and compilers; integer results do not. See [Design](design.md).

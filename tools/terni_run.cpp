@@ -129,7 +129,11 @@ int main(int argc, char** argv) {
                             case FieldType::Quantity: std::printf("%.2f", double(v[i]) / 256.0); break;
                             case FieldType::Rate: std::printf("%.3f", double(v[i]) / 65536.0); break;
                             case FieldType::Count:
-                            case FieldType::Ref: std::printf("%u", uint32_t(v[i])); break;
+                            case FieldType::Ref:
+                            case FieldType::Count8:
+                            case FieldType::Count16:
+                            case FieldType::Ref8:
+                            case FieldType::Ref16: std::printf("%u", uint32_t(v[i])); break;
                             case FieldType::Money64:
                                 std::printf("%lld", static_cast<long long>((uint64_t(uint32_t(v[2 * i + 1])) << 32) | uint32_t(v[2 * i])));
                                 break;

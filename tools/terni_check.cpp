@@ -185,11 +185,18 @@ int main(int argc, char** argv) {
                 for (int t = 0; t < ticks; ++t) {
                     const auto t0 = std::chrono::steady_clock::now();
                     if (t < CHECKED) {
-                        for (const auto& issue : sim.tick_checked())
-                            if (races.insert(issue.stage + "/" + issue.field).second)
-                                fail("stage '" + issue.stage + "' gives a different " + issue.field + " (" +
-                                     std::to_string(issue.rows) + " rows from row " + std::to_string(issue.first_row) +
+                        for (const auto& issue : sim.tick_checked()) {
+                            if (!races.insert(issue.stage + "/" + issue.field + (issue.misfit ? "/fit" : "")).second) continue;
+                            const std::string rows = std::to_string(issue.rows), first = std::to_string(issue.first_row);
+                            if (issue.misfit)
+                                warn("stage '" + issue.stage + "' writes values that do not fit the small field " + issue.field +
+                                     " (" + rows + (issue.rows == 1 ? " write" : " writes") + ", the first row is " + first +
+                                     "); the nearest ones that fit are stored");
+                            else
+                                fail("stage '" + issue.stage + "' gives a different " + issue.field + " (" + rows +
+                                     " rows from row " + first +
                                      ") depending on the order its threads run in; a multiplayer game would desync");
+                        }
                     } else {
                         sim.tick();
                         slowest = std::max(slowest, std::chrono::duration<double, std::milli>(

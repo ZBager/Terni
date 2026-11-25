@@ -12,6 +12,7 @@
 #include "terni/fixed.hpp"
 #include "terni/game.hpp"
 #include "terni/script.hpp"
+#include "small_fields.hpp"
 #include "utf8_path.hpp"
 
 namespace fs = std::filesystem;
@@ -50,7 +51,7 @@ struct U128 {
 }  // namespace
 
 bool parse_value(const std::string& text, FieldType type, int64_t& out) {
-    if (type == FieldType::Ref) return false;
+    if (base_type(type) == FieldType::Ref) return false;
     if (text == "yes" || text == "no") {
         if (type == FieldType::Quantity || type == FieldType::Rate) return false;
         out = text == "yes" ? 1 : 0;
@@ -83,10 +84,12 @@ bool parse_value(const std::string& text, FieldType type, int64_t& out) {
     if (!mag.fits_u64()) return false;
     const uint64_t m = mag.low64();
     const uint64_t limit = type == FieldType::Money64 ? (neg ? uint64_t(1) << 63 : uint64_t(INT64_MAX))
-                           : type == FieldType::Count ? (neg ? 0 : uint64_t(UINT32_MAX))
+                           : base_type(type) == FieldType::Count ? (neg ? 0 : uint64_t(UINT32_MAX))
                                                       : (neg ? uint64_t(1) << 31 : uint64_t(INT32_MAX));
     if (m > limit) return false;
-    out = neg ? static_cast<int64_t>(0 - m) : static_cast<int64_t>(m);  // modular conversion (C++20): 2^63 -> INT64_MIN
+    const int64_t value = neg ? static_cast<int64_t>(0 - m) : static_cast<int64_t>(m);  // modular (C++20): 2^63 -> INT64_MIN
+    if (is_small(type) && !fits(type, value)) return false;
+    out = value;
     return true;
 }
 
@@ -99,9 +102,18 @@ bool parse_type(const std::string& s, FieldType& t, std::string& ref) {
     else if (s == "int") t = FieldType::Int;
     else if (s == "count") t = FieldType::Count;
     else if (s == "money64") t = FieldType::Money64;
-    else if (s.rfind("ref:", 0) == 0) {
-        t = FieldType::Ref;
-        ref = s.substr(4);
+    else if (s == "int8") t = FieldType::Int8;
+    else if (s == "int16") t = FieldType::Int16;
+    else if (s == "count8") t = FieldType::Count8;
+    else if (s == "count16") t = FieldType::Count16;
+    else if (s.rfind("ref", 0) == 0 && s.find(':') != std::string::npos) {  // ref:planet, ref8:planet, ref16:planet
+        const size_t colon = s.find(':');
+        const std::string ref_type = s.substr(0, colon);
+        if (ref_type == "ref") t = FieldType::Ref;
+        else if (ref_type == "ref8") t = FieldType::Ref8;
+        else if (ref_type == "ref16") t = FieldType::Ref16;
+        else return false;
+        ref = s.substr(colon + 1);
     } else
         return false;
     return true;
@@ -384,7 +396,7 @@ private:
                 }
                 for (uint32_t k = 0; k < fd->size; ++k) {
                     int64_t raw = 0;
-                    if (fd->type == FieldType::Ref) {
+                    if (base_type(fd->type) == FieldType::Ref) {
                         const int target = g().entity_index(fd->ref_entity);
                         const auto* ids = target >= 0 ? &g().tables[size_t(target)].ids : nullptr;
                         const auto found = ids ? ids->find(values[k]) : decltype(ids->find(values[k])){};
@@ -394,7 +406,9 @@ private:
                         }
                         raw = found->second;
                     } else if (!parse_value(values[k], fd->type, raw)) {
-                        error(at(d, f), "invalid value '" + values[k] + "' for field '" + fd->name + "'");
+                        const bool too_large = is_small(fd->type) && parse_value(values[k], base_type(fd->type), raw);
+                        error(at(d, f), "invalid value '" + values[k] + "' for field '" + fd->name + "'" +
+                                            (too_large ? ": " + detail::misfit_text(fd->type, raw) : ""));
                         continue;
                     }
                     b_.set(static_cast<uint32_t>(e), row, fd->name, raw, k, at(d, f));

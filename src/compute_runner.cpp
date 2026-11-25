@@ -316,7 +316,7 @@ ComputeRunner::ComputeRunner(uint32_t device_index, bool validation, const std::
                              const std::vector<ComputeBufferSpec>& specs, const std::vector<ComputeStageSpec>& stages,
                              const std::vector<uint32_t>& zero_each_tick, bool shared_reduction,
                              const std::vector<ComputeSpecConstant>& constants,
-                             const std::vector<std::vector<uint32_t>>& clears)
+                             const std::vector<std::vector<uint32_t>>& clears, bool small_fields)
     : impl_(std::make_unique<Impl>(device_index, validation)) {
     Impl& m = *impl_;
     VulkanContext& ctx = m.ctx;
@@ -330,6 +330,9 @@ ComputeRunner::ComputeRunner(uint32_t device_index, bool validation, const std::
     for (const auto& c : constants)
         if (c.id < 2) throw std::invalid_argument("ComputeRunner: specialization constants 0 and 1 are the runner's own");
     m.constants = constants;
+    if (small_fields && !ctx.small_fields())
+        throw std::runtime_error("device '" + ctx.device_name() +
+                                 "' cannot store 8 and 16-bit values, which this game's small fields need");
     if (ctx.properties().limits.maxPerStageDescriptorStorageBuffers < n)
         throw std::runtime_error("device supports too few storage buffers per shader stage");
 
@@ -602,10 +605,14 @@ void ComputeRunner::discard_queued() {
     impl_->staged_copies.clear();
 }
 
-void ComputeRunner::take_queued(ComputeRunner& from) {
+void ComputeRunner::take_queued(ComputeRunner& from,
+                                const std::function<void(uint32_t, const void*, uint64_t, uint64_t)>& take) {
     const Impl& f = *from.impl_;
-    for (const auto& [binding, region] : f.staged_copies)
-        queue_write(binding, static_cast<const char*>(f.staging.mapped) + region.srcOffset, region.size, region.dstOffset);
+    for (const auto& [binding, region] : f.staged_copies) {
+        const char* src = static_cast<const char*>(f.staging.mapped) + region.srcOffset;
+        if (take) take(binding, src, region.size, region.dstOffset);
+        else queue_write(binding, src, region.size, region.dstOffset);
+    }
     from.discard_queued();
 }
 
@@ -658,13 +665,16 @@ void ComputeRunner::set_tick_readback_bytes(uint32_t id, uint64_t bytes) {
 uint64_t ComputeRunner::tick_readback_bytes(uint32_t id) const { return impl_->tick_reads.at(id).size; }
 
 std::vector<ComputeRunner::OrderDiff> ComputeRunner::tick_checked(const std::vector<bool>& check,
-                                                                  const std::vector<uint64_t>& row_words,
-                                                                  const std::vector<bool>& run_in) {
+                                                                  const std::vector<uint64_t>& row_bytes,
+                                                                  const std::vector<bool>& run_in,
+                                                                  uint32_t counts_binding,
+                                                                  std::vector<std::vector<uint32_t>>* counts) {
     Impl& m = *impl_;
     const std::vector<bool> runs = m.run_mask(run_in);
     const auto t0 = std::chrono::steady_clock::now();
     const size_t S = m.stages.size(), B = m.buffers.size();
-    if (check.size() != S || row_words.size() != B) throw std::invalid_argument("tick_checked: one entry per stage / buffer");
+    if (check.size() != S || row_bytes.size() != B || counts_binding >= B)
+        throw std::invalid_argument("tick_checked: one entry per stage / buffer");
     m.finish();
     flush_queued();  // host writes come first, as in tick()
     if (m.check_pipelines.empty()) m.check_pipelines = m.make_pipelines(1);
@@ -717,14 +727,22 @@ std::vector<ComputeRunner::OrderDiff> ComputeRunner::tick_checked(const std::vec
     std::vector<OrderDiff> diffs;
     const auto compare = [&](size_t s, bool parallel, const std::vector<uint32_t>& expected, const uint32_t* got) {
         for (size_t b = 0; b < B; ++b) {
-            const uint64_t first = at[b] / 4, words = m.buffers[b].size / 4, per = std::max<uint64_t>(row_words[b], 1);
+            if (row_bytes[b] == 0) continue;
+            const uint64_t first = at[b] / 4, words = m.buffers[b].size / 4, per = row_bytes[b];
             OrderDiff d{static_cast<uint32_t>(s), static_cast<uint32_t>(b), parallel, 0, 0};
             uint64_t last = UINT64_MAX;
-            for (uint64_t w = 0; w < words; ++w)
-                if (expected[first + w] != got[first + w] && w / per != last) {
-                    last = w / per;
-                    if (d.rows++ == 0) d.first_row = last;
+            for (uint64_t w = 0; w < words; ++w) {
+                if (expected[first + w] == got[first + w]) continue;
+                // a word of a small field can hold values of several rows
+                const auto* e = reinterpret_cast<const uint8_t*>(&expected[first + w]);
+                const auto* g = reinterpret_cast<const uint8_t*>(&got[first + w]);
+                for (uint64_t k = 0; k < 4; ++k) {
+                    const uint64_t row = (w * 4 + k) / per;
+                    if (e[k] == g[k] || row == last) continue;
+                    last = row;
+                    if (d.rows++ == 0) d.first_row = row;
                 }
+            }
             if (d.rows) diffs.push_back(d);
         }
     };
@@ -734,6 +752,7 @@ std::vector<ComputeRunner::OrderDiff> ComputeRunner::tick_checked(const std::vec
         for (uint32_t b : m.zeroed(runs)) vkCmdFillBuffer(cmd, m.buffers[b].buffer, 0, VK_WHOLE_SIZE, 0);
     });
     std::vector<uint32_t> forwards;
+    if (counts) counts->assign(S, {});
     for (size_t s = 0; s < S; ++s) {
         if (!runs[s]) continue;
         if (!check[s]) {
@@ -744,6 +763,10 @@ std::vector<ComputeRunner::OrderDiff> ComputeRunner::tick_checked(const std::vec
         run(s, true, 0);  // forwards, one item at a time
         const uint32_t* f = read_state();
         forwards.assign(f, f + total / 4);
+        if (counts) {
+            const auto from = forwards.begin() + std::ptrdiff_t(at[counts_binding] / 4);
+            (*counts)[s].assign(from, from + std::ptrdiff_t(m.buffers[counts_binding].size / 4));
+        }
         copy_state(false);
         run(s, true, 1);  // backwards
         compare(s, false, forwards, read_state());

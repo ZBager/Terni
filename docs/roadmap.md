@@ -2,8 +2,8 @@
 
 Terni is pre-1.0. What larger games needed first is done, and so are a reproducible
 benchmark and what games need before they ship.
-What remains is ongoing work, integrations for game engines, smaller fields, and the
-preparation of stable public releases. The order is a priority, not a promise.
+What remains is ongoing work, integrations for game engines, the rest of smaller fields, and
+the preparation of stable public releases. The order is a priority, not a promise.
 
 ## Ongoing
 
@@ -133,27 +133,23 @@ invalid, not as a time. See [Benchmark](benchmark.md).
 ## Smaller fields
 
 Field types of 8 and 16 bits, chosen field by field; 32 bits stay the default. Every field
-takes at least 32 bits today, so a job, a percentage or a reference to one of 10,000
-provinces reads up to four times the memory it needs, and large worlds are limited by
-memory, not arithmetic. GPUs store such values natively. Measured with four of the
-benchmark's eight pop fields small, the GPU time of a tick falls by 31% (medium) and 19%
-(large) on a laptop RTX 4050 and by 12% and 14% on a Radeon 760M, and does not change on
-lavapipe at medium. With only two small it falls by 13-16% and 8-9%. Packing values into
-32-bit words in the rules gains little on large worlds. Worlds made mostly of small
-values gain more on GPUs, but a world of that kind ran 10% slower on lavapipe.
+used to take at least 32 bits, so a job or a reference to one of 10,000 provinces took up to
+four times the memory it needs, and large worlds are limited by memory, not arithmetic.
 
-To settle in the design, before any code:
+1. **Small integers and refs** (done): `int8` to `ref16`
+   ([Concepts](concepts.md#small-fields)). In the benchmark's world the GPU time of a tick
+   falls by 17% (medium) and 13% (large) on a laptop RTX 4050 and by 7% and 8% on a Radeon
+   760M with two of the eight pop fields small; with four, by 34% and 19%, and by 10% and 13%. It
+   does not change on lavapipe at medium. Devices without 8 and 16-bit storage store them in
+   32 bits, with the same results.
+2. **Small rates**: a `rate16` (Q2.14, from -2 up to 2), for percentages and
+   multipliers. Writes round, so changes too small to show are lost; whether that is worth
+   it waits for a game that asks.
+3. **The benchmark world with small fields**: a new version of it, with every result measured
+   again.
 
-- What a value that does not fit becomes: the same on every device, and an error the
-  order check or a validating run can name.
-- Devices without 8 and 16-bit storage: whether they are refused, or store 32 bits and
-  give the same results.
-- Two threads write neighbouring values that share a 32-bit word: a parity test on every
-  device must show that neither is lost.
-- What changes with it: host reads and writes, readbacks, saves, hashes, the order check,
-  data folders, the C API and the plugins. Sums (`agg`) stay 32 bits.
-
-To measure: Windows drivers, discrete GPUs, and how much smaller saves and readbacks get.
+To measure: Windows drivers and discrete GPUs, and the parity test on them; a real device
+without 8 and 16-bit storage.
 
 ## Public releases
 

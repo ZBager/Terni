@@ -70,7 +70,7 @@ ctest --test-dir build --output-on-failure
   `VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation ./build/test_embedding` and check its
   output for `VUID` / `Validation Error`; a clean run prints none. Confirm the layer loaded
   (`VK_LOADER_DEBUG=layer`) before trusting silence. For changes to transfers or
-  submission, also run `test_partial_write`, `test_async_tick` and `test_device_health` with
+  submission, also run `test_partial_write`, `test_async_tick`, `test_device_health` and `test_small_fields` with
   `VK_KHRONOS_VALIDATION_VALIDATE_SYNC=1` (CI does).
 - `./build/terni_run <game folder> [--ticks N] [--dump] [--prelude] [--device I] [--driver LIBRARY]` runs a
   data folder on every device and compares state hashes; `--prelude` prints the generated
@@ -104,6 +104,7 @@ ctest --test-dir build --output-on-failure
 | `src/compute_runner.cpp` | Vulkan: buffers, pipelines, the per-tick command buffers, transfers, order-check runs |
 | `src/c_api.cpp` | The C API of `include/terni/terni.h`, built into the shared libraries `terni` and `terni_runtime` |
 | `src/rule_compiler_*.cpp` | GLSL to SPIR-V with shaderc (`core`) or none (`runtime`) |
+| `src/small_fields.hpp` | 8 and 16-bit columns: packing, widening, what fits |
 | `src/order_lint.cpp` | Load-time warnings for order-dependent stages |
 | `src/vk_context.cpp` | The Vulkan instance and device, device choice, drivers added by the game |
 | `src/device_health.hpp` | Tick-time statistics behind `GameSim::device_health()` |
@@ -164,6 +165,13 @@ ctest --test-dir build --output-on-failure
   [TerniIntegrations](https://github.com/ZBager/TerniIntegrations) (`native/CMakeLists.txt`),
   update `native/bridge` if the API changed, and run both plugins' tests (see its
   `CLAUDE.md`).
+- **Small fields** (`int8` to `ref16`): the accessors in the generated GLSL (`small_field()` in
+  `game_sim.cpp`) and the host's side of them (`src/small_fields.hpp`, `fits()` in `game.hpp`)
+  must agree on what a value that does not fit becomes; `test_small_fields` compares them.
+  Padding at a column's end stays 0, and no 8 or 16-bit constant or arithmetic may reach
+  the SPIR-V (`TERNI_ZERO`), so devices need only the storage features. Devices without them
+  store these fields widened (`Impl::rules.widened`): what touches a column on the device goes
+  through `stored()` and `stored_row_bytes()`, and saves and `tick_result_bytes()` stay packed.
 - **Dynamic entity types**: rows that rules ask for are given out by the built-in stages
   of `spawn_stage_sources()`, rows the host asks for by `Impl::allocate()`, both by the
   same rule (lowest free row; a destroyed row rests one tick). `tests/test_dynamic.cpp`

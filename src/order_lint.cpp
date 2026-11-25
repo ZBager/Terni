@@ -6,8 +6,9 @@
 // devices, and lockstep peers drift apart even though each device is consistent with
 // itself (a cross-device parity test can pass anyway).
 //
-// For each field buffer (<entity>_<field>[index]) the scan notes, per access, whether it
-// writes (assignment, ++/--) or is an atomic*() operand, and whether the index is the
+// For each field buffer (<entity>_<field>[index]; a small field's <entity>_<field>(index) and
+// <entity>_<field>_set(index, v)) the scan notes, per access, whether it
+// writes (assignment, ++/--, _set) or is an atomic*() operand, and whether the index is the
 // thread's own row: the FOR_EACH variable, `v * size + k`, or a local set from those
 // (`uint base = p * N;` ... `field[base + k]`). Every other index is "another row".
 // A field the stage writes is reported when the stage also reads it at another row,
@@ -26,6 +27,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace terni::detail {
@@ -119,12 +121,32 @@ struct Access {
 
 class StageScan {
 public:
-    StageScan(const std::string& source, const std::map<std::string, std::string>& buffers) : src_(source) {
+    // `small`: the small fields' accessor functions, by name: "entity.field" and whether it writes.
+    StageScan(const std::string& source, const std::map<std::string, std::string>& buffers,
+              const std::map<std::string, std::pair<std::string, bool>>& small)
+        : src_(source) {
         std::set<std::string> macro_names;
         t_ = lex(source, quiet_, macro_names);
         drop_unreached(macro_names);
         find_rows();
         for (size_t t = 0; t + 1 < t_.size(); ++t) {
+            if (const auto s = small.find(t_[t].text); s != small.end() && t_[t + 1].text == "(") {
+                size_t end = t + 2;  // the index ends at the first argument's end
+                for (int depth = 0; end < t_.size(); ++end) {
+                    const std::string& x = t_[end].text;
+                    if (depth == 0 && (x == "," || x == ")")) break;
+                    if (x == "(" || x == "[") ++depth;
+                    else if (x == ")" || x == "]") --depth;
+                }
+                if (end >= t_.size()) continue;
+                Access a;
+                a.line = t_[t].line;
+                a.own = own(t + 2, end);
+                a.index = src_.substr(t_[t + 1].pos + 1, t_[end].pos - t_[t + 1].pos - 1);
+                a.write = s->second.second;
+                if (!quiet_.count(a.line)) accesses[s->second.first].push_back(a);
+                continue;
+            }
             const auto b = buffers.find(t_[t].text);
             if (b == buffers.end() || t_[t + 1].text != "[") continue;
             const size_t close = match(t + 1);
@@ -304,8 +326,13 @@ private:
 
 void lint_stage_order(Game& game) {
     std::map<std::string, std::string> buffers;  // GLSL buffer name -> "entity.field"
+    std::map<std::string, std::pair<std::string, bool>> small;  // accessor -> "entity.field", whether it writes
     for (const auto& e : game.entities)
-        for (const auto& f : e.fields) buffers[e.name + "_" + f.name] = e.name + "." + f.name;
+        for (const auto& f : e.fields) {
+            const std::string name = e.name + "_" + f.name, field = e.name + "." + f.name;
+            if (!is_small(f.type)) buffers[name] = field;
+            else small[name] = {field, false}, small[name + "_set"] = {field, true};
+        }
     for (const auto& stage : game.stages) {
         // the file it was read from (a mod's, say); else rules/<stage>.glsl next to stages.txt;
         // for worlds built in code, <stage>.glsl
@@ -313,7 +340,7 @@ void lint_stage_order(Game& game) {
         if (!stage.source_file.empty()) file = stage.source_file;
         else if (const size_t slash = stage.where.file.find_last_of('/'); slash != std::string::npos)
             file = stage.where.file.substr(0, slash + 1) + file;
-        const StageScan scan(stage.source, buffers);
+        const StageScan scan(stage.source, buffers, small);
         for (const auto& [field, list] : scan.accesses) {
             const Access* write = nullptr;
             const Access *other_read = nullptr, *other_write = nullptr, *atomic = nullptr, *plain = nullptr;

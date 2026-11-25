@@ -73,7 +73,8 @@ their world can fill the starting state before creating a `GameSim`.
 | `errors`, `warnings` | `GameDiagnostic`s; `text()` gives `file:line: message` |
 | `ok()` | No errors |
 | `entity_index(name)`, `modifier_key_index(name)`, `bundle_index(name)`, `define_index(name)` | Index by name, or -1 |
-| `void set_capacity(entity, rows)` | Room for `rows` rows, before a `GameSim` starts; new rows get defaults. The rules need no recompiling |
+| `void set_capacity(entity, rows)` | Room for `rows` rows, before a `GameSim` starts; new rows get defaults. The rules need no recompiling. Throws for more rows than a small ref to the type can refer to |
+| `bool small_fields()` | It has small fields (`int8` to `ref16`), which devices without `DeviceInfo::small_fields` store in 32 bits |
 | `int32_t define(name)` | A define's raw value, as rules read it (`D.name`); throws `std::invalid_argument` for an unknown name |
 
 ### Functions
@@ -100,6 +101,7 @@ their world can fill the starting state before creating a `GameSim`.
 | `shader_library_dir` | "" | A folder with `terni/*.glsl` instead of the embedded library |
 | `validation` | false | Vulkan validation layers |
 | `spin_us` | 0 | Waits for a tick spin for up to this many microseconds before they sleep ([Embedding](embedding.md#waiting-for-small-ticks)) |
+| `widen_small_fields` | false | Stores small fields in 32 bits on any device, as one without `DeviceInfo::small_fields` does; for tests, the results are the same |
 
 ### `GameSim`
 
@@ -115,10 +117,11 @@ Runs a `Game` on one device. The `Game` must outlive it. Not thread-safe.
 | `uint64_t ticks()` | Completed ticks |
 | `std::vector<OrderIssue> tick_checked()` | A tick that also checks every stage for order dependence ([Determinism](determinism.md)) |
 | `std::vector<int32_t> read_field(entity, field, first_row = 0, rows = all)` | Raw words, read from the GPU now |
-| `void write_field(entity, field, row, words)` | Raw words from `row` on (vector or span); applied before the next tick |
+| `void write_field(entity, field, row, words)` | Raw words from `row` on (vector or span); applied before the next tick. Throws `std::out_of_range` for a value that does not fit a small field |
 | `void write_field(entity, field, row, index, words)` | Values `index` onwards of one row of a sized field; the rest of the row is untouched |
 | `uint32_t read_each_tick(entity, field, first_row = 0, rows = in use)` | Registers a per-tick readback; returns an id |
-| `std::span<const int32_t> tick_result(id)` | Its words as of the last collected tick; valid until the tick after the next one begins |
+| `std::span<const int32_t> tick_result(id)` | Its words as of the last collected tick; valid until the tick after the next one begins. A small field's are made from the packed values on the first call after a tick |
+| `std::span<const uint8_t> tick_result_bytes(id)` | The same as bytes: a small field's values packed, 1 or 2 bytes each. No copy, unless the device stores them in 32 bits |
 | `uint32_t create_entity(entity)` | A new row of a dynamic entity type: the lowest one not alive, fields at their defaults, alive from the next tick. `NO_ENTITY` if full. Collects a tick in flight |
 | `bool destroy_entity(entity, row)` | The row is no longer alive and its modifier instances are removed; it rests through the next tick. False if it was not alive. Collects a tick in flight |
 | `bool entity_alive(entity, row)`, `uint32_t entity_generation(entity, row)` | As of the last collected tick plus creates and destroys since; never block |
@@ -142,6 +145,8 @@ Runs a `Game` on one device. The `Game` must outlive it. Not thread-safe.
 | `std::vector<StageTime> stage_times()` | Per stage, in the order they run (the rules', then Terni's own, named `terni_...`): GPU time in the last tick and since the start. Never blocks |
 | `uint64_t sync_reads()` | Reads so far that waited for the GPU |
 | `DeviceHealth device_health()` | Tick times lately against the usual, and whether the device has become slow |
+| `void move_to_device(device, widen_small_fields)` | The same, with another `GameSimOptions::widen_small_fields` from here on (for tests) |
+| `bool widened()` | Small fields are stored in 32 bits here |
 | `void move_to_device(device)` | Continues on another device with the same state, bit for bit; handles and `read_each_tick` ids stay valid. Throws, changing nothing, if the device cannot be used |
 
 ### Small types
@@ -150,7 +155,8 @@ Runs a `Game` on one device. The `Game` must outlive it. Not thread-safe.
 | --- | --- |
 | `ModifierHandle` | `slot`, `version`, `valid()`; stale handles never match a reused slot |
 | `ModifierContribution` | `handle`, `bundle`, `entity`, `row` (where the instance sits), `value` (raw, scaled) |
-| `OrderIssue` | `stage`, `field`, `parallel` (false: forwards and backwards differ; true: the parallel run differs), `first_row`, `rows` |
+| `OrderIssue` | `stage`, `field`, `parallel` (false: forwards and backwards differ; true: the parallel run differs), `first_row`, `rows`; `misfit`: no order problem, but values that did not fit a small field (`rows` is the number of such writes) |
+| `FieldType` | `Quantity`, `Rate`, `Agg`, `Int`, `Count`, `Ref`, `Money64`, and the small `Int8`, `Int16`, `Count8`, `Count16`, `Ref8`, `Ref16`; `field_bits(t)`, `is_small(t)`, `base_type(t)` (`Count8` is a `Count`), `fits(t, raw)`, `type_name(t)`. `NO_ROW`: a ref to no row |
 | `CompileStats` | `compiled`, `cached`, `ms` |
 | `SaveMatch` | `SameGame` (default: refuse a save of another game) or `ByName` (fit it by name) |
 | `DeviceLost` | Thrown (a `std::runtime_error`) by every call that ticks or reads the device once the device is lost, for example after a rule ran too long. Start a new `GameSim` and load the last save |
@@ -166,7 +172,7 @@ Runs a `Game` on one device. The `Game` must outlive it. Not thread-safe.
 | Call | Does |
 | --- | --- |
 | `bool can_compile_rules()` | True for `Terni::core`, false for `Terni::runtime` |
-| `CompileStats compile_rules(game, cache_dir, shader_library_dir = "")` | Compiles every rule into the cache without a GPU; throws on a compile error, an unwritable cache, or in `Terni::runtime` |
+| `CompileStats compile_rules(game, cache_dir, shader_library_dir = "")` | Compiles every rule into the cache without a GPU (twice for a game with small fields: for devices that store them packed, and in 32 bits); throws on a compile error, an unwritable cache, or in `Terni::runtime` |
 
 ## Devices
 
@@ -174,9 +180,9 @@ Runs a `Game` on one device. The `Game` must outlive it. Not thread-safe.
 
 | Call | Does |
 | --- | --- |
-| `static std::vector<DeviceInfo> VulkanContext::list_devices()` | Every Vulkan device: `index`, `name`, `type`, `usable`, `why_not`, `uuid`, `vendor_id`, `luid` and `luid_valid` (Windows), `driver` (name and version), `robustness` (what a rule reading or writing past a field's end does there); `cpu()` is true for a software driver. Empty on a machine with no Vulkan driver |
+| `static std::vector<DeviceInfo> VulkanContext::list_devices()` | Every Vulkan device: `index`, `name`, `type`, `usable`, `why_not`, `uuid`, `vendor_id`, `luid` and `luid_valid` (Windows), `driver` (name and version), `robustness` (what a rule reading or writing past a field's end does there), `small_fields` (it stores small fields packed; without, in 32 bits); `cpu()` is true for a software driver. Empty on a machine with no Vulkan driver |
 | `void add_vulkan_driver(library_path)` | Adds a driver shipped with the game (a software driver such as lavapipe) to the system's, for the rest of the process. Call before listing or picking devices. Throws if the file is not a Vulkan driver or the Vulkan loader is older than 1.3.234 |
-| `int pick_device(preference, const std::array<uint8_t,16>* uuid = nullptr, const std::array<uint8_t,8>* luid = nullptr)` | The device `GameSim` would choose: a UUID match, then a LUID match, then by preference; -1 if none is usable |
+| `int pick_device(preference, const std::array<uint8_t,16>* uuid = nullptr, const std::array<uint8_t,8>* luid = nullptr)` | The device `GameSim` would choose: a UUID match, then a LUID match, then by preference; -1 if none is usable. |
 
 ## Fixed point and randomness
 

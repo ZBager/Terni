@@ -77,6 +77,10 @@ struct DeviceInfo {
     // most the device offers; Defined (all current desktop drivers) keeps a broken rule
     // deterministic across devices.
     BufferRobustness robustness = BufferRobustness::None;
+    // It can store 8 and 16-bit values (storageBuffer8BitAccess, storageBuffer16BitAccess),
+    // as games with small fields do (Game::small_fields()). Without, it runs them all the same,
+    // and stores those fields in 32 bits.
+    bool small_fields = false;
     // The driver's name and version as it reports them ("NVIDIA 580.95.05", "radv Mesa 25.2.4");
     // empty if the device predates Vulkan 1.2. For logs and benchmark results.
     std::string driver;
@@ -141,6 +145,7 @@ public:
     const VkPhysicalDeviceProperties& properties() const { return props_; }
     uint32_t timestamp_valid_bits() const { return timestamp_valid_bits_; }
     BufferRobustness buffer_robustness() const { return robustness_; }
+    bool small_fields() const { return small_fields_; }  // 8 and 16-bit storage is on
     // The device's timestamp clock now, in the units vkCmdWriteTimestamp2 writes (through
     // VK_KHR/EXT_calibrated_timestamps). False where the device cannot tell it.
     bool device_clock(uint64_t& ticks) const;
@@ -163,6 +168,7 @@ private:
     VkPhysicalDeviceMemoryProperties mem_props_{};
     uint32_t timestamp_valid_bits_ = 0;
     BufferRobustness robustness_ = BufferRobustness::None;
+    bool small_fields_ = false;
     PFN_vkGetCalibratedTimestampsEXT get_calibrated_ = nullptr;  // null: no device clock
 };
 

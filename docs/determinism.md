@@ -59,6 +59,10 @@ for (const terni::OrderIssue& issue : sim.tick_checked())
     log(issue.stage + ": " + issue.field + " differs in " + std::to_string(issue.rows) + " rows");
 ```
 
+An issue with `misfit` set is no order problem: a rule wrote values that do not fit a
+[small field](concepts.md#small-fields), and the nearest ones were stored. Every device
+stores the same, so it cannot desync a game, but the rule probably means something else.
+
 `tick_checked()` is a tick with the same result as `tick()`. Before the normal run,
 every stage also runs twice from the same state, with its rows handled one at a time
 (`FOR_EACH` and `FOR_EACH_GROUP` walk them in sequence), forwards and then backwards. A
@@ -112,6 +116,10 @@ GPUs, with Linux and Windows, every run has ended in the same state
 
 - Fixed-point arithmetic in C++ (`terni/fixed.hpp`) and GLSL (`fixed.glsl`) gives the same
   bits; the tests compare them on every device.
+- Small fields (`int8` to `ref16`) give the same results as 32-bit ones for values that fit,
+  and the same saturated values otherwise, whatever threads write the rows that share a
+  word. Devices that widen them store the same values, so peers may mix both kinds. A test
+  runs the same world with small, with widened and with 32-bit fields on every device.
 - 64- and 128-bit helpers (`wide.glsl`) are exact on every device; the tests compare them
   with C++ `__int128` (with GCC and Clang, which have it).
 - Decimal values in data files become fixed point through integer math only, not through

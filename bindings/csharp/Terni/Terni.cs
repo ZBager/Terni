@@ -37,7 +37,7 @@ namespace Terni
         public DeviceLostException(string message) : base(Status.DeviceLost, message) { }
     }
 
-    public enum FieldType { Quantity = 0, Rate = 1, Agg = 2, Int = 3, Count = 4, Ref = 5, Money64 = 6 }
+    public enum FieldType { Quantity = 0, Rate = 1, Agg = 2, Int = 3, Count = 4, Ref = 5, Money64 = 6, Int8 = 7, Int16 = 8, Count8 = 9, Count16 = 10, Ref8 = 11, Ref16 = 12 }
     public enum DevicePreference { Discrete = 0, Integrated = 1, Cpu = 2 }
     public enum DriverResult { Added = 0, NotShipped = 1, SystemHasOne = 2 }
 
@@ -96,6 +96,8 @@ namespace Terni
     {
         public string Stage, Field;
         public bool Parallel;
+        /// <summary>No order problem, but values that did not fit a small field: the nearest ones were stored.</summary>
+        public bool Misfit;
         public ulong FirstRow, Rows;
     }
 
@@ -137,6 +139,7 @@ namespace Terni
         public bool Validation;
         public string? ShaderLibraryDir;
         public int SpinMicroseconds;  // waits for a tick spin this long before they sleep (terni_set_tick_spin)
+        public bool WidenSmallFields; // for tests: store small fields in 32 bits on any device (terni_set_widen_small_fields)
     }
 
     internal static class Utf8
@@ -225,6 +228,13 @@ namespace Terni
                 Check(Native.terni_pick_device((int)preference, u, l, out int device));
                 return device;
             }
+        }
+
+        /// <summary>Whether the device stores small fields (World.SmallFields) packed; without, it stores them in 32 bits.</summary>
+        public static bool DeviceSmallFields(int index)
+        {
+            Check(Native.terni_device_small_fields((uint)index, out int small));
+            return small != 0;
         }
 
         static RendererGpu FromNative(in Native.RendererGpu g)
@@ -380,6 +390,9 @@ namespace Terni
         public int FindEntity(string name) => Native.terni_find_entity(H, Utf8.Of(name));
         public int Capacity(int entity) => (int)Native.terni_capacity(H, (uint)entity);
         public bool IsDynamic(int entity) => Native.terni_dynamic(H, (uint)entity) != 0;
+        /// <summary>The game has small fields.</summary>
+        public bool SmallFields => Native.terni_small_fields(H) != 0;
+
         public string[] Fields(int entity) => List(Native.terni_field_count(H, (uint)entity), i => Native.terni_field_name(H, (uint)entity, i));
         public int FindField(int entity, string name) => Native.terni_find_field(H, (uint)entity, Utf8.Of(name));
 
@@ -479,6 +492,7 @@ namespace Terni
                 o.shader_library_dir = Utf8.Alloc(options.ShaderLibraryDir);
                 if (options.SpinMicroseconds < 0) throw new ArgumentException("SpinMicroseconds is negative");
                 Check(Native.terni_set_tick_spin(H, (uint)options.SpinMicroseconds));
+                Check(Native.terni_set_widen_small_fields(H, options.WidenSmallFields ? 1 : 0));
                 Check(Native.terni_start(H, o));
             }
             finally
@@ -489,6 +503,8 @@ namespace Terni
         }
 
         public void Stop() => Native.terni_stop(H);
+        /// <summary>The running simulation stores small fields in 32 bits (Library.DeviceSmallFields, StartOptions.WidenSmallFields).</summary>
+        public bool Widened => Native.terni_widened(H) != 0;
         public bool Running => Native.terni_running(H) != 0;
         public bool DeviceLost => Native.terni_device_lost(H) != 0;
         /// <summary>For testing recovery: the next call that uses the device finds it lost.</summary>
@@ -524,7 +540,8 @@ namespace Terni
                 {
                     Stage = Utf8.FromNative(o.stage),
                     Field = Utf8.FromNative(o.field),
-                    Parallel = o.parallel != 0,
+                    Parallel = o.parallel == 1,
+                    Misfit = o.parallel == 2,
                     FirstRow = o.first_row,
                     Rows = o.rows,
                 };
@@ -582,6 +599,13 @@ namespace Terni
         {
             Check(Native.terni_subscription(H, (uint)id, out int* words, out UIntPtr count));
             return new ReadOnlySpan<int>(words, (int)count);
+        }
+
+        /// <summary>The same as bytes: a small field's values packed, 1 or 2 bytes each (no copy, unless Widened).</summary>
+        public ReadOnlySpan<byte> SubscriptionBytes(int id)
+        {
+            Check(Native.terni_subscription_bytes(H, (uint)id, out byte* bytes, out UIntPtr count));
+            return new ReadOnlySpan<byte>(bytes, (int)count);
         }
 
         // ---- entities at run time ----

@@ -19,6 +19,7 @@
 #include "terni/state_hash.hpp"
 #include "terni/version.hpp"
 #include "terni/vk_context.hpp"
+#include "small_fields.hpp"
 
 namespace {
 
@@ -60,6 +61,7 @@ struct terni_world {
     std::string device_name, report;
 
     uint32_t spin_us = 0;  // terni_set_tick_spin()
+    bool widen = false;    // terni_set_widen_small_fields()
 
     void clear_lists() {
         issues.clear();
@@ -279,6 +281,15 @@ terni_status terni_device_info(uint32_t index, terni_device* device) {
     });
 }
 
+terni_status terni_device_small_fields(uint32_t index, int32_t* small_fields) {
+    TERNI_NEED(small_fields);
+    return guard(static_cast<terni_world*>(nullptr), [&] {
+        DeviceList& list = device_list();
+        std::lock_guard<std::mutex> lock(list.mutex);
+        *small_fields = item(list.devices, index, "device").small_fields ? 1 : 0;
+    });
+}
+
 terni_status terni_add_vulkan_driver(const char* library_path) {
     TERNI_NEED(library_path);
     return guard(static_cast<terni_world*>(nullptr), [&] { terni::add_vulkan_driver(library_path); });
@@ -379,6 +390,10 @@ uint32_t terni_capacity(const terni_world* world, uint32_t entity) {
 int32_t terni_dynamic(const terni_world* world, uint32_t entity) {
     return quietly<int32_t>(world, 0, [&] { return world->need_entity(entity).dynamic ? 1 : 0; });
 }
+int32_t terni_small_fields(const terni_world* world) {
+    return quietly<int32_t>(world, 0, [&] { return world->need_game().small_fields() ? 1 : 0; });
+}
+
 uint32_t terni_field_count(const terni_world* world, uint32_t entity) {
     return quietly<uint32_t>(world, 0, [&] { return count_of(world->need_entity(entity).fields.size()); });
 }
@@ -401,7 +416,7 @@ terni_status terni_field_info_of(const terni_world* world, uint32_t entity, cons
         out.type = static_cast<int32_t>(f.type);
         out.size = f.size;
         out.words = f.words();
-        out.ref_entity = f.type == terni::FieldType::Ref ? world->game->entity_index(f.ref_entity) : -1;
+        out.ref_entity = terni::base_type(f.type) == terni::FieldType::Ref ? world->game->entity_index(f.ref_entity) : -1;
         *info = out;
     });
 }
@@ -535,6 +550,9 @@ terni_status terni_write_start(terni_world* world, uint32_t entity, const char* 
         if (row + word_count / per_row > e.capacity)
             throw Fail(TERNI_INVALID, "the rows run past the capacity of '" + e.name + "' (" +
                                           std::to_string(e.capacity) + ")");
+        if (const size_t bad = terni::detail::first_misfit(fd.type, words, word_count); bad < word_count)
+            throw Fail(TERNI_INVALID, "'" + e.name + "." + fd.name + "', row " + std::to_string(row + bad / per_row) + ": " +
+                                          terni::detail::misfit_text(fd.type, words[bad]));
         std::copy_n(words, word_count, g.tables[entity].columns[size_t(f)].begin() + std::ptrdiff_t(row * per_row));
     });
 }
@@ -634,6 +652,7 @@ terni_status terni_start(terni_world* world, const terni_start_options* options)
         s.validation = o.validation != 0;
         if (o.shader_library_dir) s.shader_library_dir = o.shader_library_dir;
         s.spin_us = world->spin_us;
+        s.widen_small_fields = world->widen;
         world->lost = false;
         world->simulate_lost = false;
         world->sim = std::make_unique<terni::GameSim>(g, s);
@@ -643,6 +662,15 @@ terni_status terni_start(terni_world* world, const terni_start_options* options)
 terni_status terni_set_tick_spin(terni_world* world, uint32_t microseconds) {
     TERNI_NEED(world);
     return guard(world, [&] { world->spin_us = microseconds; });
+}
+
+terni_status terni_set_widen_small_fields(terni_world* world, int32_t widen) {
+    TERNI_NEED(world);
+    return guard(world, [&] { world->widen = widen != 0; });
+}
+
+int32_t terni_widened(const terni_world* world) {
+    return quietly<int32_t>(world, 0, [&] { return world->need_sim().widened() ? 1 : 0; });
 }
 
 void terni_stop(terni_world* world) {
@@ -690,7 +718,8 @@ terni_status terni_order_issue_at(const terni_world* world, uint32_t index, tern
     TERNI_NEED(issue);
     return guard(world, [&] {
         const terni::OrderIssue& i = item(world->issues, index, "order issue");
-        *issue = terni_order_issue{i.stage.c_str(), i.field.c_str(), i.parallel ? 1 : 0, i.first_row, i.rows};
+        *issue = terni_order_issue{i.stage.c_str(), i.field.c_str(), i.misfit ? TERNI_ISSUE_MISFIT : i.parallel ? 1 : 0,
+                                   i.first_row, i.rows};
     });
 }
 
@@ -747,19 +776,36 @@ terni_status terni_subscribe(terni_world* world, uint32_t entity, const char* fi
     });
 }
 
+static void need_subscription(const terni_world* world, uint32_t id) {
+    if (id < world->subscriptions) return;
+    throw Fail(TERNI_INVALID, "no subscription " + std::to_string(id) + " (this world has " +
+                                  std::to_string(world->subscriptions) +
+                                  "; subscriptions end when a world stops or starts again)");
+}
+
 terni_status terni_subscription(const terni_world* world, uint32_t id, const int32_t** words, size_t* word_count) {
     TERNI_NEED(world);
     TERNI_NEED(words);
     TERNI_NEED(word_count);
     return guard(world, [&] {
         const terni::GameSim& sim = world->need_sim();
-        if (id >= world->subscriptions)
-            throw Fail(TERNI_INVALID, "no subscription " + std::to_string(id) + " (this world has " +
-                                          std::to_string(world->subscriptions) +
-                                          "; subscriptions end when a world stops or starts again)");
+        need_subscription(world, id);
         const std::span<const int32_t> result = sim.tick_result(id);
         *words = result.data();
         *word_count = result.size();
+    });
+}
+
+terni_status terni_subscription_bytes(const terni_world* world, uint32_t id, const uint8_t** bytes, size_t* byte_count) {
+    TERNI_NEED(world);
+    TERNI_NEED(bytes);
+    TERNI_NEED(byte_count);
+    return guard(world, [&] {
+        const terni::GameSim& sim = world->need_sim();
+        need_subscription(world, id);
+        const std::span<const uint8_t> result = sim.tick_result_bytes(id);
+        *bytes = result.data();
+        *byte_count = result.size();
     });
 }
 

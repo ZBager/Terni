@@ -20,6 +20,7 @@ void main() {
 | Name | What it is |
 | --- | --- |
 | `<entity>_<field>[i]` | A field; row `i`, or `i * SIZE + k` for sized fields |
+| `<entity>_<field>(i)`, `<entity>_<field>_set(i, v)` | A [small field](#small-fields) (`int8` to `ref16`): read and write |
 | `FOR_EACH_<ENTITY>(i) { }` | Loop over the rows in use of an entity type |
 | `FOR_EACH_<ENTITY>_GROUP(i) { }` | The same in `dispatch = workgroup` stages; 256 threads per row |
 | `<ENTITY>_CAPACITY`, `<ENTITY>_<FIELD>_SIZE` | Capacity (see below); values per row |
@@ -64,6 +65,41 @@ Rules of thumb:
   13% less time with `int` values and 30% less with `uint` on a laptop RTX 4050, 5% and 13%
   less on a Radeon 760M, and about a third of the time on a software device. The define must
   not be 0, and for `uint` values it must be above 0.
+
+## Small fields
+
+A field of a small type (`int8`, `int16`, `count8`, `count16`, `ref8`, `ref16`) is read and
+written with functions instead of `[ ]`:
+
+```glsl
+void main() {
+    FOR_EACH_POP(i) {
+        const uint p = pop_home(i);                       // ref16:province
+        if (pop_mood(i) < -50) pop_job_set(i, 0u);        // int8; count8
+        pop_mood_set(i, pop_mood(i) + province_calm[p]);  // computed in 32 bits, stored in 8
+    }
+}
+```
+
+- Reading gives an `int` (`int8`, `int16`) or a `uint` (the others), so nothing overflows
+  while you compute. For a sized field the index is `i * SIZE + k`, as usual.
+- Writing stores the nearest value that fits: 300 in a `count8` becomes 255, -200 in an
+  `int8` becomes -128. A `count` below 0 is a very large `uint`, so it becomes the largest
+  value, not 0. `tick_checked()` reports such writes.
+- A small ref that points at no row reads `0xFFFFFFFFu`. Writing that, or any row that does
+  not fit, stores "no row", so a ref never ends up at a wrong row. A fresh ref is 0 (the
+  first row), as in any ref field.
+- A write past the last row does nothing, and a read there gives 0, on every device.
+- Atomics do not work on small fields: the rule does not compile.
+- Threads may write neighbouring rows of a small field at the same time, as of any field.
+- Changing a field between 32 bits and a small type means changing every rule that uses it,
+  those in mods too.
+
+What they gain depends on how much of the memory a stage touches becomes smaller. In the
+benchmark's `medium` world, with two of the eight pop fields small (a `ref16` and a
+`count8`), the GPU time of a tick was 17% lower on a laptop RTX 4050 and 7% on a Radeon
+760M; with four small, 34% and 10%. On a software device (lavapipe) it did not change, and
+a world made mostly of small values ran 10% slower there.
 
 ## 64- and 128-bit integers
 

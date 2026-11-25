@@ -354,6 +354,8 @@ terni::CompileStats s = terni::compile_rules(*game, "dist/spirv-cache");
 ```
 
 or with the tool that comes with Terni: `terni_compile_rules data/my_game dist/spirv-cache`.
+A game with [small fields](concepts.md#small-fields) gets every rule twice, for devices that
+store them packed and for the few that widen them to 32 bits, so the cache works on both.
 
 Ship the cache folder with the game and link the game with `Terni::runtime`:
 
@@ -471,7 +473,9 @@ Entity types, fields and bundles are matched by name, so the save fits the patch
   rows in use still fit.
 - Changed rules, defines and bundle values simply apply from the next tick: modifier
   totals are worked out again from the instances.
-- A field whose type or ref target changed, or an entity type that became dynamic or
+- A field may become smaller or larger (`count` and `count8`, `ref` and `ref16`), as long as
+  every value fits; one that does not is refused, with its row named.
+- A field whose type or ref target changed otherwise, or an entity type that became dynamic or
   stopped being so, is refused, with the simulation left as it was. Convert such a save
   in your own code first: load it into the old version of the game, change the values,
   and save it again.

@@ -1,0 +1,8 @@
+realm = { capacity = 8 }
+town = {
+	capacity = 10
+	owner = ref32:realm
+	tiny = count4
+	level = { type = count8 default = 300 }
+	people = count16
+}

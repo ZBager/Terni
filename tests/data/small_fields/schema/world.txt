@@ -1,0 +1,10 @@
+realm = { capacity = 8 }
+town = {
+	capacity = 10
+	owner = ref8:realm
+	twin = ref16:town
+	level = { type = count8 default = 3 }
+	mood = int8
+	people = count16
+	stock = { type = int16 size = 2 }
+}

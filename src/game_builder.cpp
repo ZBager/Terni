@@ -10,6 +10,7 @@
 
 #include "terni/game.hpp"
 #include "order_lint.hpp"
+#include "small_fields.hpp"
 
 namespace terni {
 
@@ -63,7 +64,47 @@ int32_t Game::define(const std::string& n) const {
     return define_values.at(size_t(i));
 }
 
+const char* type_name(FieldType t) {
+    switch (t) {
+        case FieldType::Quantity: return "quantity";
+        case FieldType::Rate: return "rate";
+        case FieldType::Agg: return "agg";
+        case FieldType::Int: return "int";
+        case FieldType::Count: return "count";
+        case FieldType::Ref: return "ref";
+        case FieldType::Money64: return "money64";
+        case FieldType::Int8: return "int8";
+        case FieldType::Int16: return "int16";
+        case FieldType::Count8: return "count8";
+        case FieldType::Count16: return "count16";
+        case FieldType::Ref8: return "ref8";
+        case FieldType::Ref16: return "ref16";
+    }
+    return "?";
+}
+
+std::string detail::misfit_text(FieldType t, int64_t raw) {
+    const int64_t values = int64_t(1) << std::min(field_bits(t), 32u);
+    std::string range;
+    switch (base_type(t)) {
+        case FieldType::Count: range = "0 to " + std::to_string(values - 1); break;
+        case FieldType::Ref: range = "rows 0 to " + std::to_string(values - 2) + ", or none"; break;
+        default: range = std::to_string(-values / 2) + " to " + std::to_string(values / 2 - 1);
+    }
+    return std::to_string(raw) + " does not fit " + type_name(t) + " (" + range + ")";
+}
+
+bool Game::small_fields() const {
+    for (const auto& e : entities)
+        for (const auto& f : e.fields)
+            if (is_small(f.type)) return true;
+    return false;
+}
+
 namespace {
+
+// Rows a ref field can refer to.
+uint64_t most_rows(FieldType ref) { return field_bits(ref) < 32 ? (uint64_t(1) << field_bits(ref)) - 1 : UINT32_MAX; }
 
 // ASCII letters only, whatever the process locale: these names become GLSL identifiers
 // (std::isalpha would accept accented letters under some single-byte locales).
@@ -110,6 +151,12 @@ void Game::set_capacity(uint32_t entity, uint32_t rows) {
     if (rows == 0 || rows < t.count)
         throw std::out_of_range("set_capacity: '" + e.name + "' needs room for its " + std::to_string(t.count) +
                                 " rows in use, and at least one");
+    for (const auto& other : entities)
+        for (const auto& f : other.fields)
+            if (f.ref_entity == e.name && rows > most_rows(f.type))
+                throw std::out_of_range("set_capacity: '" + other.name + "." + f.name + "' is a " + type_name(f.type) +
+                                        ", which can refer to at most " + std::to_string(most_rows(f.type)) + " rows of '" +
+                                        e.name + "'");
     for (size_t f = 0; f < e.fields.size(); ++f) {
         const FieldDef& fd = e.fields[f];
         grow(t.columns.at(f), fd, size_t(rows) * fd.size);
@@ -145,6 +192,10 @@ void WorldBuilder::field(uint32_t entity, const std::string& name, FieldType typ
     if (!valid_identifier(name)) error(where, "invalid field name '" + name + "'");
     if (e.field(name)) error(where, "field '" + name + "' defined twice");
     if (size == 0) error(where, "size must be a positive integer");
+    if (is_small(type) && !fits(type, default_raw)) {
+        error(where, "field '" + name + "': default " + detail::misfit_text(type, default_raw));
+        default_raw = 0;
+    }
     FieldDef f;
     f.name = name;
     f.type = type;
@@ -195,6 +246,7 @@ void WorldBuilder::define(const std::string& name, FieldType type, Location wher
     if (!valid_identifier(name)) error(where, "invalid define name '" + name + "'");
     for (const auto& d : g.defines)
         if (d.name == name) error(where, "define '" + name + "' declared twice");
+    if (is_small(type)) error(where, "defines can't be small fields: use " + std::string(type_name(base_type(type))));
     if (type == FieldType::Ref || type == FieldType::Money64) error(where, "defines can't be refs or money64");
     g.defines.push_back({name, type, std::move(where)});
     g.define_values.push_back(0);
@@ -338,6 +390,8 @@ void WorldBuilder::set(uint32_t entity, uint32_t row, const std::string& field, 
         error(where, "index out of range for field '" + field + "'");
         return;
     }
+    if (is_small(fd.type) && !fits(fd.type, raw))
+        return error(where, "field '" + field + "': " + detail::misfit_text(fd.type, raw));
     set_raw(g.tables[entity].columns[size_t(f)], fd, size_t(row) * fd.size + index, raw);
 }
 
@@ -368,6 +422,9 @@ void WorldBuilder::set_rows(uint32_t entity, uint32_t first_row, const std::stri
                                 std::to_string(per_row) + " words per row)");
     if (first_row > e.capacity || words.size() / per_row > e.capacity - first_row)
         return error(where, "rows out of range for field '" + field + "'");
+    if (const size_t bad = detail::first_misfit(fd.type, words.data(), words.size()); bad < words.size())
+        return error(where, "field '" + field + "', row " + std::to_string(first_row + bad / per_row) + ": " +
+                                detail::misfit_text(fd.type, words[bad]));
     std::copy(words.begin(), words.end(),
               g.tables[entity].columns[size_t(f)].begin() + std::ptrdiff_t(size_t(first_row) * per_row));
 }
@@ -385,8 +442,25 @@ std::unique_ptr<Game> WorldBuilder::finish() {
     for (size_t e = 0; e < g.entities.size(); ++e) {
         g.tables[e].def = &g.entities[e];
         for (const auto& f : g.entities[e].fields)
-            if (f.type == FieldType::Ref && !g.entity(f.ref_entity))
-                error(f.where, "reference to unknown entity '" + f.ref_entity + "'");
+            if (base_type(f.type) == FieldType::Ref) {
+                const EntityDef* to = g.entity(f.ref_entity);
+                if (!to)
+                    error(f.where, "reference to unknown entity '" + f.ref_entity + "'");
+                else if (to->capacity > most_rows(f.type))
+                    error(f.where, "field '" + f.name + "': a " + type_name(f.type) + " can refer to at most " +
+                                       std::to_string(most_rows(f.type)) + " rows, and '" + to->name + "' has room for " +
+                                       std::to_string(to->capacity));
+            }
+        // rules get <entity>_<field>_set() for a small field: no other field may take that name
+        for (const auto& f : g.entities[e].fields) {
+            if (!is_small(f.type)) continue;
+            const std::string setter = g.entities[e].name + "_" + f.name + "_set";
+            for (const auto& other : g.entities)
+                for (const auto& o : other.fields)
+                    if (other.name + "_" + o.name == setter)
+                        error(o.where, "field '" + o.name + "': rules already have " + setter + "() for the small field '" +
+                                           f.name + "'");
+        }
     }
     for (auto& e : g.entities) {
         if (!e.spawns.empty() && !e.dynamic)
@@ -407,7 +481,7 @@ std::unique_ptr<Game> WorldBuilder::finish() {
             }
             const EntityDef& from = g.entities[size_t(s.from_entity)];
             s.count_index = from.field_index(s.count_field);
-            if (s.count_index < 0 || from.fields[size_t(s.count_index)].type != FieldType::Count ||
+            if (s.count_index < 0 || base_type(from.fields[size_t(s.count_index)].type) != FieldType::Count ||
                 from.fields[size_t(s.count_index)].size != 1) {
                 error(s.where, what + "'" + s.count_field + "' is not a single count field of '" + from.name + "'");
                 s.count_index = -1;
@@ -415,7 +489,8 @@ std::unique_ptr<Game> WorldBuilder::finish() {
             if (!s.ordinal_field.empty()) {
                 s.ordinal_index = e.field_index(s.ordinal_field);
                 const FieldDef* o = s.ordinal_index >= 0 ? &e.fields[size_t(s.ordinal_index)] : nullptr;
-                if (!o || (o->type != FieldType::Int && o->type != FieldType::Count) || o->size != 1 ||
+                const FieldType holds = o ? base_type(o->type) : FieldType::Ref;
+                if ((holds != FieldType::Int && holds != FieldType::Count) || o->size != 1 ||
                     s.ordinal_field == s.parent_field) {
                     error(s.where, what + "ordinal '" + s.ordinal_field + "' is not a single int or count field of '" +
                                        e.name + "' (other than its parent field)");
@@ -425,7 +500,7 @@ std::unique_ptr<Game> WorldBuilder::finish() {
             if (s.parent_field.empty()) continue;
             s.parent_index = e.field_index(s.parent_field);
             const FieldDef* p = s.parent_index >= 0 ? &e.fields[size_t(s.parent_index)] : nullptr;
-            if (!p || p->type != FieldType::Ref || p->ref_entity != from.name || p->size != 1) {
+            if (!p || base_type(p->type) != FieldType::Ref || p->ref_entity != from.name || p->size != 1) {
                 error(s.where, what + "'" + s.parent_field + "' is not a single ref:" + from.name + " field of '" + e.name + "'");
                 s.parent_index = -1;
             }
@@ -445,9 +520,10 @@ std::unique_ptr<Game> WorldBuilder::finish() {
             const std::string what = "modifier key '" + k.name + "': inherit field '" + name + "' ";
             const int fi = from.field_index(name);
             const FieldDef* f = fi >= 0 ? &from.fields[size_t(fi)] : nullptr;
-            const int to = f && f->type == FieldType::Ref ? g.entity_index(f->ref_entity) : -1;
+            const bool is_ref = f && base_type(f->type) == FieldType::Ref;
+            const int to = is_ref ? g.entity_index(f->ref_entity) : -1;
             ok = false;
-            if (!f || f->type != FieldType::Ref)
+            if (!is_ref)
                 error(k.where, what + "is not a ref field of '" + from.name + "'");
             else if (f->size != 1)  // the generated accessor reads one parent per row
                 error(k.where, what + "must hold one ref, not " + std::to_string(f->size));

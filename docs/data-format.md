@@ -45,6 +45,11 @@ planet = {
 | `count` | 32-bit unsigned | |
 | `ref:<entity>` | row index | written as the target's `id` in history |
 | `money64` | 64-bit integer | two words on the GPU |
+| `int8`, `int16` | -128 to 127, -32,768 to 32,767 | [small fields](concepts.md#small-fields): 1 or 2 bytes a value |
+| `count8`, `count16` | 0 to 255, 0 to 65,535 | small |
+| `ref8:<entity>`, `ref16:<entity>` | row index | small; the entity type may have at most 255 or 65,535 rows |
+
+A value or default that does not fit a small field is an error.
 
 `size = N` gives each row N values. `default` is written in the field's own units
 (`default = 50` on a rate means 50.0).
@@ -66,10 +71,10 @@ army = {
   not be named `alive`, `alive_bits`, `destroy` or `generation`, and the capacity must
   be under 16,777,216.
 - `spawn` lets rules ask for new rows. `from` is the entity type that asks, `count` one
-  of its `count` fields (how many rows a row wants), and `parent`, if given, a
-  `ref:<from>` field of the new rows that is set to the row that asked. Several
+  of its `count` fields (how many rows a row wants; a small one will do), and `parent`, if
+  given, a `ref:<from>` field (or a small one) of the new rows that is set to the row that asked. Several
   `spawn` blocks are served in the order written.
-- `ordinal`, if given, names an `int` or `count` field of the new rows: the rows one
+- `ordinal`, if given, names an `int` or `count` field (small or not) of the new rows: the rows one
   asking row gets in a tick are numbered 0, 1, 2, ... in the order they are created.
 - `every` and `offset` give the line a schedule, as for a stage: with
   `every = 30  offset = 29` rows are given out only at the end of every 30th tick, and

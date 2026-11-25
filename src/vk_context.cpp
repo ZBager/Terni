@@ -165,6 +165,18 @@ BufferRobustness robustness_of(VkPhysicalDevice pd, const char** extension = nul
     return robust2 && r2.robustBufferAccess2 ? BufferRobustness::Defined : BufferRobustness::Bounded;
 }
 
+// 8 and 16-bit values in storage buffers, loaded and stored (shaders still compute in 32
+// bits, so shaderInt8 and shaderInt16 are not needed).
+bool has_small_fields(VkPhysicalDevice pd) {
+    VkPhysicalDeviceVulkan12Features f12{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
+    VkPhysicalDeviceVulkan11Features f11{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES};
+    f11.pNext = &f12;
+    VkPhysicalDeviceFeatures2 f2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+    f2.pNext = &f11;
+    vkGetPhysicalDeviceFeatures2(pd, &f2);
+    return f12.storageBuffer8BitAccess && f11.storageBuffer16BitAccess;
+}
+
 const char* type_name(VkPhysicalDeviceType t) {
     switch (t) {
         case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU: return "discrete";
@@ -222,6 +234,7 @@ std::vector<DeviceInfo> VulkanContext::list_devices() {
         std::copy(std::begin(id.deviceLUID), std::end(id.deviceLUID), info.luid.begin());
         info.luid_valid = id.deviceLUIDValid == VK_TRUE;
         info.robustness = robustness_of(devs[i]);
+        info.small_fields = has_driver && has_small_fields(devs[i]);
         if (has_driver) {
             const std::string name(driver.driverName, std::find(driver.driverName, std::end(driver.driverName), '\0'));
             const std::string version(driver.driverInfo, std::find(driver.driverInfo, std::end(driver.driverInfo), '\0'));
@@ -295,8 +308,13 @@ VulkanContext::VulkanContext(uint32_t device_index, bool enable_validation) {
     VkPhysicalDeviceVulkan12Features f12{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
     // Terni is pure 32-bit: no shaderInt64 / 64-bit atomics needed.
     f12.pNext = &f13;
+    VkPhysicalDeviceVulkan11Features f11{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES};
+    f11.pNext = &f12;
+    small_fields_ = has_small_fields(physical_);  // storage only: the arithmetic stays 32-bit
+    f12.storageBuffer8BitAccess = small_fields_ ? VK_TRUE : VK_FALSE;
+    f11.storageBuffer16BitAccess = f12.storageBuffer8BitAccess;
     VkPhysicalDeviceFeatures2 f2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
-    f2.pNext = &f12;
+    f2.pNext = &f11;
 
     const float priority = 1.0f;
     VkDeviceQueueCreateInfo qci{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};

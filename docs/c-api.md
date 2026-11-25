@@ -110,7 +110,9 @@ build it to load `terni_runtime` instead.
   `TERNI_TOO_SMALL` and writes the number of words it needs.
 - **Raw values.** Fields hold the raw integer form of their type, as in C++: a quantity
   of 1.5 is `384` (Q24.8), a rate of 1.5 is `98304` (Q16.16), a money64 value is two
-  words, the low one first.
+  words, the low one first. A [small field](concepts.md#small-fields) has one word per
+  value too; a value that does not fit is refused with `TERNI_INVALID`, and -1 in a small
+  ref means no row.
 - **Truth values** are `int32_t`: 0 is false.
 
 ## A world from start to end
@@ -130,6 +132,8 @@ build it to load `terni_runtime` instead.
    ([Embedding](embedding.md#a-tick-that-does-not-block)). For very small ticks,
    `terni_set_tick_spin()` before the start makes waits spin before they sleep
    ([Embedding](embedding.md#waiting-for-small-ticks)).
+   `terni_set_widen_small_fields()` tests how [small fields](concepts.md#small-fields) run
+   on devices that store them in 32 bits.
 5. Read results: `terni_subscribe()` once for each field you show every frame, then
    `terni_subscription()` after each tick (no extra GPU round trip). `terni_read_field()`
    waits for the GPU; keep it for occasional reads.
@@ -195,7 +199,8 @@ The calls a lockstep game makes ([Embedding](embedding.md#lockstep-multiplayer))
   `terni_hash_at()`, computed on the device and cheap enough to compare every few ticks;
   they name the entity type or field that diverged.
 - `terni_tick_checked()` in tests and parity runs: stages whose result depends on the
-  order of their threads, read with `terni_order_issue_at()`.
+  order of their threads, read with `terni_order_issue_at()`, and values that did not fit
+  a small field (`TERNI_ISSUE_MISFIT`).
 - `terni_add_modifiers()` adds one bundle to many rows in one call, and
   `terni_replace_modifier()` swaps the instance a game keeps one handle for (a policy, a
   focus) in one call.
@@ -214,14 +219,14 @@ Every function is declared, with a comment, in `include/terni/terni.h`.
 | Group | Functions |
 | --- | --- |
 | Library | `terni_abi_version`, `terni_version`, `terni_last_error`, `terni_can_compile_rules` |
-| Devices | `terni_device_count`, `terni_device_info`, `terni_add_vulkan_driver`, `terni_pick_device` |
+| Devices | `terni_device_count`, `terni_device_info`, `terni_device_small_fields`, `terni_add_vulkan_driver`, `terni_pick_device` |
 | The renderer's GPU, a shipped driver | `terni_vulkan_renderer_gpu`, `terni_dxgi_renderer_gpu`, `terni_dxgi_adapter_gpu`, `terni_find_device`, `terni_shipped_driver_name`, `terni_add_shipped_driver` |
 | World | `terni_world_create`, `terni_world_destroy`, `terni_load`, `terni_unload`, `terni_loaded`, `terni_diagnostic_count`, `terni_diagnostic` |
-| What the game declares | `terni_entity_count`, `terni_entity_name`, `terni_find_entity`, `terni_capacity`, `terni_dynamic`, `terni_field_count`, `terni_field_name`, `terni_find_field`, `terni_field_info_of`, `terni_find_row`, `terni_row_id`, `terni_define_count`, `terni_define_name`, `terni_find_define`, `terni_define_value`, `terni_bundle_count`, `terni_bundle_name`, `terni_find_bundle`, `terni_modifier_key_count`, `terni_modifier_key_name`, `terni_find_modifier_key`, `terni_checksum` |
+| What the game declares | `terni_entity_count`, `terni_entity_name`, `terni_find_entity`, `terni_capacity`, `terni_dynamic`, `terni_small_fields`, `terni_field_count`, `terni_field_name`, `terni_find_field`, `terni_field_info_of`, `terni_find_row`, `terni_row_id`, `terni_define_count`, `terni_define_name`, `terni_find_define`, `terni_define_value`, `terni_bundle_count`, `terni_bundle_name`, `terni_find_bundle`, `terni_modifier_key_count`, `terni_modifier_key_name`, `terni_find_modifier_key`, `terni_checksum` |
 | Before the start | `terni_set_capacity`, `terni_set_modifier_capacity`, `terni_set_start_count`, `terni_start_count`, `terni_write_start`, `terni_read_start`, `terni_add_start_modifier`, `terni_compile_rules` |
-| Starting and stopping | `terni_start_options_init`, `terni_start_options_init_sized`, `terni_set_tick_spin`, `terni_start`, `terni_stop`, `terni_running`, `terni_device_lost`, `terni_simulate_device_lost` |
+| Starting and stopping | `terni_start_options_init`, `terni_start_options_init_sized`, `terni_set_tick_spin`, `terni_set_widen_small_fields`, `terni_start`, `terni_widened`, `terni_stop`, `terni_running`, `terni_device_lost`, `terni_simulate_device_lost` |
 | Ticks | `terni_tick`, `terni_begin_tick`, `terni_tick_ready`, `terni_end_tick`, `terni_tick_in_flight`, `terni_ticks`, `terni_tick_checked`, `terni_order_issue_at` |
-| State | `terni_read_field`, `terni_write_field`, `terni_write_values`, `terni_subscribe`, `terni_subscription` |
+| State | `terni_read_field`, `terni_write_field`, `terni_write_values`, `terni_subscribe`, `terni_subscription`, `terni_subscription_bytes` |
 | Entities at run time | `terni_create_entity`, `terni_destroy_entity`, `terni_alive`, `terni_generation`, `terni_rows_in_use`, `terni_rows_alive`, `terni_alive_bits`, `terni_rows_free` |
 | Modifiers | `terni_add_modifier`, `terni_add_modifiers`, `terni_replace_modifier`, `terni_set_modifier_scale`, `terni_remove_modifier`, `terni_modifier_alive`, `terni_modifier_instances`, `terni_modifier_total`, `terni_modifier_breakdown`, `terni_contribution_at` |
 | Saves | `terni_save`, `terni_load_save`, `terni_fitted`, `terni_save_checksum` |

@@ -14,6 +14,7 @@
 //
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -43,12 +44,13 @@ class ComputeRunner {
 public:
     // shared_reduction is passed to every shader as specialization constant 0, and
     // `constants` (ids from 2 up) as given. `clears`: lists of buffers zeroed at the start
-    // of the ticks their list is in (`run`, below).
+    // of the ticks their list is in (`run`, below). `small_fields`: the shaders use 8 and
+    // 16-bit values; throws if the device cannot store them (DeviceInfo::small_fields).
     ComputeRunner(uint32_t device_index, bool validation, const std::string& shader_dir,
                   const std::vector<ComputeBufferSpec>& buffers, const std::vector<ComputeStageSpec>& stages,
                   const std::vector<uint32_t>& zero_each_tick, bool shared_reduction,
                   const std::vector<ComputeSpecConstant>& constants = {},
-                  const std::vector<std::vector<uint32_t>>& clears = {});
+                  const std::vector<std::vector<uint32_t>>& clears = {}, bool small_fields = false);
     ~ComputeRunner();
     ComputeRunner(const ComputeRunner&) = delete;
     ComputeRunner& operator=(const ComputeRunner&) = delete;
@@ -83,8 +85,10 @@ public:
     void flush_queued();    // apply queued writes now (e.g. before saving)
     void discard_queued();  // drop queued writes (e.g. when loading a save)
     // Move the writes queued on `from` (a runner with the same buffers) to this one, in
-    // their order: for a host that carries on with another runner.
-    void take_queued(ComputeRunner& from);
+    // their order: for a host that carries on with another runner. `take`, if given, is called
+    // for each write instead of queue_write(), with its arguments, e.g. to convert them.
+    void take_queued(ComputeRunner& from,
+                     const std::function<void(uint32_t binding, const void* src, uint64_t bytes, uint64_t offset)>& take = {});
     // A buffer range copied back to the host after every tick's last stage; returns an id.
     // `bytes` is the most it will ever copy (host memory is reserved for that much).
     uint32_t add_tick_readback(uint32_t binding, uint64_t bytes, uint64_t offset = 0);
@@ -102,15 +106,19 @@ public:
     // One tick in which every stage with check[s] set runs three times from the state
     // before it: with the order-check pipeline (one workgroup visiting the items one at a
     // time) forwards, then backwards, then normally, which is the result kept. `run` as in
-    // tick(). Reports the buffers whose words differ between the forward run and the backward run
-    // (parallel = false) or the normal run (parallel = true), in rows of row_words[b] words.
+    // tick(). Reports the buffers that differ between the forward run and the backward run
+    // (parallel = false) or the normal run (parallel = true), in rows of row_bytes[b] bytes;
+    // 0 leaves a buffer out. `counts`, if not null, gets what each forward run left in
+    // buffer `counts_binding` (by stage; empty for a stage that is not checked or not run),
+    // which the check then sets back to what it held before.
     struct OrderDiff {
         uint32_t stage, binding;
         bool parallel;
         uint64_t first_row, rows;
     };
-    std::vector<OrderDiff> tick_checked(const std::vector<bool>& check, const std::vector<uint64_t>& row_words,
-                                        const std::vector<bool>& run = {});
+    std::vector<OrderDiff> tick_checked(const std::vector<bool>& check, const std::vector<uint64_t>& row_bytes,
+                                        const std::vector<bool>& run = {}, uint32_t counts_binding = 0,
+                                        std::vector<std::vector<uint32_t>>* counts = nullptr);
     uint64_t sync_reads() const;  // read() calls so far; each waits for the GPU
 
     std::string device_name() const;

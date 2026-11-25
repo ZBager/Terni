@@ -168,6 +168,22 @@ The first public version.
   size instead of up to 256 MiB.
 - **A starting state in bulk**: `WorldBuilder::create_rows()` and `set_rows()` add rows and
   set whole columns in one call.
+- **Small fields**: field types of 1 and 2 bytes (`int8`, `int16`, `count8`, `count16`,
+  `ref8:x`, `ref16:x`), chosen field by field. Rules use `pop_job(i)` and
+  `pop_job_set(i, v)`; a value that does not fit becomes the nearest one that does on every
+  device, and `tick_checked()` names it (`OrderIssue::misfit`). Hosts see a word per value;
+  `GameSim::tick_result_bytes()` gives the packed bytes, and saves hold them (format 3,
+  used only by games with small fields). A device without 8 and 16-bit storage
+  (`DeviceInfo::small_fields`) stores them in 32 bits, with the same results
+  (`GameSim::widened()`); `GameSimOptions::widen_small_fields` does so on any device, for
+  tests, and `compile_rules()` compiles both forms. C API: `TERNI_INT8` to `TERNI_REF16`,
+  `terni_small_fields()`, `terni_device_small_fields()`, `terni_set_widen_small_fields()`,
+  `terni_widened()`, `terni_subscription_bytes()`,
+  `TERNI_ISSUE_MISFIT`. `ComputeRunner::tick_checked()` takes the bytes per row of each
+  buffer instead of the words. Games without small fields keep their checksums, compiled
+  rules and save format.
+- **Saves between widths**: `SaveMatch::ByName` loads a field that became smaller or larger
+  (`count` and `count8`), if every value fits.
 - **Faster compiling**: one shader compiler serves all the rules of a world, instead of one
   per rule: 12 rules compile in 0.16 s instead of 1.5 s. The compiled rules are the same.
 - **Licence**: LGPL 2.1 with the Terni Linking Exception (static linking, no relinking or

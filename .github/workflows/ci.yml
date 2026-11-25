@@ -64,6 +64,8 @@ jobs:
             ./build-linux/test_async_tick >> sync.txt 2>&1
           VK_KHRONOS_VALIDATION_VALIDATE_SYNC=1 VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation \
             ./build-linux/test_device_health >> sync.txt 2>&1
+          VK_KHRONOS_VALIDATION_VALIDATE_SYNC=1 VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation \
+            ./build-linux/test_small_fields >> sync.txt 2>&1
           grep -q 'Insert instance layer "VK_LAYER_KHRONOS_validation"' sync.txt
           if grep -E "VUID|Validation Error" sync.txt; then exit 1; fi
 

@@ -1,0 +1,4 @@
+realm = { id = red }
+realm = { id = blue }
+town = { id = ashford owner = blue twin = brook level = 4 mood = -5 people = 65535 stock = { -30000 12 } }
+town = { id = brook owner = red twin = ashford }

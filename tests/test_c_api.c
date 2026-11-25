@@ -29,6 +29,8 @@ static int failures = 0;
 static const char* const galaxy[] = {TERNI_SOURCE_DIR "/examples/mini_galaxy"};
 static const char* const armies[] = {TERNI_TEST_DATA "/dynamic_game"};
 
+static const char* const small[] = {TERNI_TEST_DATA "/small_fields"};
+
 static int contains(const char* text, const char* part) { return text && strstr(text, part) != NULL; }
 
 static terni_world* loaded(const char* const* folders) {
@@ -537,6 +539,57 @@ static void dynamic_entities(void) {
     terni_world_destroy(w);
 }
 
+static void small_fields(void) {
+    terni_world* w = loaded(small);
+    CHECK(terni_small_fields(w) == 1);
+    const uint32_t town = (uint32_t)terni_find_entity(w, "town");
+    terni_field_info info;
+    OK(terni_field_info_of(w, town, "twin", &info));
+    CHECK(info.type == TERNI_REF16 && info.words == 1 && info.ref_entity == (int32_t)town);
+    OK(terni_field_info_of(w, town, "level", &info));
+    CHECK(info.type == TERNI_COUNT8 && info.words == 1);
+    const int32_t too_large[2] = {1, 256}, levels[2] = {255, 9};
+    CHECK(terni_write_start(w, town, "level", 0, too_large, 2) == TERNI_INVALID);
+    CHECK(contains(terni_last_error(), "row 1: 256 does not fit count8 (0 to 255)"));
+    OK(terni_write_start(w, town, "level", 0, levels, 2));
+    uint32_t count = 0;
+    int32_t device = -1, can = 0;
+    OK(terni_device_count(&count));
+    OK(terni_pick_device(TERNI_PREFER_DISCRETE, NULL, NULL, &device));
+    CHECK(device >= 0);
+    OK(terni_device_small_fields((uint32_t)device, &can));
+    CHECK(terni_device_small_fields(count, &can) == TERNI_INVALID);
+    for (int32_t widen = 1; widen >= 0; --widen) {
+        OK(terni_set_widen_small_fields(w, widen));
+        CHECK(start_on(w, device));
+        CHECK(terni_widened(w) == (widen || !can));
+        uint32_t sub = 0, issues = 0;
+        OK(terni_subscribe(w, town, "level", 0, TERNI_ALL_ROWS, &sub));
+        OK(terni_tick_checked(w, &issues));  // the rule adds 1 to 255
+        CHECK(issues == 1);
+        terni_order_issue issue;
+        OK(terni_order_issue_at(w, 0, &issue));
+        CHECK(issue.parallel == TERNI_ISSUE_MISFIT && strcmp(issue.field, "town.level") == 0);
+        CHECK(issue.first_row == 0 && issue.rows == 1);
+        const int32_t* words = NULL;
+        const uint8_t* bytes = NULL;
+        size_t n = 0;
+        OK(terni_subscription(w, sub, &words, &n));
+        CHECK(n == 2 && words[0] == 255 && words[1] == 10);
+        OK(terni_subscription_bytes(w, sub, &bytes, &n));
+        CHECK(n == 2 && bytes[0] == 255 && bytes[1] == 10);
+        CHECK(terni_subscription_bytes(w, sub + 1, &bytes, &n) == TERNI_INVALID);
+        CHECK(terni_write_field(w, town, "level", 0, too_large, 2) == TERNI_INVALID);
+        const int32_t no_row = -1;
+        OK(terni_write_field(w, town, "owner", 1, &no_row, 1));
+        OK(terni_tick(w));
+        int32_t owner = 0;
+        OK(terni_read_field(w, town, "owner", 1, 1, &owner, 1, &n));
+        CHECK(owner == -1 && n == 1);
+    }
+    terni_world_destroy(w);
+}
+
 int main(int argc, char** argv) {
     if (argc == 3 && strcmp(argv[1], "--shipped-driver-alone") == 0) {
         shipped_driver_alone(argv[2]);
@@ -551,6 +604,7 @@ int main(int argc, char** argv) {
     compiled_ahead();
     options_of_any_size();
     dynamic_entities();
+    small_fields();
     printf("test_c_api: %s\n", failures == 0 ? "PASS" : "FAIL");
     return failures == 0 ? 0 : 1;
 }
