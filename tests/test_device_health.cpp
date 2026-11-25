@@ -6,6 +6,7 @@
 // flight gives the same observations and the same final state whether it stays on one
 // device or moves between any two in the middle. A host that polls a background tick
 // rarely is judged by what the device did, not by how often it looked.
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <stdexcept>
@@ -286,6 +287,72 @@ int main() {
         CHECK(sim.ticks() == 43);
         sim.move_to_device(devices.back().index);
         CHECK(sim.device_name() == devices.back().name);
+    }
+
+    // A tick() counts the wall time the host waited, in the same median as polled ticks.
+    for (const auto& d : devices) {
+        GameSim sim(*w.game, d.index);
+        (void)sim.read_each_tick(w.planet, "pop");
+        sim.begin_tick();  // a polled tick first, so the device's clock is known
+        while (!sim.tick_ready()) std::this_thread::yield();
+        sim.end_tick();
+        sim.load(sim.save());  // starts the health again; the clock stays known
+        std::vector<double> waited;
+        for (size_t t = 0; t < detail::DeviceHealthMonitor::WINDOW; ++t) {
+            sim.tick();
+            waited.push_back(sim.last_tick_ms());
+        }
+        std::nth_element(waited.begin(), waited.begin() + std::ptrdiff_t(waited.size() / 2), waited.end());
+        CHECK(sim.device_health().recent_ms == waited[waited.size() / 2]);
+    }
+
+    // A polled tick ends when its results are back: here a copy of 32 MiB, next to a stage that does
+    // hardly anything.
+    {
+        constexpr uint32_t ROWS = 8u << 20;
+        WorldBuilder b;
+        const uint32_t probe = b.entity("probe", 1), heap = b.entity("heap", ROWS);
+        b.field(probe, "x", FieldType::Int);
+        b.field(heap, "v", FieldType::Int);
+        b.stage("idle", "probe", "void main() { FOR_EACH_PROBE(p) { probe_x[p] += 1; } }");
+        b.create_rows(probe, 1);
+        b.create_rows(heap, ROWS);
+        const auto game = b.finish();
+        CHECK(game->ok());
+        for (const auto& d : devices) {
+            GameSim sim(*game, d.index);
+            (void)sim.read_each_tick(heap, "v");
+            for (size_t t = 0; t < detail::DeviceHealthMonitor::WINDOW; ++t) {
+                sim.begin_tick();
+                while (!sim.tick_ready()) std::this_thread::yield();
+                sim.end_tick();
+            }
+            const double ms = sim.device_health().recent_ms;
+            CHECK(ms > sim.last_tick_gpu_ms() + 0.2);  // 0.2 ms: 160 GB/s
+            std::printf("a 32 MiB readback on %-40.40s %.3f ms by the device, stages %.3f ms\n", d.name.c_str(), ms, sim.last_tick_gpu_ms());
+        }
+    }
+
+    // Both kinds of tick in turns, with readbacks added on the way: the copies are recorded with and
+    // without a timestamp at their end, and neither may use what is gone.
+    for (const auto& d : devices) {
+        GameSim a(*w.game, d.index), b(*w.game, d.index);
+        uint32_t ids_a[3] = {}, ids_b[3] = {};
+        const char* const fields[3] = {"pop", "owner", "stock"};
+        size_t n = 0;
+        bool same = true;
+        for (int t = 0; t < 24; ++t) {
+            if (t % 8 == 0 && n < 3) ids_a[n] = a.read_each_tick(w.planet, fields[n]), ids_b[n] = b.read_each_tick(w.planet, fields[n]), ++n;
+            a.tick();
+            if (t % 3 == 1) b.tick();
+            else b.begin_tick(), b.end_tick();
+            for (size_t k = 0; k < n; ++k) {
+                const auto x = a.tick_result(ids_a[k]), y = b.tick_result(ids_b[k]);
+                same &= x.size() == y.size() && std::equal(x.begin(), x.end(), y.begin());
+            }
+            same &= a.field_hashes() == b.field_hashes();
+        }
+        CHECK(same && n == 3);
     }
 
     // A host that polls a background tick once a frame: the device is judged by what it

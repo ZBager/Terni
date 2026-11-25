@@ -64,7 +64,8 @@ public:
     // queue_write() goes to the next tick, and tick_readback() still gives the last
     // finished tick's results. read(), write(), flush_queued(), add_tick_readback() and
     // tick_checked() wait for a tick in flight first.
-    void tick_submit(const std::vector<bool>& run = {});  // a tick still in flight is finished first
+    // `waits`: tick_wait() follows at once, as in tick() (last_tick_device_ms() is then the wall time).
+    void tick_submit(const std::vector<bool>& run = {}, bool waits = false);  // a tick still in flight is finished first
     bool tick_done();                                      // never blocks
     void tick_wait();                                      // blocks; nothing to do if none is in flight
     bool tick_in_flight() const;                           // submitted and not yet waited for
@@ -126,9 +127,10 @@ public:
     double last_tick_ms() const;      // wall time of the last tick incl. batched transfers, from submission
                                       // until it was seen done (tick_done() or the wait)
     double last_tick_gpu_ms() const;  // GPU time of the last tick's stages (timestamps; 0 if unsupported)
-    // The last tick from its submission until its results were back, on the device's own
-    // clock, so it does not depend on when the host looked. Where the device cannot tell
-    // its clock: last_tick_ms() if the host waited, last_tick_gpu_ms() if it polled.
+    // The last tick from its submission until its results were back, not depending on when the
+    // host looked: last_tick_ms() if the host waited from the start, else on the device's own
+    // clock. Where the device cannot tell its clock: last_tick_ms() if the host waited,
+    // last_tick_gpu_ms() if it polled.
     double last_tick_device_ms() const;
     // Per stage, in order: whether it ran in the last tick and its GPU time there, and the
     // ticks it ran in and their GPU time in all, since this runner was made. Times are 0

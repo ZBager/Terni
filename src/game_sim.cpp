@@ -1546,6 +1546,14 @@ struct GameSim::Impl {
             if (p.active) runner->set_tick_readback_bytes(p.read.readback, tick_read_bytes(p.read));
     }
 
+    // `waits`: the host waits for the tick from the start.
+    void submit(bool waits) {
+        settle();  // one tick in flight at a time
+        boundary();
+        runner->tick_submit(stages_now(), waits);
+        in_flight = true;
+    }
+
     // Tick boundary: expire modifiers, push host changes to the GPU.
     void boundary() {
         mods.expire_due(now);
@@ -1841,17 +1849,11 @@ uint32_t GameSim::entities_alive(uint32_t entity) const {
 GameSim::~GameSim() = default;
 
 void GameSim::tick() {
-    begin_tick();
+    impl_->submit(true);
     end_tick();
 }
 
-void GameSim::begin_tick() {
-    Impl& m = *impl_;
-    m.settle();  // one tick in flight at a time
-    m.boundary();
-    m.runner->tick_submit(m.stages_now());
-    m.in_flight = true;
-}
+void GameSim::begin_tick() { impl_->submit(false); }
 
 bool GameSim::tick_ready() { return !impl_->in_flight || impl_->runner->tick_done(); }
 

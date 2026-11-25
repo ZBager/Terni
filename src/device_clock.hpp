@@ -2,8 +2,8 @@
 // Copyright (C) 2026 Rafał Zając
 #pragma once
 // How long a tick took on the device's clock, from its submission to its last timestamp,
-// without reading that clock at every submission: a read takes tens of microseconds on some
-// integrated GPUs, as long as a small world's stages. It is read now and then, together with
+// without reading that clock at every submission (a read takes a few microseconds). It is
+// read now and then, together with
 // the host's clock, and a submission is placed on it through the host time passed since. The
 // two clocks drift apart by far less in that time than DeviceHealthMonitor looks at.
 

@@ -215,11 +215,12 @@ if (health.slow) {
   does not count. `usual_ms` is the lowest median so far, `recent_ms` the latest one.
 - `slow` means the last 32 ticks took over 4 times the usual and at least 1 ms longer.
   For another threshold, compare `recent_ms` and `usual_ms` yourself.
-- A tick is timed on the device's own clock, from its submission until its results are
-  back, waiting behind other programs' work included. So it does not matter how often
-  you poll a tick begun with `begin_tick()`: a host that looks once a frame is judged by
-  the device, not by its frame rate. (`last_tick_ms()` is different: it counts until
-  you first saw the tick done.) Where a device cannot read its clock that way (Vulkan's
+- A tick begun with `begin_tick()` is timed on the device's own clock, from its submission
+  until its results are back, waiting behind other programs' work included. So it does not
+  matter how often you poll it: a host that looks once a frame is judged by the device, not
+  by its frame rate. A `tick()` counts its wall time, which is the same thing: you wait for
+  it from the start. (`last_tick_ms()` of a polled tick is different: it counts until you
+  first saw the tick done.) Where a device cannot read its clock that way (Vulkan's
   calibrated timestamps), a waited-for tick counts its wall time and a polled one the
   GPU time of its stages.
 - `move_to_device(index)` continues on another device. The state moves bit for bit:

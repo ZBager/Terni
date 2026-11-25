@@ -235,8 +235,8 @@ are specialization constants (ids 2 and up) given to every shader. `tick_submit(
 `tick_done()` and `tick_wait()` split `tick()` for hosts that keep working meanwhile.
 `add_extra(spirv)` and `run_extra(id, elements)` run a pipeline outside the tick, on the
 same buffers. `stage_timings()` gives each stage's GPU time, as `GameSim::stage_times()` does, and
-`last_tick_device_ms()` the tick from submission to its results on the device's clock,
-which is what `GameSim::device_health()` judges.
+`last_tick_device_ms()` the tick from submission to its results (on the device's clock, if the host
+did not wait from the start), which is what `GameSim::device_health()` judges.
 The header documents every call, including the transfers (`queue_write`,
 `add_tick_readback`) and `VulkanContext`'s buffer and submission helpers.
 
