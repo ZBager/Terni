@@ -931,8 +931,10 @@ uint32_t misfits_binding(const Game& game) { return buffer_count(game) + 1; }  /
 // row: some devices let such a write reach the padding at the end of the buffer, others
 // drop it. A read there gives 0 everywhere, as the padding is never written.
 // Values are loaded and stored in 8 or 16 bits and computed with in 32, so devices need only
-// the storage features. TERNI_ZERO keeps it so: the SPIR-V optimizer cannot see through it,
-// and without it makes an 8-bit constant of a stored constant, which needs shaderInt8.
+// the storage features. terni_zero(), which no compiler can see through, keeps it so: without it
+// the SPIR-V optimizer makes an 8-bit constant of a stored constant, which needs shaderInt8. It
+// also keeps drivers from knowing that a value fits: Mesa 26.0.8's lavapipe (LLVM 21.1.8) on some
+// CPUs gives wrong results for clamped values stored in signed 8-bit fields.
 // Widened, for devices without 8 and 16-bit storage, they are stored in 32 bits as hosts see
 // them; what does not fit is the same.
 void small_field(std::ostream& o, const EntityDef& e, const FieldDef& f, uint32_t binding, uint32_t number, bool widened) {
@@ -965,7 +967,7 @@ void small_field(std::ostream& o, const EntityDef& e, const FieldDef& f, uint32_
       << (f.size > 1 ? " / " + per_row : "") << ");\n"
       << "    " << data << "[i] = ";
     if (widened) o << value;
-    else o << store << "(" << value << " | " << (type[0] == 'i' ? "int(TERNI_ZERO)" : "TERNI_ZERO") << ")";
+    else o << store << "(" << value << " | " << (type[0] == 'i' ? "int(terni_zero())" : "terni_zero()") << ")";
     o << ";\n}\n";
 }
 
@@ -988,7 +990,8 @@ std::string generate_prelude(const Game& game, bool widened) {
     o << "layout(std430, binding = 1) buffer TerniState {\n    uint tick;\n";
     for (const auto& e : game.entities) o << "    uint " << e.name << "_count;\n";
     o << "} terni;\n";
-    if (game.small_fields() && !widened) o << "layout(constant_id = 2) const uint TERNI_ZERO = 0u;\n";
+    // 0, but only at run time (small_field): the order check runs with 0 or 1 here
+    if (game.small_fields() && !widened) o << "uint terni_zero() { return terni_order.backward >> 1; }\n";
     if (game.small_fields())
         // Writes that do not fit are counted per field in checked ticks: how many, and the
         // first row (as its complement, so that a zeroed buffer means none).

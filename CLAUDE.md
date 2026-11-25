@@ -169,7 +169,7 @@ ctest --test-dir build --output-on-failure
   `game_sim.cpp`) and the host's side of them (`src/small_fields.hpp`, `fits()` in `game.hpp`)
   must agree on what a value that does not fit becomes; `test_small_fields` compares them.
   Padding at a column's end stays 0, and no 8 or 16-bit constant or arithmetic may reach
-  the SPIR-V (`TERNI_ZERO`), so devices need only the storage features. Devices without them
+  the SPIR-V (`terni_zero()`), so devices need only the storage features. Devices without them
   store these fields widened (`Impl::rules.widened`): what touches a column on the device goes
   through `stored()` and `stored_row_bytes()`, and saves and `tick_result_bytes()` stay packed.
 - **Dynamic entity types**: rows that rules ask for are given out by the built-in stages
