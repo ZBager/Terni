@@ -361,7 +361,7 @@ TERNI_API terni_status terni_write_values(terni_world* world, uint32_t entity, c
 TERNI_API terni_status terni_subscribe(terni_world* world, uint32_t entity, const char* field, uint32_t first_row,
                                        uint32_t rows, uint32_t* id);
 /* A subscription's words as of the last collected tick. Valid until the tick after the
- * next one begins. */
+ * next one begins, or terni_move_to_device(). */
 TERNI_API terni_status terni_subscription(const terni_world* world, uint32_t id, const int32_t** words,
                                           size_t* word_count);
 /* The same as bytes: a small field's values packed, 1 or 2 bytes each, little-endian, a

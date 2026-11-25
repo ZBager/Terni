@@ -7,6 +7,7 @@
 // During a tick, tick_result() keeps the last collected tick's results. CI also runs this
 // test under synchronization validation.
 #include <cstdio>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -81,6 +82,60 @@ std::vector<int32_t> result(GameSim& sim, uint32_t id) {
 
 uint64_t state_hash(GameSim& sim) { return combine(hash_fields(sim.snapshot())); }
 
+// Results stay readable as long as tick_result() says (until the tick after the next one
+// begins), also when readbacks are added meanwhile, which takes larger buffers.
+void results_outlive_new_readbacks(uint32_t device) {
+    constexpr uint32_t N = 200000;
+    WorldBuilder b;
+    const uint32_t realm = b.entity("realm", 2), pop = b.entity("pop", N);
+    b.field(pop, "home", FieldType::Ref, "realm");
+    b.field(pop, "age", FieldType::Int);
+    b.field(pop, "more", FieldType::Int);
+    const uint32_t zeal = b.modifier_key("zeal", pop, FieldType::Int, "home");
+    b.stage("age", "pop", "void main() { FOR_EACH_POP(i) { pop_age[i] += int(i) + 1; } }");
+    b.create_rows(realm, 2);
+    b.create_rows(pop, N);
+    const auto game = b.finish();
+    CHECK(game->ok());
+    // the ages after `ticks` ticks
+    const auto holds = [&](std::span<const int32_t> ages, int32_t ticks) {
+        for (uint32_t i = 0; i < N; ++i)
+            if (ages[i] != int32_t(i + 1) * ticks) return false;
+        return ages.size() == N;
+    };
+    for (int way = 0; way < 4; ++way) {  // what adds the readbacks, and whether a tick is in flight
+        const auto add = [&](GameSim& sim, const char* field) {
+            if (way < 2) sim.modifier_total(zeal, pop, 5);  // the first total that is inherited
+            else sim.read_each_tick(pop, field);
+        };
+        GameSim sim(*game, device);
+        const uint32_t id = sim.read_each_tick(pop, "age");
+        sim.tick();
+        const auto one = sim.tick_result(id);
+        sim.tick();
+        const auto two = sim.tick_result(id);
+        if (way % 2 == 0) {
+            add(sim, "home"), add(sim, "more");
+            CHECK(holds(one, 1) && holds(two, 2) && holds(sim.tick_result(id), 2));
+            sim.begin_tick();
+            CHECK(holds(two, 2) && holds(sim.tick_result(id), 2));
+            sim.end_tick();
+        } else {
+            sim.begin_tick();
+            add(sim, "home"), add(sim, "more");  // collect the tick
+        }
+        const auto three = sim.tick_result(id);
+        CHECK(holds(two, 2) && holds(three, 3));
+        if (way % 2 == 0) sim.tick();
+        else sim.tick_checked();
+        CHECK(holds(three, 3) && holds(sim.tick_result(id), 4));
+        for (int t = 5; t < 8; ++t) {
+            sim.tick();
+            CHECK(holds(sim.tick_result(id), t));
+        }
+    }
+}
+
 int main() {
     const World w = make_world();
     for (const auto& e : w.game->errors) std::printf("  %s\n", e.text().c_str());
@@ -93,6 +148,8 @@ int main() {
         std::printf("device %u: %s\n", d.index, d.name.c_str());
         GameSimOptions o;
         o.device = int(d.index);
+
+        results_outlive_new_readbacks(d.index);
 
         // ---- reference: tick() and commands between ticks
         GameSim a(*w.game, o);

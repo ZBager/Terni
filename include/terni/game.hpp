@@ -568,8 +568,8 @@ public:
     uint32_t read_each_tick(uint32_t entity, const std::string& field, uint32_t first_row = 0,
                             uint32_t rows = 0xFFFFFFFFu);
     // Words of a registered field as of the last collected tick, for the rows it covers
-    // (valid until the tick after the next one begins; after load(), stale until the next
-    // tick is collected).
+    // (valid until the tick after the next one begins or move_to_device(); after load(),
+    // stale until the next tick is collected).
     std::span<const int32_t> tick_result(uint32_t id) const;
     // The same as bytes: a small field's values packed, 1 or 2 bytes each, little-endian (no
     // copy, unless the device widens them); other fields as tick_result(). Valid as long.

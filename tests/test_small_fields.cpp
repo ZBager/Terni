@@ -216,8 +216,6 @@ static void twins(const std::vector<Target>& devices) {
         const uint32_t ha = a.read_each_tick(2, "home", 3, 1001), hw = w.read_each_tick(2, "home", 3, 1001);
         std::vector<std::vector<FieldHash>> hashes;
         CHECK(a.field_hashes() == w.field_hashes());
-        // the first query of an inherited total adds a readback, which moves the results below
-        CHECK(a.modifier_total(0, 2, 5) == w.modifier_total(0, 2, 5));
         std::span<const int32_t> before;
         std::vector<int32_t> before_copy;
         std::span<const uint8_t> bytes_before;

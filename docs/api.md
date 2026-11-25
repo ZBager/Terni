@@ -120,7 +120,7 @@ Runs a `Game` on one device. The `Game` must outlive it. Not thread-safe.
 | `void write_field(entity, field, row, words)` | Raw words from `row` on (vector or span); applied before the next tick. Throws `std::out_of_range` for a value that does not fit a small field |
 | `void write_field(entity, field, row, index, words)` | Values `index` onwards of one row of a sized field; the rest of the row is untouched |
 | `uint32_t read_each_tick(entity, field, first_row = 0, rows = in use)` | Registers a per-tick readback; returns an id |
-| `std::span<const int32_t> tick_result(id)` | Its words as of the last collected tick; valid until the tick after the next one begins. A small field's are made from the packed values on the first call after a tick |
+| `std::span<const int32_t> tick_result(id)` | Its words as of the last collected tick; valid until the tick after the next one begins or `move_to_device()` (after it, ask again: the results are the same). A small field's are made from the packed values on the first call after a tick |
 | `std::span<const uint8_t> tick_result_bytes(id)` | The same as bytes: a small field's values packed, 1 or 2 bytes each. No copy, unless the device stores them in 32 bits |
 | `uint32_t create_entity(entity)` | A new row of a dynamic entity type: the lowest one not alive, fields at their defaults, alive from the next tick. `NO_ENTITY` if full. Collects a tick in flight |
 | `bool destroy_entity(entity, row)` | The row is no longer alive and its modifier instances are removed; it rests through the next tick. False if it was not alive. Collects a tick in flight |

@@ -57,6 +57,17 @@ struct ComputeRunner::Impl {
     // tick's results stay readable while the next tick writes the other one.
     GpuBuffer tick_rb[2];
     int rb_done = 0;  // which one holds the last finished tick
+    // Ones that larger buffers replaced: hosts may still read the results in them, for as
+    // many ticks as tick_readback() promises.
+    struct Retired { GpuBuffer buffer; int ticks; };
+    std::vector<Retired> retired_rb;
+    void age_retired() {  // a tick begins
+        std::erase_if(retired_rb, [&](Retired& r) {
+            if (--r.ticks > 0) return false;
+            ctx.destroy_buffer(r.buffer);
+            return true;
+        });
+    }
     // The copies into each of them, recorded when first needed after `tick_reads` or the
     // destinations change (readbacks_changed) and resubmitted until then.
     VkCommandBuffer readback_cmds[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
@@ -455,6 +466,7 @@ ComputeRunner::~ComputeRunner() {
     if (m.staging_busy.buffer) m.ctx.destroy_buffer(m.staging_busy);
     for (auto& rb : m.tick_rb)
         if (rb.buffer) m.ctx.destroy_buffer(rb);
+    for (auto& r : m.retired_rb) m.ctx.destroy_buffer(r.buffer);
 }
 
 void ComputeRunner::tick(const std::vector<bool>& run) {
@@ -465,6 +477,7 @@ void ComputeRunner::tick(const std::vector<bool>& run) {
 void ComputeRunner::tick_submit(const std::vector<bool>& run) {
     Impl& m = *impl_;
     m.finish();
+    m.age_retired();
     Impl::Flight f;
     f.run = m.run_mask(run);
     VkCommandBuffer tick_cmd = m.tick_cmd(f.run);
@@ -634,7 +647,8 @@ uint32_t ComputeRunner::add_tick_readback(uint32_t binding, uint64_t bytes, uint
             std::memset(grown.mapped, 0, grown.size);
             if (rb.buffer) {
                 std::memcpy(grown.mapped, rb.mapped, rb.size);
-                m.ctx.destroy_buffer(rb);
+                // the last tick's results stay until the tick after the next one, those before until the next
+                m.retired_rb.push_back({rb, &rb == &m.tick_rb[m.rb_done] ? 2 : 1});
             }
             rb = grown;
         }
@@ -676,6 +690,7 @@ std::vector<ComputeRunner::OrderDiff> ComputeRunner::tick_checked(const std::vec
     if (check.size() != S || row_bytes.size() != B || counts_binding >= B)
         throw std::invalid_argument("tick_checked: one entry per stage / buffer");
     m.finish();
+    m.age_retired();
     flush_queued();  // host writes come first, as in tick()
     if (m.check_pipelines.empty()) m.check_pipelines = m.make_pipelines(1);
     std::vector<uint64_t> at(B);  // where each buffer sits in check_rb
